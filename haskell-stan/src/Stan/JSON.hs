@@ -1,0 +1,177 @@
+{-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE ScopedTypeVariables #-}
+module Stan.JSON where
+
+import qualified Frames as F
+import qualified Control.Foldl as FL
+import qualified Control.Exception as X
+--import qualified Control.Monad.State as State
+import qualified Data.Aeson as A
+import qualified Data.Aeson.Encoding as A
+import qualified Data.ByteString.Lazy as BL
+import qualified Data.Map.Strict as M
+import qualified Data.IntMap.Strict as IM
+import qualified Data.Text as T
+
+--import qualified Data.Vector as V
+import Data.Vector.Serialize()
+import qualified Data.Vector.Generic as Vec
+import qualified Data.Vector.Unboxed as VU
+import qualified VectorBuilder.Builder as VB
+import qualified VectorBuilder.Vector as VB
+
+type StanJSONF row t = FL.FoldM (Either T.Text) row t
+type Encoding k a = (a -> Maybe k, M.Map k a)
+type EncoderF k a = FL.Fold a (Encoding k a)
+
+-- special case for single field int encodings which happen a lot
+type IntEncoderF a =  FL.Fold a (a -> Maybe Int, IM.IntMap a)
+
+data Product a b c = Product { combine :: (a, b) -> c
+                             , prjA :: c -> a
+                             , prjB :: c -> b
+                             }
+
+composeEncodingsWith :: Ord k3 => ((k1, k2) -> k3) -> Product a b c -> Encoding k1 a -> Encoding k2 b -> Encoding k3 c
+composeEncodingsWith combineIndex pp (tok1, fromk1) (tok2, fromk2) =
+   let composeMaps m1 m2 = M.fromList $ [(combineIndex (k1, k2), combine pp (a, b)) | (k1, a) <- M.toList m1, (k2, b) <- M.toList m2]
+       composeTok tok1 tok2 c = curry combineIndex <$> tok1 (prjA pp c) <*> tok2 (prjB pp c)
+   in (composeTok tok1 tok2,  composeMaps fromk1 fromk2)
+   
+composeEncodersWith :: Ord k3 => ((k1, k2) -> k3) -> Product a b c -> EncoderF k1 a -> EncoderF k2 b -> EncoderF k3 c
+composeEncodersWith combineIndex pp f1 f2 =
+  composeEncodingsWith combineIndex pp <$> FL.premap (prjA pp) f1 <*> FL.premap (prjB pp) f2
+
+tupleProduct :: Product a b (a, b)
+tupleProduct = Product id fst snd
+
+composeEncoders :: (Ord k1, Ord k2) => EncoderF k1 a -> EncoderF k2 b -> EncoderF (k1, k2) (a, b)
+composeEncoders = composeEncodersWith id tupleProduct 
+
+type IntVec = VU.Vector Int
+
+-- encode [a, b, c, d] as [(0,0,0), (1,0,0), (0,1,0), (0,0,1)]
+dummyEncodeEnum :: forall a.(Enum a, Bounded a) => Encoding IntVec a 
+dummyEncodeEnum = (toK, m) where
+  allEnum = [(minBound :: a)..(maxBound :: a)]
+  levels = length allEnum
+  dummyN = levels - 1
+  g :: Int -> Int -> Maybe (Int, Int)
+  g m n
+    | n == dummyN = Nothing -- end of vector
+    | n == m = Just (1, n + 1) 
+    | otherwise = Just (0, n + 1)
+  makeVec a = VU.unfoldr (g $ (fromEnum a - 1)) 0
+  toK = Just . makeVec 
+  m = M.fromList $ fmap (\a -> (makeVec a, a)) allEnum
+
+composeIntVecEncoders :: Product a b c -> EncoderF IntVec a -> EncoderF IntVec b -> EncoderF IntVec c
+composeIntVecEncoders = composeEncodersWith (uncurry (VU.++)) 
+
+
+composeIntVecEncodings :: Product a b c -> Encoding IntVec a -> Encoding IntVec b -> Encoding IntVec c
+composeIntVecEncodings = composeEncodingsWith (uncurry (VU.++)) 
+
+-- this function can crash!!
+vecEncodingLength :: VU.Unbox b => Encoding (VU.Vector b) c -> Int 
+vecEncodingLength (_, m) = case M.toList m of
+  [] -> 0
+  ((v, _) : _) -> VU.length v
+
+
+flipIntIndex :: Ord a => IM.IntMap a -> M.Map a Int
+flipIntIndex = M.fromList . fmap (\(n, a) -> (a, n)) . IM.toList
+
+flipIndex :: Ord a => M.Map k a -> M.Map a k
+flipIndex =  M.fromList . fmap (\(k, a) -> (a, k)) . M.toList
+
+data StanJSONException = StanJSONException T.Text deriving Show
+instance X.Exception StanJSONException
+
+frameToStanJSONFile :: Foldable f => FilePath -> StanJSONF row A.Series -> f row -> IO ()
+frameToStanJSONFile fp stanJSONF rows = do
+  case frameToStanJSONEncoding stanJSONF rows of
+    Right e -> BL.writeFile fp $ A.encodingToLazyByteString e
+    Left err -> X.throwIO $ StanJSONException err 
+
+frameToStanJSONEncoding :: Foldable f => StanJSONF row A.Series -> f row -> Either T.Text A.Encoding
+frameToStanJSONEncoding stanJSONF = fmap A.pairs . frameToStanJSONSeries stanJSONF
+
+frameToStanJSONSeries :: Foldable f => StanJSONF row A.Series -> f row -> Either T.Text A.Series
+frameToStanJSONSeries = FL.foldM
+
+
+-- once we have folds for each piece of data, we use this to combine and get one fold for the data object
+jsonObject :: (Foldable f, Foldable g) => f (StanJSONF row A.Series) -> g row -> Either T.Text A.Encoding
+jsonObject frameToSeriesFs rows = A.pairs <$> FL.foldM (jsonObjectF frameToSeriesFs) rows 
+
+-- We'll do one fold with as many of these as we need to build int encodings for categorical fields
+enumerateField :: forall row a. Ord a
+  => (a -> T.Text)
+  -> IntEncoderF a
+  -> (row -> a)
+  -> FL.Fold row (StanJSONF row A.Value, IM.IntMap a)
+enumerateField textA intEncoderF toA = fmap (\(getOneM, toInt) -> (stanF getOneM, toInt)) $ FL.premap toA intEncoderF where
+  stanF :: (a -> Maybe Int) -> StanJSONF row A.Value
+  stanF g = FL.FoldM step init extract where
+    step vb r = case g (toA r) of
+      Just n -> Right $ vb <> (VB.singleton $ A.toJSON n)
+      Nothing -> Left $ "Int index not found for " <> textA (toA r)
+    init = return VB.empty
+    extract = return . A.Array . VB.build
+
+vecEncoder :: forall row a b. (Ord a, Vec.Vector VU.Vector b, A.ToJSON b)
+  => (a -> T.Text) -- ^ for errors
+  -> EncoderF (VU.Vector b) a
+  -> (row -> a)
+  -> FL.Fold row (StanJSONF row A.Value, M.Map (VU.Vector b) a)
+vecEncoder textA encodeF toA = fmap (\(getOneM, toInt) -> (stanF getOneM, toInt)) $ FL.premap toA encodeF where
+  stanF :: (a -> Maybe (VU.Vector b)) -> StanJSONF row A.Value
+  stanF g = FL.FoldM step init extract where
+    step vb r = case g (toA r) of
+      Just v -> Right $ vb <> (VB.singleton $ A.toJSON v)
+      Nothing -> Left $ "index not found for " <> textA (toA r)
+    init = return VB.empty
+    extract = return . A.Array . VB.build
+  
+
+-- NB: THese folds form a semigroup & monoid since @Series@ does
+-- NB: Series includes @ToJSON a => (T.Text, a)@ pairs.
+jsonObjectF :: Foldable f => f (StanJSONF row A.Series) -> StanJSONF row A.Series
+jsonObjectF = foldMap id
+
+constDataF :: A.ToJSON a => T.Text -> a -> StanJSONF row A.Series
+constDataF name val = pure (name A..= val)
+
+namedF :: A.ToJSON a => T.Text -> FL.Fold row a -> StanJSONF row A.Series
+namedF name fld = FL.generalize seriesF where
+  seriesF = fmap (\a -> (name A..= a)) fld
+
+jsonArrayF :: A.ToJSON a => (row -> a) -> StanJSONF row A.Value
+jsonArrayF toA = FL.generalize $ FL.Fold step init extract where
+  step vb r = vb <> (VB.singleton . A.toJSON $ toA r)
+  init = mempty
+  extract = A.Array . VB.build
+
+jsonArrayMF :: A.ToJSON a => (row -> Maybe a) -> StanJSONF row A.Value
+jsonArrayMF toMA = FL.FoldM step init extract where
+  step vb r = case toMA r of
+    Nothing -> Left $ "Failed indexing in jsonArrayMF"
+    Just a -> Right $ vb <> (VB.singleton $ A.toJSON a)
+  init = Right mempty
+  extract = Right . A.Array . VB.build
+
+valueToPairF :: T.Text -> StanJSONF row A.Value -> StanJSONF row A.Series
+valueToPairF name = fmap (\a -> name A..= a) 
+
+
+enumerate :: Ord a => Int -> IntEncoderF a
+enumerate start = FL.Fold step init done where
+  step m a = M.insert a () m
+  init = M.empty
+  done m = (toIntM, fromInt) where
+    keyedList = zip (fmap fst $ M.toList m) [start..]
+    mapToInt = M.fromList keyedList
+    toIntM a = M.lookup a mapToInt
+    fromInt = IM.fromList $ fmap (\(a,b) -> (b,a)) keyedList
