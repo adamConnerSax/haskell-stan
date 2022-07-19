@@ -62,20 +62,35 @@ type CodePP = PP.Doc ()
 stmtToCodeE :: LStmt -> Either Text CodePP
 stmtToCodeE = RS.hylo stmtToCodeAlg (hfmap exprToCode . RS.project)
 
+lineLayout :: PP.Doc a -> PP.Doc a
+lineLayout = PP.group . PP.nest 2
+
 stmtToCodeAlg :: StmtF (K CodePP) (Either Text CodePP) -> Either Text CodePP
 stmtToCodeAlg = \case
-  SDeclareF txt st divf vms -> Right $ stanDeclHead st (unK <$> DT.toList (unDeclIndexVecF divf)) vms <+> PP.pretty txt <> PP.semi
-  SDeclAssignF txt st divf vms rhs -> Right $ stanDeclHead st (unK <$> DT.toList (unDeclIndexVecF divf)) vms <+> PP.pretty txt <+> PP.equals <+> unK rhs <> PP.semi
-  SAssignF lhs rhs -> Right $ unK lhs <+> PP.equals <+> unK rhs <> PP.semi
-  SOpAssignF op lhs rhs -> Right $ unK lhs <+> opDoc op <> PP.equals <+> unK rhs <> PP.semi
-  STargetF rhs -> Right $ "target +=" <+> unK rhs <> PP.semi
-  SSampleF lhs (Density dn _ _ rF) al -> Right $ unK lhs <+> "~" <+> PP.pretty dn <> PP.parens (csArgList $ rF al) <> PP.semi
+  SDeclareF txt st divf vms -> Right $ lineLayout
+                               $ stanDeclHead st (unK <$> DT.toList (unDeclIndexVecF divf)) vms <> PP.softline
+                               <> PP.pretty txt <> PP.semi
+  SDeclAssignF txt st divf vms rhs -> Right $ lineLayout
+                                      $ stanDeclHead st (unK <$> DT.toList (unDeclIndexVecF divf)) vms <> PP.softline
+                                      <> PP.pretty txt <> PP.softline
+                                      <> PP.equals <+> unK rhs <> PP.semi
+  SAssignF lhs rhs -> Right $ lineLayout
+                      $ unK lhs <> PP.softline
+                      <> PP.equals <+> unK rhs <> PP.semi
+  SOpAssignF op lhs rhs -> Right $ lineLayout
+                           $ unK lhs <> PP.softline
+                           <> opDoc op <> PP.equals <+> unK rhs <> PP.semi
+  STargetF rhs -> Right $ lineLayout $ "target +=" <> PP.softline
+                  <> unK rhs <> PP.semi
+  SSampleF lhs (Density dn _ _ rF) al -> Right $ lineLayout
+                                         $ unK lhs <> PP.softline <>
+                                         "~" <+> PP.pretty dn <> PP.parens (csArgList $ rF al) <> PP.semi
   SForF txt fe te body -> (\b -> "for" <+> PP.parens (PP.pretty txt <+> "in" <+> unK fe <> PP.colon <> unK te) <+> bracketBlock b) <$> sequenceA body
   SForEachF txt e body -> (\b -> "foreach" <+> PP.parens (PP.pretty txt <+> "in" <+> unK e) <+> bracketBlock b) <$> sequence body
   SIfElseF condAndIfTrueL allFalse -> ifElseCode condAndIfTrueL allFalse
   SWhileF if' body -> (\b -> "while" <+> PP.parens (unK if') <+> bracketBlock b) <$> sequence body
-  SBreakF -> Right $ "break"
-  SContinueF -> Right $ "continue"
+  SBreakF -> Right $ "break" <> PP.semi
+  SContinueF -> Right $ "continue" <> PP.semi
   SFunctionF (Function fname rt ats rF) al body re ->
     (\b -> PP.pretty (sTypeName rt) <+> PP.pretty fname <> functionArgs (applyTypedListFunctionToTypeList rF ats) (rF al)
            <+> bracketBlock (b `appendAsList` ["return" <+> unK re <> PP.semi])) <$> sequence body
@@ -112,15 +127,19 @@ stanDeclHead st il vms = case st of
     varModifiersToCode vms =
       if null vms
       then mempty
-      else PP.langle <> (PP.hsep $ PP.punctuate ", " $ fmap vmToCode vms) <> PP.rangle
+      else PP.langle <> (PP.hsep $ PP.punctuate  (PP.comma <> PP.space) $ fmap vmToCode vms) <> PP.rangle
 
 -- add brackets and indent the lines of code
 bracketBlock :: Traversable f => f CodePP -> CodePP
-bracketBlock = bracketCode . blockCode
+bracketBlock s = if length s == 1
+                 then PP.group . bracketCode $ blockCode s
+                 else bracketCode $ blockCode s
 
 -- surround with brackets and indent
 bracketCode :: CodePP -> CodePP
-bracketCode c = "{" <> PP.line <> PP.indent 2 c <> PP.line <> "} "
+bracketCode c = PP.flatAlt
+                (PP.lbrace <> PP.hardline <> PP.indent 2 c <> PP.hardline <> PP.rbrace <> PP.space) -- otherwise
+                (PP.lbrace <+> c <+> PP.rbrace <> PP.space) -- if grouped and fits on one line
 
 addSemi :: CodePP -> CodePP
 addSemi c = c <> PP.semi
@@ -139,7 +158,7 @@ appendAsList :: Traversable f => f a -> [a] -> [a]
 appendAsList fa as = toList fa ++ as
 
 functionArgs:: TypeList args -> TypedList (FuncArg Text) args -> CodePP
-functionArgs argTypes argNames = PP.parens $ mconcat $ PP.punctuate (PP.comma <> PP.space) argCodeList
+functionArgs argTypes argNames = PP.parens $ mconcat $ PP.punctuate (PP.softline' <> PP.comma <> PP.space) argCodeList
   where
     handleFA :: CodePP -> FuncArg Text t -> CodePP
     handleFA c = \case
@@ -169,7 +188,7 @@ ifElseCode ecNE c = do
       condCode (e :| es) = "if" <+> PP.parens (unK e) <> PP.space :| fmap (\le -> "else if" <+> PP.parens (unK le) <> PP.space) es
       condCodeNE = condCode conds `appendNEList` ["else"]
   ifTrueCodes <- sequenceA (ifTrueCodeEs `appendNEList` [c])
-  let ecNE = NE.zipWith (<+>) condCodeNE (fmap (bracketBlock . pure @[]) ifTrueCodes)
+  let ecNE = NE.zipWith (<+>) condCodeNE (fmap (PP.group . bracketBlock . pure @[]) ifTrueCodes)
   return $ blockCode' ecNE
 
 data  IExprCode :: Type where
@@ -229,7 +248,7 @@ iExprToCode :: IExprCode -> CodePP
 iExprToCode = RS.cata iExprToDocAlg
 
 csArgList :: TypedList (K CodePP) args -> CodePP
-csArgList = mconcat . PP.punctuate (PP.comma <> PP.space) . typedKToList
+csArgList = mconcat . PP.punctuate (PP.softline' <> PP.comma <> PP.space) . typedKToList
 
 -- I am not sure about/do not understand the quantified constraint here.
 exprToDocAlg :: IAlg LExprF (K IExprCode) -- LExprF ~> K IExprCode
@@ -245,8 +264,10 @@ exprToDocAlg = K . \case
   LIntRange leM ueM -> Oped $ maybe mempty (unK . f) leM <> PP.colon <> maybe mempty (unK . f) ueM
   LFunction (Function fn _ _ rF) al -> Bare $ PP.pretty fn <> PP.parens (csArgList $ hfmap f $ rF al)
   LFunction (IdentityFunction _) (arg :> TNil) -> Bare $ unK $ f arg
-  LDensity (Density dn _ _ rF) k al -> Bare $ PP.pretty dn <> PP.parens (unK (f k) <> PP.pipe <+> csArgList (hfmap f $ rF al))
-  LBinaryOp sbo le re -> Oped $ unK (f $ parenthesizeOped le) <+> opDoc sbo <+> unK (f $ parenthesizeOped re)
+  LDensity (Density dn _ _ rF) k al -> Bare $ PP.group
+                                       $ PP.pretty dn <> PP.parens (unK (f k) <> PP.pipe <> PP.softline
+                                                                     <> csArgList (hfmap f $ rF al))
+  LBinaryOp sbo le re -> Oped $ unK (f $ parenthesizeOped le) <> PP.softline <> opDoc sbo <+> unK (f $ parenthesizeOped re)
   LUnaryOp op e -> Bare $ unaryOpDoc (unK (f $ parenthesizeOped e)) op
   LCond ce te fe -> Bare $ unK (f ce) <+> "?" <+> unK (f te) <+> PP.colon <+> unK (f fe)
   LSlice sn ie e -> sliced sn ie e

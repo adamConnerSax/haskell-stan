@@ -19,7 +19,9 @@ import Stan.ModelBuilder.TypedExpressions.Format
 import Stan.ModelBuilder.TypedExpressions.Statements
 import Stan.ModelBuilder.TypedExpressions.Functions
 
+import qualified Prettyprinter as PP
 import qualified Prettyprinter.Render.Text as PP
+import Stan.ModelBuilder.TypedExpressions.Program (stmtAsText, stmtAsText')
 
 writeExprCode :: IndexLookupCtxt -> UExpr t -> IO ()
 writeExprCode ctxt0 ue = case flip evalStateT ctxt0 $ doLookups ue of
@@ -46,6 +48,12 @@ writeStmtCode ctxt0 s = case statementToCodeE ctxt0 s of
     Right c -> do
       PP.putDoc c
       putTextLn ""
+
+
+writeStmtAsText :: Int -> UStmt -> IO ()
+writeStmtAsText n s = case stmtAsText' (PP.LayoutOptions $ PP.AvailablePerLine n 1) s of
+  Left err -> putTextLn $ "stmtAsText failed: " <> err
+  Right t -> putTextLn t
 
 main :: IO ()
 main = do
@@ -157,3 +165,12 @@ main = do
   writeStmtCode ctxt0 $ print (stringE "example" :> l :> TNil)
   writeStmtCode ctxt0 $ reject (m :> stringE "or" :> r :> TNil)
   writeStmtCode ctxt0 $ comment ("Multiline comments" :| ["are formatted differently!"])
+  writeStmtAsText 80 $ comment (one $ "Formatting...")
+  let ln n = namedE ("longVarName" <> show n) SReal
+      dn n = namedE ("someInt" <> show n) SInt
+      veryLongName = "abcdefghijklmnopqrstuvwxyz"
+  writeStmtAsText 80 $ declareN $ NamedDeclSpec veryLongName $  arraySpec s4 (dn 1 ::: dn 2 ::: dn 3 ::: dn 4 ::: VNil) $ matrixSpec (dn 1) (dn 2) []
+  writeStmtAsText 40 $ declareN $ NamedDeclSpec veryLongName $  arraySpec s4 (dn 1 ::: dn 2 ::: dn 3 ::: dn 4 ::: VNil) $ matrixSpec (dn 1) (dn 2) []
+  writeStmtAsText 80 $ declareAndAssignN (NamedDeclSpec "longRealName" $ realSpec []) (foldl' plusE (ln 2) $ fmap ln [3])
+  writeStmtAsText 80 $ declareAndAssignN (NamedDeclSpec "longRealName" $ realSpec []) (foldl' plusE (ln 2) $ fmap ln [3..20])
+  writeStmtAsText 80 $ ln 1 `assign` (foldl' plusE (ln 2) $ fmap ln [3..20])

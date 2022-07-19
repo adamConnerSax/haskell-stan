@@ -123,12 +123,15 @@ programAsText :: SBT.GeneratedQuantities -> StanProgram -> Either Text Text
 programAsText gq p = stmtAsText $ programToStmt gq p
 
 stmtAsText :: TE.UStmt -> Either Text Text
-stmtAsText  stmt = case TE.statementToCodeE TE.emptyLookupCtxt stmt of
-  Right x -> pure $ PP.renderStrict $ PP.layoutSmart PP.defaultLayoutOptions x
+stmtAsText = stmtAsText' PP.defaultLayoutOptions
+
+stmtAsText' :: PP.LayoutOptions -> TE.UStmt -> Either Text Text
+stmtAsText' lo stmt = case TE.statementToCodeE TE.emptyLookupCtxt stmt of
+  Right x -> pure $ PP.renderStrict $ PP.layoutSmart lo x
   Left err ->
     let msg = "Lookup error when building code from tree: " <> err <> "\n"
               <> "Tree with failed lookups between hashes follows.\n"
               <> case TE.eStatementToCodeE TE.emptyLookupCtxt stmt of
                    Left err2 -> "Yikes! Can't build error tree: " <> err2 <> "\n"
-                   Right x -> PP.renderStrict $ PP.layoutSmart PP.defaultLayoutOptions x
+                   Right x -> PP.renderStrict $ PP.layoutSmart lo x
     in Left msg
