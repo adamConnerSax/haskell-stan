@@ -158,7 +158,7 @@ appendAsList :: Traversable f => f a -> [a] -> [a]
 appendAsList fa as = toList fa ++ as
 
 functionArgs:: TypeList args -> TypedList (FuncArg Text) args -> CodePP
-functionArgs argTypes argNames = PP.parens $ mconcat $ PP.punctuate (PP.softline' <> PP.comma <> PP.space) argCodeList
+functionArgs argTypes argNames = PP.parens $ formatFunctionArgs argCodeList
   where
     handleFA :: CodePP -> FuncArg Text t -> CodePP
     handleFA c = \case
@@ -247,8 +247,14 @@ withLeadingEmpty im = imWLE where
 iExprToCode :: IExprCode -> CodePP
 iExprToCode = RS.cata iExprToDocAlg
 
+formatFunctionArgs :: [CodePP] -> CodePP
+formatFunctionArgs cs = PP.align . PP.group
+                        $ PP.flatAlt
+                        (PP.encloseSep mempty mempty PP.comma cs)
+                        (PP.encloseSep mempty mempty (PP.comma <> PP.space) cs)
+
 csArgList :: TypedList (K CodePP) args -> CodePP
-csArgList = mconcat . PP.punctuate (PP.softline' <> PP.comma <> PP.space) . typedKToList
+csArgList = formatFunctionArgs . typedKToList
 
 -- I am not sure about/do not understand the quantified constraint here.
 exprToDocAlg :: IAlg LExprF (K IExprCode) -- LExprF ~> K IExprCode
@@ -269,7 +275,7 @@ exprToDocAlg = K . \case
                                                                      <> csArgList (hfmap f $ rF al))
   LBinaryOp sbo le re -> Oped $ unK (f $ parenthesizeOped le) <> PP.softline <> opDoc sbo <+> unK (f $ parenthesizeOped re)
   LUnaryOp op e -> Bare $ unaryOpDoc (unK (f $ parenthesizeOped e)) op
-  LCond ce te fe -> Bare $ unK (f ce) <+> "?" <+> unK (f te) <+> PP.colon <+> unK (f fe)
+  LCond ce te fe -> Bare $ PP.group $ PP.nest 1 $ unK (f ce) <> PP.softline <> "?" <+> unK (f te) <> PP.softline <> PP.colon <+> unK (f fe)
   LSlice sn ie e -> sliced sn ie e
   LIndex sn ie e -> indexed sn ie e
   where
@@ -371,8 +377,11 @@ stmtBlockHeader = \case
   ModelStmts -> "model"
   GeneratedQuantitiesStmts -> "generated quantities"
 
+exprToText' :: PP.LayoutOptions -> LExpr t -> Text
+exprToText' lo = PP.renderStrict . PP.layoutSmart lo . unK . exprToCode
+
 exprToText :: LExpr t -> Text
-exprToText = PP.renderStrict . PP.layoutSmart PP.defaultLayoutOptions . unK . exprToCode
+exprToText = exprToText' PP.defaultLayoutOptions
 
 printLookupCtxt :: IndexLookupCtxt -> Text
 printLookupCtxt (IndexLookupCtxt s i) = "sizes: " <> T.intercalate ", " (printF <$> Map.toList s)

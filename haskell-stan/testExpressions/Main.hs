@@ -141,7 +141,7 @@ main = do
   let stmtFor3 = for "yl" (SpecificIn $ namedE "ys" SCVec) (\ye -> [assign x (x `plus` ye)])
   writeStmtCode ctxt0 stmtFor3
   let stmtFor4 = for "q" (IndexedIn "States" $ namedE "votes" SCVec)
-        $ \sie -> (assign (sliceE s0 sie $ namedE "w" SCVec) (realE 2) :| [assign x (x `plus` y), SContinue])
+        $ \sie -> (assign (sliceE s0 sie $ namedE "w" SCVec) (realE 2) :| [assign x (x `plus` y)])
   writeStmtCode ctxt1 stmtFor4
   cmnt "Conditionals"
   let
@@ -174,3 +174,17 @@ main = do
   writeStmtAsText 80 $ declareAndAssignN (NamedDeclSpec "longRealName" $ realSpec []) (foldl' plusE (ln 2) $ fmap ln [3])
   writeStmtAsText 80 $ declareAndAssignN (NamedDeclSpec "longRealName" $ realSpec []) (foldl' plusE (ln 2) $ fmap ln [3..20])
   writeStmtAsText 80 $ ln 1 `assign` (foldl' plusE (ln 2) $ fmap ln [3..20])
+  let formatS1 = for "q" (IndexedIn "States" $ namedE "votes" SCVec)
+                 $ \sie -> (assign (sliceE s0 sie $ namedE "w" SCVec) (realE 2) :| [assign x (x `plus` y)
+                                                                                   , stmtWhile
+                                                                                   , ln 1 `assign` (foldl' plusE (ln 2) $ fmap ln [3..20])])
+  writeStmtAsText 80 formatS1
+  let
+    f :: Function EReal [ECVec, ECVec, EArray N1 EInt, EInt, EInt]
+    f = simpleFunction "f"
+    fArgList = Arg "x1" :> Arg "x2" :> DataArg "m" :> Arg "ThisIsALongName" :> Arg "AsIsThisNameAlsoLong" :> TNil
+    fBody :: ExprList [ECVec, ECVec, EArray N1 EInt, EInt, EInt] -> (NonEmpty UStmt, UExpr EReal)
+    fBody (x1 :> x2 :> _ :> _ :> _ :> TNil) = (one $ rv `assign` (tr (x1 `eMinus` x2) `times` (x1 `eMinus` x2)), rv)
+      where rv = namedE "r" SReal
+    funcStmt = function f fArgList fBody
+  writeStmtAsText 80 funcStmt
