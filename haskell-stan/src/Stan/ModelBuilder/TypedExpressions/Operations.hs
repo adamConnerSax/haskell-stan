@@ -59,6 +59,29 @@ data SBoolOp :: BoolOp -> Type where
   SAnd :: SBoolOp BAnd
   SOr :: SBoolOp BOr
 
+boolOpFromSBoolOp :: SBoolOp bop -> BoolOp
+boolOpFromSBoolOp SEq = BEq
+boolOpFromSBoolOp SNEq = BNEq
+boolOpFromSBoolOp SLT = BLT
+boolOpFromSBoolOp SLEq = BLEq
+boolOpFromSBoolOp SGT = BGT
+boolOpFromSBoolOp SGEq = BGEq
+boolOpFromSBoolOp SAnd = BAnd
+boolOpFromSBoolOp SOr = BOr
+{-# INLINABLE boolOpFromSBoolOp #-}
+
+noParenBoolOps :: BoolOp -> BoolOp -> Bool
+noParenBoolOps BAnd BAnd = True
+noParenBoolOps BOr BOr = True
+noParenBoolOps BOr BAnd = False
+noParenBoolOps BAnd BOr = False
+noParenBoolOps BAnd _ = True
+noParenBoolOps _ BAnd = True
+noParenBoolOps BOr _ = True
+noParenBoolOps _ BOr = True
+noParenBoolOps _ _ = False
+{-# INLINABLE noParenBoolOps #-}
+
 instance TestEquality SBoolOp where
   testEquality SEq SEq = Just Refl
   testEquality SNEq SNEq = Just Refl
@@ -88,7 +111,7 @@ type family BoolResultT (bo :: BoolOp) (a :: EType) (b :: EType) :: EType where
   BoolResultT BOr EBool EBool = EBool
   BoolResultT BOr a b = TE.TypeError (TE.Text "\"" :<>: TE.ShowType a :<>: TE.Text " || " :<>: TE.ShowType b :<>: TE.Text "\" is not defined." )
 
-data BinaryOp = BAdd | BSubtract | BMultiply | BDivide | BPow | BModulo | BElementWise BinaryOp | BAndEqual BinaryOp | BBoolean BoolOp
+data BinaryOp = BSubtract | BAdd | BDivide | BMultiply | BPow | BModulo | BElementWise BinaryOp | BAndEqual BinaryOp | BBoolean BoolOp
 
 data SBinaryOp :: BinaryOp -> Type where
   SAdd :: SBinaryOp BAdd
@@ -99,6 +122,33 @@ data SBinaryOp :: BinaryOp -> Type where
   SModulo :: SBinaryOp BModulo
   SElementWise :: SBinaryOp op -> SBinaryOp (BElementWise op)
   SBoolean :: SBoolOp bop -> SBinaryOp (BBoolean bop)
+
+binaryOpFromSBinaryOp :: SBinaryOp op -> BinaryOp
+binaryOpFromSBinaryOp SAdd = BAdd
+binaryOpFromSBinaryOp SSubtract = BSubtract
+binaryOpFromSBinaryOp SMultiply = BMultiply
+binaryOpFromSBinaryOp SDivide = BDivide
+binaryOpFromSBinaryOp SPow = BPow
+binaryOpFromSBinaryOp SModulo = BModulo
+binaryOpFromSBinaryOp (SElementWise sop) = BElementWise (binaryOpFromSBinaryOp sop)
+binaryOpFromSBinaryOp (SBoolean sbop) = BBoolean (boolOpFromSBoolOp sbop)
+{-# INLINABLE binaryOpFromSBinaryOp #-}
+
+needParens :: BinaryOp -- operator being applied
+           -> BinaryOp -- operator already within
+           -> Bool -- do we need to parenthesize ?
+needParens BSubtract BDivide = False
+needParens BSubtract BMultiply = False
+needParens BAdd BSubtract = False
+needParens BAdd BAdd = False
+needParens BAdd BDivide = False
+needParens BAdd BMultiply = False
+needParens BDivide BMultiply = False
+needParens BMultiply BDivide = False
+needParens BMultiply BMultiply = False
+needParens (BElementWise op1) (BElementWise op2) = needParens op1 op2
+needParens (BBoolean bop1) (BBoolean bop2) = not $ noParenBoolOps bop1 bop2
+needParens _ _ = True
 
 type family CanAndEqual (bo :: BinaryOp) :: BinaryOp where
   CanAndEqual (BBoolean _) =  TE.TypeError (TE.Text "Cannot AndEqual a boolean operator. That is, something like =/= makes no sense.")

@@ -61,8 +61,10 @@ main = do
   let
     cmnt t = writeStmtCode ctxt0 $ comment (one t)
     plus = binaryOpE SAdd
-    eMinus = binaryOpE $ SElementWise SSubtract
+    minus = binaryOpE SSubtract
     times = binaryOpE SMultiply
+    divide = binaryOpE SDivide
+    eMinus = binaryOpE $ SElementWise SSubtract
     tr = unaryOpE STranspose
     n = namedE "n" SInt
     l = namedE "l" SInt
@@ -165,6 +167,14 @@ main = do
   writeStmtCode ctxt0 $ print (stringE "example" :> l :> TNil)
   writeStmtCode ctxt0 $ reject (m :> stringE "or" :> r :> TNil)
   writeStmtCode ctxt0 $ comment ("Multiline comments" :| ["are formatted differently!"])
+-- parentheses
+  cmnt "Parentheses"
+  traverse_ (writeStmtAsText 80) $ [x `assign` op1 x (op2 y x) | op1 <- [plus, minus, times, divide], op2 <- [plus, minus, times, divide] ]
+  let b1 = namedE "b1" SBool
+      b2 = namedE "b2" SBool
+      and = boolOpE SAnd
+      or = boolOpE SOr
+  traverse_ (writeStmtAsText 80) $ [ifThen (b1 `op1` (b2 `op2` b2)) (x `assign` y) (y `assign` x) | op1 <- [and, or], op2 <- [and, or] ]
   writeStmtAsText 80 $ comment (one $ "Formatting...")
   let ln n = namedE ("longVarName" <> show n) SReal
       dn n = namedE ("someLongIntName" <> show n) SInt
