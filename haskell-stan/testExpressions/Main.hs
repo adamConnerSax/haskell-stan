@@ -167,7 +167,7 @@ main = do
   writeStmtCode ctxt0 $ comment ("Multiline comments" :| ["are formatted differently!"])
   writeStmtAsText 80 $ comment (one $ "Formatting...")
   let ln n = namedE ("longVarName" <> show n) SReal
-      dn n = namedE ("someInt" <> show n) SInt
+      dn n = namedE ("someLongIntName" <> show n) SInt
       veryLongName = "abcdefghijklmnopqrstuvwxyz"
   writeStmtAsText 80 $ declareN $ NamedDeclSpec veryLongName $  arraySpec s4 (dn 1 ::: dn 2 ::: dn 3 ::: dn 4 ::: VNil) $ matrixSpec (dn 1) (dn 2) []
   writeStmtAsText 40 $ declareN $ NamedDeclSpec veryLongName $  arraySpec s4 (dn 1 ::: dn 2 ::: dn 3 ::: dn 4 ::: VNil) $ matrixSpec (dn 1) (dn 2) []
@@ -188,3 +188,8 @@ main = do
       where rv = namedE "r" SReal
     funcStmt = function f fArgList fBody
   writeStmtAsText 80 funcStmt
+  let
+    d :: Density EReal [ECVec, ECVec, EArray N1 EInt, EInt, EInt, EInt, EInt]
+    d = simpleDensity "d"
+    dStmt = target $ densityE d x (v :> v :> (namedE "indexArray" sIntArray) :> dn 1 :> dn 2 :> dn 3 :> dn 4 :> TNil)
+  writeStmtAsText 80 dStmt

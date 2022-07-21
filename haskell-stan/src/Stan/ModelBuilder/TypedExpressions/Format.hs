@@ -65,26 +65,29 @@ stmtToCodeE = RS.hylo stmtToCodeAlg (hfmap exprToCode . RS.project)
 lineLayout :: PP.Doc a -> PP.Doc a
 lineLayout = PP.group . PP.nest 2
 
+preferOpBreak :: CodePP -> CodePP -> CodePP -> CodePP
+preferOpBreak prefix op rhs = PP.flatAlt
+                              (prefix <> PP.line <> op <+> rhs)
+                              (prefix <+> op <+> rhs)
+
 stmtToCodeAlg :: StmtF (K CodePP) (Either Text CodePP) -> Either Text CodePP
 stmtToCodeAlg = \case
   SDeclareF txt st divf vms -> Right $ lineLayout
                                $ stanDeclHead st (unK <$> DT.toList (unDeclIndexVecF divf)) vms <> PP.softline
                                <> PP.pretty txt <> PP.semi
   SDeclAssignF txt st divf vms rhs -> Right $ lineLayout
-                                      $ stanDeclHead st (unK <$> DT.toList (unDeclIndexVecF divf)) vms <> PP.softline
-                                      <> PP.pretty txt <> PP.softline
-                                      <> PP.equals <+> unK rhs <> PP.semi
-  SAssignF lhs rhs -> Right $ lineLayout
-                      $ unK lhs <> PP.softline
-                      <> PP.equals <+> unK rhs <> PP.semi
-  SOpAssignF op lhs rhs -> Right $ lineLayout
-                           $ unK lhs <> PP.softline
-                           <> opDoc op <> PP.equals <+> unK rhs <> PP.semi
-  STargetF rhs -> Right $ lineLayout $ "target +=" <> PP.softline
-                  <> unK rhs <> PP.semi
+                                      $ preferOpBreak
+                                      (stanDeclHead st (unK <$> DT.toList (unDeclIndexVecF divf)) vms <+> PP.pretty txt)
+                                      PP.equals
+                                      (unK rhs <> PP.semi)
+  SAssignF lhs rhs -> Right $ lineLayout $ preferOpBreak (unK lhs) PP.equals (unK rhs <> PP.semi)
+  SOpAssignF op lhs rhs -> Right $ lineLayout $ preferOpBreak (unK lhs) (opDoc op <> PP.equals) (unK rhs <> PP.semi)
+  STargetF rhs -> Right $ lineLayout $ preferOpBreak "target" "+=" $ unK rhs <> PP.semi
   SSampleF lhs (Density dn _ _ rF) al -> Right $ lineLayout
-                                         $ unK lhs <> PP.softline <>
-                                         "~" <+> PP.pretty dn <> PP.parens (csArgList $ rF al) <> PP.semi
+                                         $ preferOpBreak
+                                         (unK lhs)
+                                         "~"
+                                         (PP.pretty dn <> PP.parens (csArgList $ rF al) <> PP.semi)
   SForF txt fe te body -> (\b -> "for" <+> PP.parens (PP.pretty txt <+> "in" <+> unK fe <> PP.colon <> unK te) <+> bracketBlock b) <$> sequenceA body
   SForEachF txt e body -> (\b -> "foreach" <+> PP.parens (PP.pretty txt <+> "in" <+> unK e) <+> bracketBlock b) <$> sequence body
   SIfElseF condAndIfTrueL allFalse -> ifElseCode condAndIfTrueL allFalse
@@ -253,8 +256,24 @@ formatFunctionArgs cs = PP.align . PP.group
                         (PP.encloseSep mempty mempty PP.comma cs)
                         (PP.encloseSep mempty mempty (PP.comma <> PP.space) cs)
 
+formatDensityArgs :: [CodePP] -> CodePP
+formatDensityArgs cs = PP.align . PP.group
+                        $ PP.flatAlt
+                        (encloseSep' mempty mempty PP.pipe PP.comma cs)
+                        (encloseSep' mempty mempty (PP.pipe <> PP.space) (PP.comma <> PP.space) cs)
+
+
+encloseSep' :: CodePP -> CodePP -> CodePP -> CodePP -> [CodePP] -> CodePP
+encloseSep' l r s1 s ds = case ds of
+  [] -> l <> r
+  [d] -> l <> d <> r
+  _ -> PP.cat (zipWith (<>) (l : s1 : repeat s) ds) <> r
+
 csArgList :: TypedList (K CodePP) args -> CodePP
 csArgList = formatFunctionArgs . typedKToList
+
+prefixSurroundPrefer :: CodePP -> CodePP -> CodePP -> CodePP -> CodePP -> CodePP
+prefixSurroundPrefer ifUnsplit ifSplit ls rs c = PP.group $ PP.flatAlt ifSplit ifUnsplit <> ls <> PP.align c <> rs
 
 -- I am not sure about/do not understand the quantified constraint here.
 exprToDocAlg :: IAlg LExprF (K IExprCode) -- LExprF ~> K IExprCode
@@ -270,9 +289,12 @@ exprToDocAlg = K . \case
   LIntRange leM ueM -> Oped $ maybe mempty (unK . f) leM <> PP.colon <> maybe mempty (unK . f) ueM
   LFunction (Function fn _ _ rF) al -> Bare $ PP.pretty fn <> PP.parens (csArgList $ hfmap f $ rF al)
   LFunction (IdentityFunction _) (arg :> TNil) -> Bare $ unK $ f arg
-  LDensity (Density dn _ _ rF) k al -> Bare $ PP.group
-                                       $ PP.pretty dn <> PP.parens (unK (f k) <> PP.pipe <> PP.softline
-                                                                     <> csArgList (hfmap f $ rF al))
+  LDensity (Density dn _ _ rF) k al -> Bare $ PP.pretty dn <> PP.parens (formatDensityArgs (unK (f k) : typedKToList (hfmap f $ rF al)))
+{-
+
+    PP.align (unK (f k) <> PP.pipe <> PP.softline
+                                                                              <> csArgList (hfmap f $ rF al)))
+-}
   LBinaryOp sbo le re -> Oped $ unK (f $ parenthesizeOped le) <> PP.softline <> opDoc sbo <+> unK (f $ parenthesizeOped re)
   LUnaryOp op e -> Bare $ unaryOpDoc (unK (f $ parenthesizeOped e)) op
   LCond ce te fe -> Bare $ PP.group $ PP.nest 1 $ unK (f ce) <> PP.softline <> "?" <+> unK (f te) <> PP.softline <> PP.colon <+> unK (f fe)
