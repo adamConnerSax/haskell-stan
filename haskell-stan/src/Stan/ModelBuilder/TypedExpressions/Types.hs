@@ -46,6 +46,7 @@ data EType where
   EInt :: EType
   EReal :: EType
   EComplex :: EType
+  ESimplex :: EType
   ECVec :: EType
   ERVec :: EType
   EMat :: EType
@@ -63,6 +64,7 @@ instance GenEType EBool where genEType = EBool
 instance GenEType EInt where genEType = EInt
 instance GenEType EReal where genEType = EReal
 instance GenEType EComplex where genEType = EComplex
+instance GenEType ESimplex where genEType = ESimplex
 instance GenEType ECVec where genEType = ECVec
 instance GenEType ERVec where genEType = ERVec
 instance GenEType EMat where genEType = EMat
@@ -131,6 +133,7 @@ type family Promoted (a :: EType) (b :: EType) :: EType where
 --Stan's modifiers (e.g. "<lower=2>" apply to the internal type in an array.)
 type family ScalarType (et :: EType) :: EType where
   ScalarType (EArray _ t) = ScalarType t
+  ScalarType ESimplex = EReal
   ScalarType ECVec = EReal
   ScalarType ERVec = EReal
   ScalarType EMat = EReal
@@ -138,6 +141,7 @@ type family ScalarType (et :: EType) :: EType where
   ScalarType a = a
 
 type family IsContainer (t :: EType) :: Constraint where
+  IsContainer ESimplex = ()
   IsContainer ECVec = ()
   IsContainer ERVec = ()
   IsContainer EMat = ()
@@ -153,6 +157,7 @@ data SType :: EType -> Type where
   SInt :: SType EInt
   SReal :: SType EReal
   SComplex :: SType EComplex
+  SSimplex :: SType ESimplex
   SCVec :: SType ECVec
   SRVec :: SType ERVec
   SMat :: SType EMat
@@ -169,6 +174,7 @@ instance GenSType EBool where genSType = SBool
 instance GenSType EInt where genSType = SInt
 instance GenSType EReal where genSType = SReal
 instance GenSType EComplex where genSType = SComplex
+instance GenSType ESimplex where genSType = SSimplex
 instance GenSType ECVec where genSType = SCVec
 instance GenSType ERVec where genSType = SRVec
 instance GenSType EMat where genSType = SMat
@@ -194,6 +200,7 @@ instance Eq (SType t) where
   SInt == SInt = True
   SReal == SReal = True
   SComplex == SComplex = True
+  SSimplex == SSimplex = True
   SCVec == SCVec = True
   SRVec == SRVec = True
   SMat == SMat = True
@@ -226,6 +233,7 @@ withSType EBool k = k SBool
 withSType EInt k = k SInt
 withSType EReal k = k SReal
 withSType EComplex k = k SComplex
+withSType ESimplex k = k SSimplex
 withSType ERVec k = k SRVec
 withSType ECVec k = k SCVec
 withSType EMat k = k SMat
@@ -244,6 +252,7 @@ sTypeName = \case
   SInt -> "int"
   SReal -> "real"
   SComplex -> "complex"
+  SSimplex -> "simplex"
   SCVec -> "vector"
   SRVec -> "row_vector"
   SMat -> "matrix"
@@ -262,7 +271,7 @@ data StanType :: EType -> Type where
   StanVector :: StanType ECVec
   StanOrdered :: StanType ECVec
   StanPositiveOrdered :: StanType ECVec
-  StanSimplex :: StanType ECVec
+  StanSimplex :: StanType ESimplex
   StanUnitVector :: StanType ECVec
   StanRowVector :: StanType ERVec
   StanMatrix :: StanType EMat
@@ -304,7 +313,7 @@ eTypeFromStanType = \case
   StanVector -> ECVec
   StanOrdered -> ECVec
   StanPositiveOrdered -> ECVec
-  StanSimplex -> ECVec
+  StanSimplex -> ESimplex
   StanUnitVector -> ECVec
   StanRowVector -> ERVec
   StanMatrix -> EMat
@@ -322,7 +331,7 @@ sTypeFromStanType = \case
   StanVector -> SCVec
   StanOrdered -> SCVec
   StanPositiveOrdered -> SCVec
-  StanSimplex -> SCVec
+  StanSimplex -> SSimplex
   StanUnitVector -> SCVec
   StanRowVector -> SRVec
   StanMatrix -> SMat
@@ -338,6 +347,7 @@ instance TestEquality SType where
   testEquality SInt SInt = Just Refl
   testEquality SReal SReal = Just Refl
   testEquality SComplex SComplex = Just Refl
+  testEquality SSimplex SSimplex = Just Refl
   testEquality SCVec SCVec = Just Refl
   testEquality SRVec SRVec = Just Refl
   testEquality SMat SMat = Just Refl

@@ -76,7 +76,7 @@ orderedSpec ie = DeclSpec StanOrdered (ie ::: VNil)
 positiveOrderedSpec :: UExpr EInt -> [VarModifier UExpr EReal] -> DeclSpec ECVec
 positiveOrderedSpec ie = DeclSpec StanPositiveOrdered (ie ::: VNil)
 
-simplexSpec :: UExpr EInt -> [VarModifier UExpr EReal] -> DeclSpec ECVec
+simplexSpec :: UExpr EInt -> [VarModifier UExpr EReal] -> DeclSpec ESimplex
 simplexSpec ie = DeclSpec StanSimplex (ie ::: VNil)
 
 unitVectorSpec :: UExpr EInt -> [VarModifier UExpr EReal] -> DeclSpec ECVec

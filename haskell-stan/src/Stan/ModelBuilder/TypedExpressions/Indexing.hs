@@ -85,6 +85,7 @@ type family DeclDimension (e :: EType) :: Nat where
   DeclDimension EInt = Z
   DeclDimension EReal = Z
   DeclDimension EComplex = Z
+  DeclDimension ESimplex = S Z
   DeclDimension ECVec = S Z
   DeclDimension ERVec = S Z
   DeclDimension EMat = S (S Z)
@@ -95,6 +96,7 @@ type family Dimension (e :: EType) :: Nat where
   Dimension EInt = Z
   Dimension EReal = Z
   Dimension EComplex = Z
+  Dimension ESimplex = S Z
   Dimension ECVec = S Z
   Dimension ERVec = S Z
   Dimension EMat = S (S Z)
@@ -118,6 +120,8 @@ type family Sliced (n :: Nat) (a :: EType) :: EType where
   Sliced _ ERVec = TE.TypeError (TE.Text "Cannot slice (index) a row-vector at a position other than 0.")
   Sliced Z ECVec = EReal
   Sliced _ ECVec = TE.TypeError (TE.Text "Cannot slice (index) a vector at a position other than 0.")
+  Sliced Z ESimplex = EReal
+  Sliced _ ESimplex = TE.TypeError (TE.Text "Cannot slice (index) a simplex at a position other than 0.")
   Sliced Z EMat = ERVec
   Sliced (S Z) EMat = ECVec
   Sliced _ EMat = TE.TypeError (TE.Text "Cannot slice (index) a matrix at a position other than 0 or 1.")
@@ -137,6 +141,8 @@ type family IfLessOrEq (n :: Nat) (m :: Nat) (a :: EType) (b :: EType) :: EType 
   IfLessOrEq (S n) (S m) a b = IfLessOrEq n m a b
 
 type family Indexed (n :: Nat) (a :: EType) :: EType where
+  Indexed Z ESimplex = ESimplex
+  Indexed _ ESimplex = TE.TypeError (TE.Text "Attempt to index a simplex at a position other than 0.")
   Indexed Z ECVec = ECVec
   Indexed _ ECVec = TE.TypeError (TE.Text "Attempt to index a vector at a position other than 0.")
   Indexed Z ERVec = ERVec

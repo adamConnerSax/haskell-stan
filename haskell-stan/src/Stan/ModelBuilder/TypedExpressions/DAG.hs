@@ -216,15 +216,25 @@ addTransformedHP nds rawCsM rawPrior fromRawF = do
   rawPT <- addIndependentPriorP rawNDS rawPrior
   addBuildParameter $ TransformedP nds [] (BuildP rawPT TE.:> TE.TNil)  (\(e TE.:> TE.TNil) -> DeclRHS $ fromRawF e) -- (ExprList qs -> DeclCode t)
 
+iidMatrixP :: TE.NamedDeclSpec TE.EMat
+          -> [FunctionToDeclare]
+          -> Parameters qs
+          -> TE.Density TE.ECVec qs
+          -> SB.StanBuilderM md gq (DT.ParameterTag TE.EMat)
+iidMatrixP nds ftd ps d = addBuildParameter
+                          $ UntransformedP nds ftd ps
+                          $ \qs m -> TE.addStmt $ TE.sample (TE.functionE TE.to_vector (m TE.:> TE.TNil)) d qs
+
 withIIDMatrixRaw :: TE.NamedDeclSpec TE.EMat
                  -> Maybe [TE.VarModifier TE.UExpr TE.EReal]
                  -> TE.DensityWithArgs TE.ECVec
                  -> DT.Parameters qs
                  -> (TE.ExprList qs -> TE.MatrixE -> TE.MatrixE)
                  -> SB.StanBuilderM md gq (DT.ParameterTag TE.EMat)
-withIIDMatrixRaw nds rawCsM d qs f = do
+withIIDMatrixRaw nds rawCsM dwa qs f = do
  let TE.DeclSpec _ (rowsE ::: colsE ::: VNil) cs = TE.decl nds
      rawNDS = TE.NamedDeclSpec (rawName $ TE.declName nds) $ TE.matrixSpec rowsE colsE $ fromMaybe [] rawCsM
- rawPT <- addBuildParameter $ UntransformedP rawNDS  [] TE.TNil $ const
-   $ \m -> TE.addStmt $ TE.functionE TE.to_vector (m TE.:> TE.TNil) `TE.sampleW` d
+ rawPT <- TE.withDWA (\d tl -> iidMatrixP rawNDS [] (exprListToParameters tl) d) dwa
+-- rawPT <- addBuildParameter $ UntransformedP rawNDS  [] TE.TNil $ const
+--   $ \m -> TE.addStmt $ TE.functionE TE.to_vector (m TE.:> TE.TNil) `TE.sampleW` d
  addBuildParameter $ TransformedP nds [] (BuildP rawPT TE.:> qs) (\(rmE TE.:> qsE) -> DeclRHS $ f qsE rmE)

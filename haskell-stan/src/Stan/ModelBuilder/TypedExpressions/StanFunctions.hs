@@ -377,3 +377,12 @@ lkj_corr_cholesky = simpleDensity "lkj_corr_cholesky"
 multi_normal_cholesky :: Density ECVec '[ECVec, ECVec, ESqMat]
 multi_normal_cholesky = simpleDensity "multi_normal_cholesky"
 {-# INLINEABLE multi_normal_cholesky #-}
+
+-- Categorical
+categorical :: Density EInt '[ESimplex]
+categorical = simpleDensity "categorical"
+{-# INLINEABLE categorical #-}
+
+categorical_logit :: Density EInt '[ECVec]
+categorical_logit = simpleDensity "categorical_logit"
+{-# INLINEABLE categorical_logit #-}

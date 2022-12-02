@@ -203,6 +203,9 @@ unaryOpE op e = TR.IFix $ UL $ LUnaryOp op e
 negateE :: UExpr t -> UExpr (UnaryResultT UNegate t)
 negateE = unaryOpE SNegate
 
+transposeE :: UExpr t -> UExpr (UnaryResultT UTranspose t)
+transposeE = unaryOpE STranspose
+
 binaryOpE :: SBinaryOp op -> UExpr ta -> UExpr tb -> UExpr (BinaryResultT op ta tb)
 binaryOpE op ea eb = TR.IFix $ UL $ LBinaryOp op ea eb
 
