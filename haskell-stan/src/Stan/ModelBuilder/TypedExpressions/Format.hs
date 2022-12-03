@@ -106,7 +106,7 @@ stmtToCodeAlg = \case
   SPrintF al -> Right $ "print" <+> PP.parens (csArgList al) <> PP.semi
   SRejectF al -> Right $ "reject" <+> PP.parens (csArgList al) <> PP.semi
   SScopedF body -> bracketBlock <$> sequence body
-  SBlockF bl body -> maybe (Right mempty) (fmap (\x -> PP.pretty (stmtBlockHeader bl) <> bracketBlock x) . sequenceA) $ nonEmpty $ toList body
+  SBlockF bl body -> maybe (Right mempty) (fmap (\x -> PP.pretty (stmtBlockHeader bl) <+> bracketBlock x) . sequenceA) $ nonEmpty $ toList body
   SContextF mf body -> case mf of
     Just _ -> Left "stmtToCodeAlg: Impossible! SContext with a change function remaining!"
     Nothing -> blockCode <$> sequence body

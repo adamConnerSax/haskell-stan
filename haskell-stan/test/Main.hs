@@ -42,7 +42,7 @@ runMatchupsModel clearCaches matchupsId = do
   fbResults_C <- fbResults @r
   fbMatchups_C <- fbMatchups matchupsId
   teams <- FL.fold (FL.premap (view favoriteName) FL.set) <$> K.ignoreCacheTime fbResults_C
-  (dw, code) <- dataWranglerAndCode fbResults_C fbMatchups_C (groupBuilder teams) spreadDiffNormal
+  (dw, code) <- SMR.dataWranglerAndCode fbResults_C fbMatchups_C (groupBuilder teams) spreadDiffNormal
   (musCI, sigmaMuCI, sigmaCI, eScoreDiff) <- do
     K.ignoreCacheTimeM
     $ runModel @KE.SerializerC @KE.CacheData
@@ -60,7 +60,7 @@ runMatchupsModel clearCaches matchupsId = do
   K.logLE K.Info $ "sigma: " <> show sigmaCI
   K.logLE K.Info $ "eScoreDiff: " <> show eScoreDiff
 
-
+{-
 -- This whole thing should be wrapped in the core for this very common variation.
 dataWranglerAndCode :: forall md gq r. (K.KnitEffects r, Typeable md, Typeable gq)
                     => K.ActionWithCacheTime r md --F.Frame FB_Result
@@ -88,6 +88,7 @@ dataWranglerAndCode modelData_C gqData_C gb sb = do
         return wrangler
       resE = DAG.runStanBuilderDAG modelDat gqDat gb builderWithWrangler
   K.knitEither $ fmap (\(bs, dw) -> (dw, S.program (S.code bs))) resE
+-}
 
 runModel :: forall st cd md gq b c r.
             (SC.KnitStan st cd r

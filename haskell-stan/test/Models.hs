@@ -47,8 +47,8 @@ import qualified Stan.ModelBuilder as TE
 import qualified Stan.ModelBuilder as DS
 
 -- remove "haskell-stan" from these paths if this becomes it's own project
-F.tableTypes "FB_Result" ("haskell-stan/test/data/football.csv")
-F.tableTypes "FB_Matchup" ("haskell-stan/test/data/matchups1.csv")
+F.tableTypes "FB_Result" ("test/data/football.csv")
+F.tableTypes "FB_Matchup" ("test/data/matchups1.csv")
 
 
 fbResults :: forall r.(K.KnitEffects r, KE.CacheEffects r) => K.Sem r (K.ActionWithCacheTime r (F.Frame FB_Result))
@@ -120,15 +120,15 @@ spreadDiffNormal = do
   sigmaMuP <- DAG.simpleParameter
               (TE.NamedDeclSpec "sigma_mu_fav" $ TE.realSpec [TE.lowerM $ TE.realE 0])
               (DAG.given (TE.realE 0) :> DAG.given (TE.realE 3) :> TNil)
-              TE.normalDensity
+              TE.normal
   sigmaP <- DAG.simpleParameter
          (TE.NamedDeclSpec "sigma" $ TE.realSpec [TE.lowerM $ TE.realE 0])
          (DAG.given (TE.realE 13) :> DAG.given (TE.realE 15) :> TNil)
-         $ TE.normalDensity
+         $ TE.normal
   muVP <- DAG.simpleParameter
           (TE.NamedDeclSpec "mu_fav" $ TE.vectorSpec (S.groupSizeE favoriteG) [])
           (DAG.given (TE.realE 0) :> DAG.build sigmaMuP :> TNil)
-         $ TE.normalDensityS
+         $ TE.normalS
   -- get expressions for the parameters we need to model the data
   let (sigmaE :> muVecE :> TNil) = DAG.tagsAsExprs (sigmaP :> muVP :> TNil)
 
@@ -152,8 +152,8 @@ spreadDiffNormal = do
 
   -- log-likelihood
   let at = TE.sliceE TE.s0
-  SBB.generateLogLikelihood resultsData SD.normalDist []
-    (\k -> at k (indexed resultsData favoriteG muVecE) :> at k (toVec resultsData sigmaE) :> TNil)
+  SBB.generateLogLikelihood resultsData SD.normalDist
+    (pure (\k -> at k (indexed resultsData favoriteG muVecE) :> at k (toVec resultsData sigmaE) :> TNil))
     (\k -> at k spreadDiffE)
 
 --  (return (S.var mu_favV, S.var sigmaV)) spreadDiffV

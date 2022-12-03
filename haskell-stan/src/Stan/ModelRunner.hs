@@ -41,6 +41,40 @@ import qualified System.Directory as Dir
 import qualified System.Environment as Env
 import qualified Relude.Extra as Relude
 import qualified Stan.ModelBuilder.TypedExpressions.Program as TE
+import qualified Stan.ModelBuilder.TypedExpressions.DAG as DAG
+import Knit.Report (builderCell)
+
+
+-- given cached model data and gq data, a group builder and a model builder
+-- generate a no-predictions data-wrangler and program
+dataWranglerAndCode :: forall md gq r. (K.KnitEffects r, Typeable md, Typeable gq)
+                    => K.ActionWithCacheTime r md
+                    -> K.ActionWithCacheTime r gq
+                    -> SB.StanGroupBuilderM md gq ()
+                    -> SB.StanBuilderM md gq ()
+                    -> K.Sem r (SC.DataWrangler md gq SB.DataSetGroupIntMaps (), TE.StanProgram)
+dataWranglerAndCode modelData_C gqData_C gb sb = do
+  modelDat <- K.ignoreCacheTime modelData_C
+  gqDat <- K.ignoreCacheTime gqData_C
+  let builderWithWrangler = do
+        SB.buildGroupIndexes
+        sb
+        modelJsonF <- SB.buildModelJSONFromDataM
+        gqJsonF <- SB.buildGQJSONFromDataM
+        modelIntMapsBuilder <- SB.modelIntMapsBuilder
+        gqIntMapsBuilder <- SB.gqIntMapsBuilder
+        let modelWrangle md = (modelIntMapsBuilder md, modelJsonF)
+            gqWrangle gq = (gqIntMapsBuilder gq, gqJsonF)
+            wrangler :: SC.DataWrangler md gq SB.DataSetGroupIntMaps () =
+              SC.Wrangle
+              SC.TransientIndex
+              modelWrangle
+              (Just gqWrangle)
+        return wrangler
+      resE = DAG.runStanBuilderDAG modelDat gqDat gb builderWithWrangler
+  K.knitEither $ fmap (\(bs, dw) -> (dw, SB.program (SB.code bs))) resE
+
+
 
 makeDefaultModelRunnerConfig :: forall st cd r. SC.KnitStan st cd r
   => SC.RunnerInputNames

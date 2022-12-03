@@ -96,6 +96,10 @@ rep_vector :: Function ECVec '[EReal, EInt]
 rep_vector = simpleFunction "rep_vector"
 {-# INLINEABLE rep_vector #-}
 
+rep_row_vector :: Function ERVec '[EReal, EInt]
+rep_row_vector = simpleFunction "rep_row_vector"
+{-# INLINEABLE rep_row_vector #-}
+
 type family NInts (n :: Nat) :: [EType] where
   NInts Z = '[]
   NInts (S n) = EInt ': NInts n
@@ -112,6 +116,7 @@ dot_product = simpleFunction "dot_product"
 
 type family RepArgs (t :: EType) :: [EType] where
   RepArgs ECVec = [EReal, EInt]
+  RepArgs ERVec = [EReal, EInt]
   RepArgs EMat = [EReal, EInt, EInt]
   RepArgs ESqMat = [EReal, EInt]
   RepArgs t = TE.TypeError (TE.Text "Cannot fill " :<>: TE.ShowType t :<>: TE.Text " like a container (e.g., vector, matrix)")
@@ -120,9 +125,10 @@ type family RepArgs (t :: EType) :: [EType] where
 rep_container :: (TypeOneOf t '[ECVec, EMat, ESqMat]) => SType t -> Function t (RepArgs t)
 rep_container st = case st of
   SCVec -> rep_vector
+  SRVec -> rep_row_vector
   SMat -> rep_matrix
   SSqMat -> rep_sq_matrix
-  _ -> undefined -- constraint means this should never get called??
+  _ -> error "rep_container should be impossible ot call at type other than SCVec, SMat or SSqMat"
 {-# INLINEABLE rep_container #-}
 
 rep_matrix :: Function EMat '[EReal, EInt, EInt]
@@ -397,18 +403,18 @@ categorical_rng :: (TypeOneOf t [ESimplex, ECVec], GenSType t)  => Function EInt
 categorical_rng = simpleFunction "categorical_lupmf"
 {-# INLINEABLE categorical_rng #-}
 
-categorical_logit :: CategoricalTypes t t' => Density t '[t']
+categorical_logit :: (TypeOneOf t [EInt, EIntArray], GenSType t) => Density t '[ECVec]
 categorical_logit = simpleDensity "categorical_logit"
 {-# INLINEABLE categorical_logit #-}
 
-categorical_logit_lpmf :: CategoricalTypes t t' => Density t '[t']
+categorical_logit_lpmf :: (TypeOneOf t [EInt, EIntArray], GenSType t) => Density t '[ECVec]
 categorical_logit_lpmf = simpleDensity "categorical_logit_lpmf"
 {-# INLINEABLE categorical_logit_lpmf #-}
 
-categorical_logit_lupmf :: CategoricalTypes t t' => Density t '[t']
+categorical_logit_lupmf :: (TypeOneOf t [EInt, EIntArray], GenSType t) => Density t '[ECVec]
 categorical_logit_lupmf = simpleDensity "categorical_logit_lupmf"
 {-# INLINEABLE categorical_logit_lupmf #-}
 
-categorical_logit_rng :: (TypeOneOf t [ESimplex, ECVec], GenSType t)  => Function EInt '[t]
+categorical_logit_rng :: Function EInt '[ECVec]
 categorical_logit_rng = simpleFunction "categorical_logit_lupmf"
 {-# INLINEABLE categorical_logit_rng #-}

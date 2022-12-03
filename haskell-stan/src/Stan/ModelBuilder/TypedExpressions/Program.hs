@@ -63,7 +63,9 @@ programToStmt gq p = TE.SContext Nothing fullProgramStmt
     tDataStmtM =
       let
         x = stmtsArray ! SBT.SBTransformedData
-        xGQ =  TE.comment ("For Generated Quantities" :| []) : stmtsArray ! SBT.SBTransformedDataGQ
+        xGQ = if  not (null $ stmtsArray ! SBT.SBTransformedDataGQ)
+              then TE.comment ("For Generated Quantities" :| []) : stmtsArray ! SBT.SBTransformedDataGQ
+              else stmtsArray ! SBT.SBTransformedDataGQ
       in if null x && null xGQ then Nothing else Just (TE.SBlock TE.TDataStmts $ x ++ if gq /= SBT.NoGQ then xGQ else [])
     paramsStmt = TE.SBlock TE.ParametersStmts $ stmtsArray ! SBT.SBParameters
     tParamsStmtM = let x = stmtsArray ! SBT.SBTransformedParameters in if null x then Nothing else Just (TE.SBlock TE.TParametersStmts x)

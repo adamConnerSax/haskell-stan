@@ -185,13 +185,16 @@ instance GenSType ESqMat where genSType = SSqMat
 instance (DT.SNatI n, GenSType t) => GenSType (EArray n t) where genSType = SArray DT.snat (genSType @t)
 --instance (GenSType ta, GenSType tb) => GenSType (ta ::-> tb) where genSType = genSType @ta :-> genSType @tb
 
-sIntArray :: SType (EArray1 EInt)
+type SArray1 t = SType (EArray (S Z) t)
+
+type SIntArray = SArray1 EInt
+
+sIntArray :: SIntArray
 sIntArray = SArray SS SInt
 
 sIndexArray :: SType EIndexArray
 sIndexArray = sIntArray
 
-type SArray1 t = SType (EArray (S Z) t)
 
 instance Show (SType t) where
   show x = "SType: " <> show (sTypeToEType x)
@@ -220,6 +223,7 @@ sTypeToEType = \case
   SInt -> EInt
   SReal -> EReal
   SComplex -> EComplex
+  SSimplex -> ESimplex
   SCVec -> ECVec
   SRVec -> ERVec
   SMat -> EMat

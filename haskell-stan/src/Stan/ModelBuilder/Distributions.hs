@@ -28,6 +28,7 @@ import Data.Type.Equality ((:~:)(Refl),TestEquality(testEquality))
 
 import Prelude hiding (All)
 import qualified Stan.ModelBuilder.TypedExpressions.Operations as TE
+import Stan.ModelBuilder.TypedExpressions.Expressions (rangeIndexE)
 
 data DistType = Discrete | Continuous deriving (Show, Eq)
 
@@ -166,10 +167,10 @@ countScaledBetaBinomialDist sampleWithConstants = StanDist Discrete sample lpmf 
     f x = case TE.genSType @t' of
       TE.SCVec -> case testEquality (TE.genSType @t) (TE.genSType @(TE.EArray1 TE.EInt))  of
         Just Refl -> TE.binaryOpE (TE.SElementWise TE.SMultiply) x . intsToVec
-        _ -> undefined -- this case can't occur based on the constraint above
+        _ -> error "The impossible happened in countScaledBinomialDist" -- this case can't occur based on the constraint above
       TE.SReal -> case testEquality (TE.genSType @t) (TE.genSType @TE.EInt)  of
         Just Refl -> TE.timesE x
-        _ -> undefined -- this case can't occur based on the constraint above
+        _ -> error "The impossible happened in countScaledBinomialDist" -- this case can't occur based on the constraint above
 --    sample :: TE.UExpr (TE.EArray1 TE.EInt) -> TE.ExprList [TE.EArray1 TE.EInt, TE.ECVec, TE.ECVec] -> TE.UStmt
     sample x (t :> a :> b :> TNil) = if sampleWithConstants
                                      then TE.target $ TE.densityE TE.beta_binomial_lpmf x (t :> f a t :> f b t :> TNil)
@@ -195,6 +196,16 @@ argsToVecs (t :> a :> b :> TNil) = t :> realToSameSizeVec t a :> realToSameSizeV
 
 intsToVec :: TE.UExpr (TE.EArray1 TE.EInt) -> TE.UExpr TE.ECVec
 intsToVec x = TE.functionE TE.to_vector (x :> TNil)
+
+categoricalDist :: forall t t'.TE.CategoricalTypes t t' => StanDist t '[t']
+categoricalDist = StanDist Discrete sample lpmf lupmf rng
+  where
+    sample y = TE.sample y TE.categorical
+    lpmf = TE.densityE TE.categorical_lpmf
+    lupmf = TE.densityE TE.categorical_lupmf
+    rng = case TE.genSType @t of
+      TE.SInt -> TE.functionE TE.categorical_rng
+      _ -> error "categorical_rng is not vectorized. For a vector of results, call from a loop."
 
 {-
 normallyApproximatedBinomial :: StanDist (TE.EArray1 TE.EInt) '[TE.EArray1 TE.EInt, TE.EReal]
