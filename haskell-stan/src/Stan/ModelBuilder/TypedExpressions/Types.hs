@@ -81,6 +81,9 @@ type EArray2 t = EArray (S (S Z)) t
 type EIndexArray :: EType
 type EIndexArray = EArray1 EInt
 
+type EIntArray :: EType
+type EIntArray = EArray (S Z) EInt
+
 -- A mechanism to limit the types we can use in functions via a constraint
 type TypeOneOf et ets = TypeOneOf' et ets (TypeOneOfB et ets)
 

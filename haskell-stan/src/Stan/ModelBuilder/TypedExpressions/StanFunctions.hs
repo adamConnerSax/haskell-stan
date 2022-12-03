@@ -379,10 +379,36 @@ multi_normal_cholesky = simpleDensity "multi_normal_cholesky"
 {-# INLINEABLE multi_normal_cholesky #-}
 
 -- Categorical
-categorical :: Density EInt '[ESimplex]
+type CategoricalTypes t t' = (TypeOneOf t [EInt, EIntArray], GenSType t
+                             , TypeOneOf t' [ESimplex, ECVec], GenSType t')
+categorical :: CategoricalTypes t t' => Density t '[t']
 categorical = simpleDensity "categorical"
 {-# INLINEABLE categorical #-}
 
-categorical_logit :: Density EInt '[ECVec]
+categorical_lpmf :: CategoricalTypes t t' => Density t '[t']
+categorical_lpmf = simpleDensity "categorical_lpmf"
+{-# INLINEABLE categorical_lpmf #-}
+
+categorical_lupmf :: CategoricalTypes t t' => Density t '[t']
+categorical_lupmf = simpleDensity "categorical_lupmf"
+{-# INLINEABLE categorical_lupmf #-}
+
+categorical_rng :: (TypeOneOf t [ESimplex, ECVec], GenSType t)  => Function EInt '[t]
+categorical_rng = simpleFunction "categorical_lupmf"
+{-# INLINEABLE categorical_rng #-}
+
+categorical_logit :: CategoricalTypes t t' => Density t '[t']
 categorical_logit = simpleDensity "categorical_logit"
 {-# INLINEABLE categorical_logit #-}
+
+categorical_logit_lpmf :: CategoricalTypes t t' => Density t '[t']
+categorical_logit_lpmf = simpleDensity "categorical_logit_lpmf"
+{-# INLINEABLE categorical_logit_lpmf #-}
+
+categorical_logit_lupmf :: CategoricalTypes t t' => Density t '[t']
+categorical_logit_lupmf = simpleDensity "categorical_logit_lupmf"
+{-# INLINEABLE categorical_logit_lupmf #-}
+
+categorical_logit_rng :: (TypeOneOf t [ESimplex, ECVec], GenSType t)  => Function EInt '[t]
+categorical_logit_rng = simpleFunction "categorical_logit_lupmf"
+{-# INLINEABLE categorical_logit_rng #-}
