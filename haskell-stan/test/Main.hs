@@ -39,19 +39,25 @@ main = KE.knitToIO KE.defaultConfig $ do
 
 runMatchupsModel :: forall st cd r.(K.KnitEffects r, KE.CacheEffects r) => Bool -> Int -> K.Sem r ()
 runMatchupsModel clearCaches matchupsId = do
+  let cacheKeyE = let k = "stan/test/result" in if clearCaches then Left k else Right k
+      runnerInputNames = SC.RunnerInputNames
+                         "haskell-stan/test/stan"
+                         "normalSpreadDiff"
+                         (Just $ SC.GQNames "normalSpreadDiffGQ" ("mu" <> show matchupsId))
+                         "fb"
   fbResults_C <- fbResults @r
   fbMatchups_C <- fbMatchups matchupsId
   teams <- FL.fold (FL.premap (view favoriteName) FL.set) <$> K.ignoreCacheTime fbResults_C
   (dw, code) <- SMR.dataWranglerAndCode fbResults_C fbMatchups_C (groupBuilder teams) spreadDiffNormal
   (musCI, sigmaMuCI, sigmaCI, eScoreDiff) <- do
     K.ignoreCacheTimeM
-    $ runModel @KE.SerializerC @KE.CacheData
-    clearCaches
-    (SC.RunnerInputNames "haskell-stan/test/stan" "normalSpreadDiff" (Just $ SC.GQNames "normalSpreadDiffGQ" ("mu" <> show matchupsId)) "fb")
+    $ SMR.runModel' @KE.SerializerC @KE.CacheData
+    cacheKeyE
+    (Right runnerInputNames)
     dw
     code
-    ""
     normalParamCIs
+    (SMR.Both [])
     fbResults_C
     fbMatchups_C
   K.logLE K.Info $ "Matchups=" <> show matchupsId
@@ -88,7 +94,6 @@ dataWranglerAndCode modelData_C gqData_C gb sb = do
         return wrangler
       resE = DAG.runStanBuilderDAG modelDat gqDat gb builderWithWrangler
   K.knitEither $ fmap (\(bs, dw) -> (dw, S.program (S.code bs))) resE
--}
 
 runModel :: forall st cd md gq b c r.
             (SC.KnitStan st cd r
@@ -144,3 +149,4 @@ runModel clearCaches rin dataWrangler stanProgram ppName resultAction modelData_
       ()
       modelData_C
       gqData_C
+-}

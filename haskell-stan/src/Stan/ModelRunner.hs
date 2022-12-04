@@ -45,6 +45,67 @@ import qualified Stan.ModelBuilder.TypedExpressions.DAG as DAG
 import Knit.Report (builderCell)
 
 
+-- simplified runner for common cases
+runModel' :: forall st cd md gq b c r.
+             (SC.KnitStan st cd r
+             , Typeable md
+             , Typeable gq
+             , st c
+             )
+          => Either Text Text
+          -> Either SC.ModelRunnerConfig SC.RunnerInputNames
+          -> SC.DataWrangler md gq b ()
+          -> TE.StanProgram
+          -> SC.ResultAction r md gq b () c
+          -> RScripts
+          -> K.ActionWithCacheTime r md
+          -> K.ActionWithCacheTime r gq
+          -> K.Sem r (K.ActionWithCacheTime r c)
+runModel' cacheDirE configE dataWrangler stanProgram resultAction rScripts modelData_C gqData_C =
+  K.wrapPrefix "haskell-stan-test.runModel" $ do
+  (rin, stanConfig) <- case configE of
+    Left mrc -> pure (SC.mrcInputNames mrc, mrc)
+    Right rin' -> do
+      let stancConfig =
+            (CS.makeDefaultStancConfig (toString $ SC.rinModelDir rin' <> "/" <> SC.rinModel rin')) {CS.useOpenCL = False}
+      stanConfig <-
+        SC.setSigFigs 4
+        . SC.noLogOfSummary
+        <$> makeDefaultModelRunnerConfig @st @cd
+        rin'
+        (Just (SB.All, stanProgram))
+        (SC.StanMCParameters 4 4 Nothing Nothing Nothing Nothing (Just 1))
+        (Just stancConfig)
+      pure (rin', stanConfig)
+  let outputLabel = SC.rinModel rin  <> "_" <> SC.rinData rin <> maybe "" ("_" <>) (SC.gqDataName <$> SC.rinGQ rin)
+      cacheKey d = d <> outputLabel <> ".bin"
+  resultCacheKey <- case cacheDirE of
+    Left d -> do
+      deleteStaleFiles @st @cd stanConfig [StaleData]
+      K.clearIfPresent @Text @cd $ cacheKey d
+      pure $ cacheKey d
+    Right d -> pure $ cacheKey d
+  K.logLE K.Info
+    $ "Running: model="
+    <> SC.rinModel rin <> " using model data=" <> SC.rinData rin
+    <> maybe "" (" and GQ data=" <>) (SC.gqDataName <$> SC.rinGQ rin)
+  modelDep <- SC.modelDependency SC.MRFull $ SC.mrcInputNames stanConfig
+  K.logLE (K.Debug 1) $ "modelDep: " <> show (K.cacheTime modelDep)
+  K.logLE (K.Debug 1) $ "modelDataDep: " <> show (K.cacheTime modelData_C)
+  K.logLE (K.Debug 1) $ "gqDataDep: " <> show (K.cacheTime gqData_C)
+  let dataModelDep = (,,) <$> modelDep <*> modelData_C <*> gqData_C
+  K.retrieveOrMake @st @cd resultCacheKey dataModelDep $ \_ -> do
+    K.logLE K.Diagnostic "Data or model newer then last cached result. (Re)-running..."
+    runModel @st @cd
+      stanConfig
+      rScripts
+      dataWrangler
+      SC.UnCacheable
+      resultAction
+      ()
+      modelData_C
+      gqData_C
+
 -- given cached model data and gq data, a group builder and a model builder
 -- generate a no-predictions data-wrangler and program
 dataWranglerAndCode :: forall md gq r. (K.KnitEffects r, Typeable md, Typeable gq)
