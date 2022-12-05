@@ -27,6 +27,7 @@ module Stan.ModelBuilder.TypedExpressions.DAGTypes
   , parametersAsExprs
   , DeclCode(..)
   , BuildParameter(..)
+  , simpleTransformedP
   , BParameterCollection(..)
   , bParameterName
   , bParameterSType
@@ -167,6 +168,7 @@ instance TestEquality TData where
 tDataNamedDecl :: TData t -> TE.NamedDeclSpec t
 tDataNamedDecl (TData nds _ _ _) = nds
 
+
 data BuildParameter :: TE.EType -> Type where
   TransformedDataP :: TData t -> BuildParameter t
   UntransformedP :: TE.NamedDeclSpec t
@@ -176,8 +178,10 @@ data BuildParameter :: TE.EType -> Type where
                  -> BuildParameter t
   TransformedP :: TE.NamedDeclSpec t
                -> [FunctionToDeclare]
-               -> Parameters qs
+               -> Parameters qs -- paramters for transformation
                -> (TE.ExprList qs -> DeclCode t) -- code for transformed parameters block
+               -> Parameters rs -- parameters for prior (if nec)
+               -> (TE.ExprList rs -> TE.UExpr t -> TE.CodeWriter ()) -- prior in model block (if nec)
                -> BuildParameter t
   ModelP :: TE.NamedDeclSpec t
          -> [FunctionToDeclare]
@@ -185,16 +189,23 @@ data BuildParameter :: TE.EType -> Type where
          -> (TE.ExprList qs -> DeclCode t)
          -> BuildParameter t
 
+simpleTransformedP :: TE.NamedDeclSpec t
+                   -> [FunctionToDeclare]
+                   -> Parameters qs -- paramters for transformation
+                   -> (TE.ExprList qs -> DeclCode t) -- code for transformed parameters blockBuildParameter t
+                   -> BuildParameter t
+simpleTransformedP nds ftd ps declCodeF = TransformedP nds ftd ps declCodeF TE.TNil (\_ _ -> pure ())
+
 instance TestEquality BuildParameter where
   testEquality bpa bpb = testEquality (f bpa) (f bpb) where
     f = TE.sTypeFromStanType . TE.declType . TE.decl . getNamedDecl
 
 -- Parameter Dependencies types are scoped to stay within a `Parameter t`
 -- so to do anything which uses them, we need to use CPS
-withBPDeps :: BuildParameter t -> (forall ts. Parameters ts -> r) -> r
+withBPDeps :: Monoid r => BuildParameter t -> (forall ts. Parameters ts -> r) -> r
 withBPDeps (TransformedDataP (TData _ _ tds _)) f = f $ hfmap (BuildP . parameterTagFromTData) tds
 withBPDeps (UntransformedP _ _ ps _) f = f ps
-withBPDeps (TransformedP _ _ pq _ ) f = f pq
+withBPDeps (TransformedP _ _ pq _ pr _) f = f pq <> f pr
 withBPDeps (ModelP _ _ pq _ ) f = f pq
 
 data BParameterCollection = BParameterCollection { pdm :: DM.DMap ParameterTag BuildParameter, usedNames :: Set TE.StanName }
@@ -205,7 +216,7 @@ getNamedDecl :: BuildParameter t -> TE.NamedDeclSpec t --SB.StanBuilderM md gq (
 getNamedDecl = \case
   TransformedDataP (TData nds _ _ _) -> nds
   UntransformedP x _ _ _ -> x
-  TransformedP x _ _ _ -> x
+  TransformedP x _ _ _ _ _ -> x
   ModelP x _ _ _ -> x
 --  TransformedDiffTypeP x _ _ _ _ _ _ -> x
 
@@ -213,7 +224,7 @@ setNamedDecl :: TE.NamedDeclSpec t -> BuildParameter t -> BuildParameter t --SB.
 setNamedDecl x = \case
   TransformedDataP (TData _ y z a) -> TransformedDataP (TData x y z a)
   UntransformedP _ y z a -> UntransformedP x y z a
-  TransformedP _ y z a  -> TransformedP x y z a
+  TransformedP _ y z a b c  -> TransformedP x y z a b c
   ModelP _ y z a  -> ModelP x y z a
 
 --  TransformedDiffTypeP _ y z a b c d -> TransformedDiffTypeP x y z a b c d

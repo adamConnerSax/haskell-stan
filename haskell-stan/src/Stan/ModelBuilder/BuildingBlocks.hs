@@ -68,6 +68,9 @@ namedMatrixColIndex x = case SME.varType x of
   _ -> SB.stanBuildError $ "namedMatrixColIndex: bad type=" <> show x
 -}
 
+addFixedInt :: (Typeable md, Typeable gq) => Text -> Int -> SB.StanBuilderM md gq TE.IntE
+addFixedInt t n = SB.addFixedIntJson SB.ModelData t Nothing n
+
 addIntData :: (Typeable md, Typeable gq)
             => SB.RowTypeTag r
             -> TE.StanName

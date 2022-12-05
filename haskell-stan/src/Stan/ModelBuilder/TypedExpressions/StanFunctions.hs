@@ -179,6 +179,10 @@ sub_row :: Function ERVec [EMat, EInt, EInt, EInt]
 sub_row = simpleFunction "sub_row"
 {-# INLINEABLE sub_row #-}
 
+append_col :: Function EMat [EMat, ECVec]
+append_col = simpleFunction "append_col"
+{-# INLINEABLE append_col #-}
+
 rows :: (TypeOneOf t [EMat, ESqMat], GenSType t) => Function EInt '[t]
 rows = simpleFunction "rows"
 {-# INLINEABLE rows #-}

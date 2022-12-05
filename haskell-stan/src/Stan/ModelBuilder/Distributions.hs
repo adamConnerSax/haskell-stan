@@ -207,6 +207,18 @@ categoricalDist = StanDist Discrete sample lpmf lupmf rng
       TE.SInt -> TE.functionE TE.categorical_rng
       _ -> error "categorical_rng is not vectorized. For a vector of results, call from a loop."
 
+
+categoricalLogitDist :: forall t t'.(TE.TypeOneOf t [TE.EInt, TE.EIntArray], TE.GenSType t) => StanDist t '[TE.ECVec]
+categoricalLogitDist = StanDist Discrete sample lpmf lupmf rng
+  where
+    sample y = TE.sample y TE.categorical_logit
+    lpmf = TE.densityE TE.categorical_logit_lpmf
+    lupmf = TE.densityE TE.categorical_logit_lupmf
+    rng = case TE.genSType @t of
+      TE.SInt -> TE.functionE TE.categorical_logit_rng
+      _ -> error "categorical_rng is not vectorized. For a vector of results, call from a loop."
+
+
 {-
 normallyApproximatedBinomial :: StanDist (TE.EArray1 TE.EInt) '[TE.EArray1 TE.EInt, TE.EReal]
 normallyApproximatedBinomial = StanDist Continuous sample lpdf lupdf rng
