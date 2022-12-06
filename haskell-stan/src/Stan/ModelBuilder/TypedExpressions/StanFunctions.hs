@@ -404,7 +404,7 @@ categorical_lupmf = simpleDensity "categorical_lupmf"
 {-# INLINEABLE categorical_lupmf #-}
 
 categorical_rng :: (TypeOneOf t [ESimplex, ECVec], GenSType t)  => Function EInt '[t]
-categorical_rng = simpleFunction "categorical_lupmf"
+categorical_rng = simpleFunction "categorical_rng"
 {-# INLINEABLE categorical_rng #-}
 
 categorical_logit :: (TypeOneOf t [EInt, EIntArray], GenSType t) => Density t '[ECVec]

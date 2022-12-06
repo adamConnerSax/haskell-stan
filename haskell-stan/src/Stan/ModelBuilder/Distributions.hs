@@ -32,31 +32,33 @@ import Stan.ModelBuilder.TypedExpressions.Expressions (rangeIndexE)
 
 data DistType = Discrete | Continuous deriving (Show, Eq)
 
-data StanDist :: TE.EType -> [TE.EType] -> Type where
+data StanDist :: TE.EType -> [TE.EType] -> [TE.EType] -> Type where
   StanDist :: DistType
            -> (TE.UExpr t -> TE.ExprList ts -> TE.UStmt)
            -> (TE.UExpr t -> TE.ExprList ts -> TE.UExpr TE.EReal)
            -> (TE.UExpr t -> TE.ExprList ts -> TE.UExpr TE.EReal)
-           -> (TE.ExprList ts -> TE.UExpr t)
-           -> StanDist t ts
+           -> (TE.ExprList rs -> TE.UExpr t)
+           -> StanDist t ts rs
 
-distType :: StanDist t ts -> DistType
+type SimpleDist t ts = StanDist t ts ts
+
+distType :: StanDist t ts rs -> DistType
 distType (StanDist t _ _ _ _) = t
 
-familySample :: StanDist t ts -> TE.UExpr t -> TE.ExprList ts -> TE.UStmt
+familySample :: StanDist t ts rs -> TE.UExpr t -> TE.ExprList ts -> TE.UStmt
 familySample (StanDist _ f _ _ _)  = f
 
-familyLDF :: StanDist t ts -> TE.UExpr t -> TE.ExprList ts -> TE.UExpr TE.EReal
+familyLDF :: StanDist t ts rs -> TE.UExpr t -> TE.ExprList ts -> TE.UExpr TE.EReal
 familyLDF (StanDist _ _ ldf _ _ ) = ldf
 
-familyLUDF :: StanDist t ts -> TE.UExpr t -> TE.ExprList ts -> TE.UExpr TE.EReal
+familyLUDF :: StanDist t ts rs -> TE.UExpr t -> TE.ExprList ts -> TE.UExpr TE.EReal
 familyLUDF (StanDist _ _ _ ludf _ ) = ludf
 
-familyRNG :: StanDist t ts -> TE.ExprList ts -> TE.UExpr t
+familyRNG :: StanDist t ts rs -> TE.ExprList rs -> TE.UExpr t
 familyRNG (StanDist _ _ _ _ rng ) = rng
 
 
-normalDist :: forall t.(TE.TypeOneOf t [TE.EReal, TE.ECVec, TE.ERVec], TE.GenSType t) => StanDist t '[t, t]
+normalDist :: forall t.(TE.TypeOneOf t [TE.EReal, TE.ECVec, TE.ERVec], TE.GenSType t) => SimpleDist t '[t, t]
 normalDist = StanDist Continuous sample lpdf lupdf rng
   where
     sample x = TE.sample x TE.normal
@@ -68,7 +70,7 @@ normalDist = StanDist Continuous sample lpdf lupdf rng
       TE.SRVec -> TE.functionE TE.to_row_vector (TE.functionE TE.normal_rng ps :> TNil) -- why does the stan version return array[] real??
 
 
-scalarNormalDist :: (TE.TypeOneOf t [TE.EReal, TE.ECVec, TE.ERVec], TE.GenSType t) => StanDist t '[TE.EReal, TE.EReal]
+scalarNormalDist :: (TE.TypeOneOf t [TE.EReal, TE.ECVec, TE.ERVec], TE.GenSType t) => SimpleDist t '[TE.EReal, TE.EReal]
 scalarNormalDist = StanDist Continuous sample lpdf lupdf rng
   where
     sample x  = TE.sample x TE.normalS
@@ -77,7 +79,7 @@ scalarNormalDist = StanDist Continuous sample lpdf lupdf rng
     rng = TE.functionE TE.normalS_rng
 
 
-binomialDist' :: TE.BinDensityC t t' => Bool -> StanDist t '[t, t']
+binomialDist' :: TE.BinDensityC t t' => Bool -> SimpleDist t '[t, t']
 binomialDist' sampleWithConstants = StanDist Discrete sample lpmf lupmf rng
   where
     sample gE args = if sampleWithConstants
@@ -87,10 +89,10 @@ binomialDist' sampleWithConstants = StanDist Discrete sample lpmf lupmf rng
     lupmf = TE.densityE TE.binomial_lupmf
     rng = TE.functionE TE.binomial_rng
 
-binomialDist ::  TE.BinDensityC t t' => StanDist t '[t, t']
+binomialDist ::  TE.BinDensityC t t' => SimpleDist t '[t, t']
 binomialDist = binomialDist' False
 
-binomialLogitDist' :: TE.BinDensityC t t' => Bool -> StanDist t '[t, t']
+binomialLogitDist' :: TE.BinDensityC t t' => Bool -> SimpleDist t '[t, t']
 binomialLogitDist' sampleWithConstants = StanDist Discrete sample lpmf lupmf rng
   where
     sample gE args = if sampleWithConstants
@@ -102,17 +104,17 @@ binomialLogitDist' sampleWithConstants = StanDist Discrete sample lpmf lupmf rng
     rng (tE :> pE :> TNil)= TE.functionE TE.binomial_rng (tE :> TE.functionE TE.inv_logit (pE :> TNil) :> TNil)
 
 
-binomialLogitDist :: TE.BinDensityC t t' => StanDist t '[t, t']
+binomialLogitDist :: TE.BinDensityC t t' => SimpleDist t '[t, t']
 binomialLogitDist = binomialLogitDist' False
 
-binomialLogitDistWithConstants ::  TE.BinDensityC t t' => StanDist t '[t, t']
+binomialLogitDistWithConstants ::  TE.BinDensityC t t' => SimpleDist t '[t, t']
 binomialLogitDistWithConstants = binomialLogitDist' True
 
 
 --vecTimes = TE.binaryOpE (TE.SElementWise TE.SMultiply)
 --vecDivide = TE.binaryOpE (TE.SElementWise TE.SDivide)
 
-betaDist :: StanDist TE.EReal '[TE.EReal, TE.EReal]
+betaDist :: SimpleDist TE.EReal '[TE.EReal, TE.EReal]
 betaDist = StanDist Continuous sample lpdf lupdf rng
   where
     sample x = TE.sample x TE.beta
@@ -123,7 +125,7 @@ betaDist = StanDist Continuous sample lpdf lupdf rng
 betaMu :: TE.UExpr TE.EReal -> TE.UExpr TE.EReal -> TE.UExpr TE.EReal
 betaMu aE bE = aE `TE.divideE` (aE `TE.plusE` bE)
 
-betaProportionDist :: StanDist TE.EReal '[TE.EReal, TE.EReal]
+betaProportionDist :: SimpleDist TE.EReal '[TE.EReal, TE.EReal]
 betaProportionDist = StanDist Continuous sample lpdf lupdf rng
   where
     sample x = TE.sample x TE.beta_proportion
@@ -134,7 +136,7 @@ betaProportionDist = StanDist Continuous sample lpdf lupdf rng
 realToSameSizeVec :: TE.UExpr (TE.EArray1 TE.EInt) -> TE.UExpr TE.EReal -> TE.UExpr TE.ECVec
 realToSameSizeVec v x = TE.functionE TE.rep_vector (x :> TE.functionE TE.size (v :> TNil) :> TNil)
 
-betaBinomialDist' :: forall t t'.TE.BinDensityC t t' => Bool -> StanDist t '[t, t',t']
+betaBinomialDist' :: forall t t'.TE.BinDensityC t t' => Bool -> SimpleDist t '[t, t',t']
 betaBinomialDist' sampleWithConstants = StanDist Discrete sample lpmf lupmf rng
   where
     sample x args = if sampleWithConstants
@@ -145,7 +147,7 @@ betaBinomialDist' sampleWithConstants = StanDist Discrete sample lpmf lupmf rng
     rng = TE.functionE TE.beta_binomial_rng
 
 -- beta-binomial but with the same parameters for every row
-scalarBetaBinomialDist' :: Bool -> StanDist (TE.EArray1 TE.EInt) '[TE.EArray1 TE.EInt, TE.EReal, TE.EReal]
+scalarBetaBinomialDist' :: Bool -> SimpleDist (TE.EArray1 TE.EInt) '[TE.EArray1 TE.EInt, TE.EReal, TE.EReal]
 scalarBetaBinomialDist' sampleWithConstants = StanDist Discrete sample lpmf lupmf rng
   where
     (StanDist _ sample' lpmf' lupmf' rng') = betaBinomialDist' @(TE.EArray1 TE.EInt) @TE.ECVec sampleWithConstants
@@ -160,7 +162,7 @@ scaledIntVec :: TE.UExpr TE.EReal
 scaledIntVec x iv = x `TE.timesE` intsToVec iv
 
 countScaledBetaBinomialDist :: forall t t'.TE.BinDensityC t t'
-                            => Bool -> StanDist t '[t, t', t']
+                            => Bool -> SimpleDist t '[t, t', t']
 countScaledBetaBinomialDist sampleWithConstants = StanDist Discrete sample lpmf lupmf rng
   where
     f :: TE.UExpr t' -> TE.UExpr t -> TE.UExpr t'
@@ -182,7 +184,7 @@ countScaledBetaBinomialDist sampleWithConstants = StanDist Discrete sample lpmf 
 --    rng :: TE.ExprList '[TE.EArray1 TE.EInt, TE.ECVec, TE.ECVec] -> TE.UExpr (TE.EArray1 TE.EInt)
     rng (t :> a :> b :> TNil)  = TE.functionE TE.beta_binomial_rng (t :> f a t :> f b t :> TNil)
 
-countScaledScalarBetaBinomialDist :: Bool -> StanDist (TE.EArray1 TE.EInt) '[TE.EArray1 TE.EInt, TE.EReal, TE.EReal]
+countScaledScalarBetaBinomialDist :: Bool -> SimpleDist (TE.EArray1 TE.EInt) '[TE.EArray1 TE.EInt, TE.EReal, TE.EReal]
 countScaledScalarBetaBinomialDist sampleWithConstants = StanDist Discrete sample lpmf lupmf rng
   where
     (StanDist _ sample' lpmf' lupmf' rng') = countScaledBetaBinomialDist sampleWithConstants
@@ -197,7 +199,7 @@ argsToVecs (t :> a :> b :> TNil) = t :> realToSameSizeVec t a :> realToSameSizeV
 intsToVec :: TE.UExpr (TE.EArray1 TE.EInt) -> TE.UExpr TE.ECVec
 intsToVec x = TE.functionE TE.to_vector (x :> TNil)
 
-categoricalDist :: forall t t'.TE.CategoricalTypes t t' => StanDist t '[t']
+categoricalDist :: forall t t'.TE.CategoricalTypes t t' => SimpleDist t '[t']
 categoricalDist = StanDist Discrete sample lpmf lupmf rng
   where
     sample y = TE.sample y TE.categorical
@@ -208,7 +210,7 @@ categoricalDist = StanDist Discrete sample lpmf lupmf rng
       _ -> error "categorical_rng is not vectorized. For a vector of results, call from a loop."
 
 
-categoricalLogitDist :: forall t t'.(TE.TypeOneOf t [TE.EInt, TE.EIntArray], TE.GenSType t) => StanDist t '[TE.ECVec]
+categoricalLogitDist :: forall t t'.(TE.TypeOneOf t [TE.EInt, TE.EIntArray], TE.GenSType t) => SimpleDist t '[TE.ECVec]
 categoricalLogitDist = StanDist Discrete sample lpmf lupmf rng
   where
     sample y = TE.sample y TE.categorical_logit
@@ -219,6 +221,22 @@ categoricalLogitDist = StanDist Discrete sample lpmf lupmf rng
       _ -> error "categorical_logit_rng is not vectorized. For a vector of results, call from a loop."
 
 
+multinomialDist ::  (TE.TypeOneOf t [TE.ESimplex, TE.ECVec], TE.GenSType t) => StanDist TE.EIntArray '[t] [t, TE.EInt]
+multinomialDist = StanDist Discrete sample lpmf lupmf rng
+  where
+    sample y = TE.sample y TE.multinomial
+    lpmf  = TE.densityE TE.multinomial_lpmf
+    lupmf  = TE.densityE TE.multinomial_lupmf
+    rng  = TE.functionE TE.multinomial_rng
+
+
+multinomialLogitDist :: StanDist TE.EIntArray '[TE.ECVec] [TE.ECVec, TE.EInt]
+multinomialLogitDist = StanDist Discrete sample lpmf lupmf rng
+  where
+    sample y = TE.sample y TE.multinomial_logit
+    lpmf  = TE.densityE TE.multinomial_logit_lpmf
+    lupmf  = TE.densityE TE.multinomial_logit_lupmf
+    rng  = TE.functionE TE.multinomial_logit_rng
 
 {-
 normallyApproximatedBinomial :: StanDist (TE.EArray1 TE.EInt) '[TE.EArray1 TE.EInt, TE.EReal]

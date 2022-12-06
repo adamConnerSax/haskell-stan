@@ -112,7 +112,7 @@ add2dMatrixData rtt matrixRowFromData mLower mUpper = do
   let cs = maybe [] (pure . TE.lowerM . TE.realE) mLower ++ maybe [] (pure . TE.upperM . TE.realE) mUpper
   SB.add2dMatrixJson rtt matrixRowFromData cs -- (SB.NamedDim $ SB.dataSetName rtt)  --stanType bounds f
 
-sampleDistV :: SMD.StanDist t args -> TE.ExprList args -> TE.UExpr t -> SB.StanBuilderM md gq ()
+sampleDistV :: SMD.StanDist t args rargs -> TE.ExprList args -> TE.UExpr t -> SB.StanBuilderM md gq ()
 sampleDistV sDist args yV =  SB.inBlock SB.SBModel $ SB.addStmtToCode $ SMD.familySample sDist yV args
 
 printExpr :: Text -> TE.UExpr t -> SB.StanBuilderM md gq ()
@@ -158,7 +158,7 @@ parallelSampleDistV fPrefix rtt sDist args slicedVar@(SB.StanVar slicedName slic
     SB.addExprLine "parallelSampleDistV" $ SB.target `SB.plusEq` SB.function "reduce_sum" argList
 -}
 generateLogLikelihood :: SB.RowTypeTag r
-                      -> SMD.StanDist t pts
+                      -> SMD.StanDist t pts rts
                       -> TE.CodeWriter (TE.IntE -> TE.ExprList pts)
                       -> (TE.IntE -> TE.UExpr t)
                       -> SB.StanBuilderM md gq ()
@@ -167,7 +167,7 @@ generateLogLikelihood rtt sDist slicedArgsFCW slicedYF =
 
 -- 2nd arg returns something which might need slicing at the loop index for paramters that depend on the index
 -- 3rd arg also
-data LLDetails r = forall t pts.LLDetails (SMD.StanDist t pts) (TE.CodeWriter (TE.UExpr TE.EInt -> TE.ExprList pts)) (TE.UExpr TE.EInt -> TE.UExpr t)
+data LLDetails r = forall t pts rts.LLDetails (SMD.StanDist t pts rts) (TE.CodeWriter (TE.UExpr TE.EInt -> TE.ExprList pts)) (TE.UExpr TE.EInt -> TE.UExpr t)
 --  LLDetails :: forall args.SMD.StanDist args -> SB.StanBuilderM md gq args -> SME.StanVar -> LLDetails md gq r
 
 newtype LLDetailsList r = LLDetailsList [LLDetails r]
@@ -213,15 +213,15 @@ generateLogLikelihood' llSet =  SB.inBlock SB.SBLogLikelihood $ do
 
 generatePosteriorPrediction :: SB.RowTypeTag r
                             -> TE.NamedDeclSpec (TE.EArray1 t)
-                            -> SMD.StanDist t pts
-                            -> TE.CodeWriter (TE.IntE -> TE.ExprList pts)
+                            -> SMD.StanDist t pts rts
+                            -> TE.CodeWriter (TE.IntE -> TE.ExprList rts)
                             -> SB.StanBuilderM md gq (TE.ArrayE t)
 generatePosteriorPrediction rtt nds sDist psFCW = generatePosteriorPrediction' rtt nds sDist psFCW id
 
 generatePosteriorPrediction' :: SB.RowTypeTag r
                              -> TE.NamedDeclSpec (TE.EArray1 t)
-                             -> SMD.StanDist t pts
-                             -> TE.CodeWriter (TE.IntE -> TE.ExprList pts)
+                             -> SMD.StanDist t pts rts
+                             -> TE.CodeWriter (TE.IntE -> TE.ExprList rts)
                              -> (TE.UExpr t -> TE.UExpr t)
                              -> SB.StanBuilderM md gq (TE.ArrayE t)
 generatePosteriorPrediction' rtt nds sDist psFCW f = SB.inBlock SB.SBGeneratedQuantities $ do
@@ -235,8 +235,8 @@ generatePosteriorPrediction' rtt nds sDist psFCW f = SB.inBlock SB.SBGeneratedQu
 
 generatePosteriorPredictionV :: SB.RowTypeTag r
                              -> TE.NamedDeclSpec TE.ECVec
-                             -> SMD.StanDist TE.ECVec pts
-                             -> TE.ExprList pts
+                             -> SMD.StanDist TE.ECVec pts rts
+                             -> TE.ExprList rts
                              -> SB.StanBuilderM md gq TE.VectorE
 generatePosteriorPredictionV rtt nds sDist ps =
   SB.inBlock SB.SBGeneratedQuantities
