@@ -216,7 +216,8 @@ categoricalLogitDist = StanDist Discrete sample lpmf lupmf rng
     lupmf = TE.densityE TE.categorical_logit_lupmf
     rng = case TE.genSType @t of
       TE.SInt -> TE.functionE TE.categorical_logit_rng
-      _ -> error "categorical_rng is not vectorized. For a vector of results, call from a loop."
+      _ -> error "categorical_logit_rng is not vectorized. For a vector of results, call from a loop."
+
 
 
 {-

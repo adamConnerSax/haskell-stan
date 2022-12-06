@@ -422,3 +422,37 @@ categorical_logit_lupmf = simpleDensity "categorical_logit_lupmf"
 categorical_logit_rng :: Function EInt '[ECVec]
 categorical_logit_rng = simpleFunction "categorical_logit_lupmf"
 {-# INLINEABLE categorical_logit_rng #-}
+
+
+-- Multinomial
+multinomial :: (TypeOneOf t [ESimplex, ECVec], GenSType t) => Density EIntArray '[t]
+multinomial = simpleDensity "multinomial"
+{-# INLINEABLE multinomial #-}
+
+multinomial_lpmf :: (TypeOneOf t [ESimplex, ECVec], GenSType t) => Density EIntArray '[t]
+multinomial_lpmf = simpleDensity "multinomial_lpmf"
+{-# INLINEABLE multinomial_lpmf #-}
+
+multinomial_lupmf :: (TypeOneOf t [ESimplex, ECVec], GenSType t) => Density EIntArray '[t]
+multinomial_lupmf = simpleDensity "multinomial_lupmf"
+{-# INLINEABLE multinomial_lupmf #-}
+
+multinomial_rng :: (TypeOneOf t [ESimplex, ECVec], GenSType t) => Function EIntArray '[t, EInt]
+multinomial_rng = simpleFunction "multinomial_lupmf"
+{-# INLINEABLE multinomial_rng #-}
+
+multinomial_logit :: Density EIntArray '[ECVec]
+multinomial_logit = simpleDensity "multinomial_logit"
+{-# INLINEABLE multinomial_logit #-}
+
+multinomial_logit_lpmf :: Density EIntArray '[ECVec]
+multinomial_logit_lpmf = simpleDensity "multinomial_logit_lpmf"
+{-# INLINEABLE multinomial_logit_lpmf #-}
+
+multinomial_logit_lupmf :: Density EIntArray '[ECVec]
+multinomial_logit_lupmf = simpleDensity "multinomial_logit_lupmf"
+{-# INLINEABLE multinomial_logit_lupmf #-}
+
+multinomial_logit_rng :: Function EIntArray '[ECVec, EInt]
+multinomial_logit_rng = simpleFunction "multinomial_logit_rng"
+{-# INLINEABLE multinomial_logit_rng #-}
