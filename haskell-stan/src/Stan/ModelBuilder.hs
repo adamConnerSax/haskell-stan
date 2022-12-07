@@ -1326,7 +1326,12 @@ nameSuffixMsg :: TE.StanName -> Text -> Text
 nameSuffixMsg n dsName = "name=\"" <> show n <> "\" data-set=\"" <> show dsName <> "\""
 
 addColumnJson :: (Typeable md, Typeable gq, Aeson.ToJSON x
-                 , TE.TypeOneOf t [TE.EArray (S Z) TE.EInt, TE.ECVec, TE.EMat]
+{-                 , TE.TypeOneOf t [TE.EArray (S Z) TE.EInt
+                                  , TE.EArray (S Z) TE.EReal
+                                  , TE.ECVec
+                                  , TE.EMat
+                                  ]
+-}
                  )
               => RowTypeTag r
               -> (TE.UExpr TE.EInt -> TE.NamedDeclSpec t)
@@ -1336,7 +1341,6 @@ addColumnJson rtt ndsF toX = do
   lE <- addLengthJson rtt (dataSetSizeName rtt) (dataSetName rtt)
   let nds = ndsF lE
   addJson rtt nds (Stan.valueToPairF (TE.declName nds) $ Stan.jsonArrayF toX)
-
 
 addColumnJsonOnce :: (Typeable md, Typeable gq, Aeson.ToJSON x
                      , TE.TypeOneOf t [TE.EArray (S Z) TE.EInt, TE.ECVec, TE.EMat]

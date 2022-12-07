@@ -29,6 +29,7 @@ import Data.Type.Equality ((:~:)(Refl),TestEquality(testEquality))
 import Prelude hiding (All)
 import qualified Stan.ModelBuilder.TypedExpressions.Operations as TE
 import Stan.ModelBuilder.TypedExpressions.Expressions (rangeIndexE)
+import qualified Stan.ModelBuilder.TypedExpressions.Statements as TE
 
 data DistType = Discrete | Continuous deriving (Show, Eq)
 

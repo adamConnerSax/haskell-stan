@@ -22,7 +22,7 @@ module Stan.ModelBuilder.BuildingBlocks where
 import qualified Stan.ModelBuilder.TypedExpressions.Types as TE
 import qualified Stan.ModelBuilder.TypedExpressions.TypedList as TE
 import Stan.ModelBuilder.TypedExpressions.TypedList (TypedList(..))
-import Stan.ModelBuilder.TypedExpressions.Types (Nat(..))
+import Stan.ModelBuilder.TypedExpressions.Types (Nat(..), ScalarType)
 import qualified Stan.ModelBuilder.TypedExpressions.Statements as TE
 import qualified Stan.ModelBuilder.TypedExpressions.Indexing as TE
 import qualified Stan.ModelBuilder.TypedExpressions.Operations as TE
@@ -39,6 +39,7 @@ import qualified Data.Map as Map
 import qualified Data.Set as Set
 import qualified Data.Text as T
 import qualified Data.Vector as V
+import qualified Data.Vector.Unboxed as VU
 import qualified Stan.ModelConfig as SB
 import Stan.ModelBuilder.BuilderTypes (dataSetSizeName)
 import qualified Stan.ModelBuilder.TypedExpressions.Types as TE
@@ -100,6 +101,19 @@ addRealData :: (Typeable md, Typeable gq)
 addRealData rtt varName mLower mUpper f = do
   let cs = maybe [] (pure . TE.lowerM. TE.realE) mLower ++ maybe [] (pure . TE.upperM . TE.realE) mUpper
       ndsF lE = TE.NamedDeclSpec varName $ TE.vectorSpec lE cs
+  SB.addColumnJson rtt ndsF f
+
+addIntArrayData :: (Typeable md, Typeable gq)
+              => SB.RowTypeTag r
+              -> TE.StanName
+              -> TE.IntE
+              -> Maybe Int
+              -> Maybe Int
+              -> (r -> VU.Vector Int)
+              -> SB.StanBuilderM md gq (TE.UExpr (TE.EArray1 (TE.EArray1 TE.EInt)))
+addIntArrayData rtt varName innerSizeE mLower mUpper f = do
+  let cs = maybe [] (pure . TE.lowerM . TE.intE) mLower ++ maybe [] (pure . TE.upperM . TE.intE) mUpper
+      ndsF lE = TE.NamedDeclSpec varName $ TE.array1Spec lE (TE.array1Spec innerSizeE $ TE.intSpec cs)
   SB.addColumnJson rtt ndsF f
 
 add2dMatrixData :: (Typeable md, Typeable gq)

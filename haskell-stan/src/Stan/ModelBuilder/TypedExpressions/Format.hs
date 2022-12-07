@@ -115,10 +115,26 @@ indexCodeL :: [CodePP] -> CodePP
 indexCodeL [] = ""
 indexCodeL x = PP.brackets $ PP.hsep $ PP.punctuate "," x
 
-stanDeclHead :: StanType t -> [CodePP] -> [VarModifier (K CodePP) (ScalarType t)] -> CodePP
+{-
+snatPlus1 :: DT.SNat n -> DT.SNat (DT.Plus n DT.Nat1)
+snatPlus1 sn = case sn of
+  DT.SZ -> DT.snat @DT.Nat1
+  DT.SS ->
+
+snatSum :: DT.SNat n1 -> DT.SNat n2 -> DT.SNat (DT.Plus n1 n2)
+snatSum sn1 x = case sn1 of
+  DT.SZ -> x
+  DT.SS -> snatSum DT.snat x
+-}
+
+--snatSum :: DT.SNat n1 -> DT.SNat n2 -> DT.Nat
+
+
+--sta1 -> NatSum
+
+stanDeclHead :: forall t.StanType t -> [CodePP] -> [VarModifier (K CodePP) (ScalarType t)] -> CodePP
 stanDeclHead st il vms = case st of
-  StanArray sn st -> let (adl, sdl) = List.splitAt (fromIntegral $ DT.snatToNatural sn) il
-                     in "array" <> indexCodeL adl <+> stanDeclHead st sdl vms
+  StanArray sn st -> arrayDeclHead (fromIntegral $ DT.snatToNatural sn) st
 --  _ -> PP.pretty (stanTypeName st)  <> indexCodeL il <> varModifiersToCode vms
   _ -> PP.pretty (stanTypeName st) <> varModifiersToCode vms <> indexCodeL il
   where
@@ -131,6 +147,11 @@ stanDeclHead st il vms = case st of
       if null vms
       then mempty
       else PP.langle <> (PP.hsep $ PP.punctuate  (PP.comma <> PP.space) $ fmap vmToCode vms) <> PP.rangle
+    arrayDeclHead :: (ScalarType t ~ ScalarType t') => Int -> StanType t' -> CodePP
+    arrayDeclHead ad st = case st of
+      StanArray sn' st' -> arrayDeclHead (ad + (fromIntegral $ DT.snatToNatural sn')) st'
+      _ -> let (adl, sdl) = List.splitAt ad il
+           in "array" <> indexCodeL adl <+> stanDeclHead st sdl vms
 
 -- add brackets and indent the lines of code
 bracketBlock :: Traversable f => f CodePP -> CodePP
