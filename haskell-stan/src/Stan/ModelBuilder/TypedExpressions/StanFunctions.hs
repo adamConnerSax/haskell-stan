@@ -92,6 +92,11 @@ sum :: (TypeOneOf t '[ECVec, ERVec, EMat, ESqMat], GenSType t) => Function EReal
 sum = simpleFunction "sum"
 {-# INLINEABLE sum #-}
 
+sumInt :: Function EInt '[EIntArray]
+sumInt = simpleFunction "sum"
+{-# INLINEABLE sumInt #-}
+
+
 rep_vector :: Function ECVec '[EReal, EInt]
 rep_vector = simpleFunction "rep_vector"
 {-# INLINEABLE rep_vector #-}

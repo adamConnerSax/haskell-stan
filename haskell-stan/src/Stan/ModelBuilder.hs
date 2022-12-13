@@ -130,6 +130,10 @@ addFromCodeWriter :: TE.CodeWriter a -> StanBuilderM md gq a
 addFromCodeWriter (TE.CodeWriter cw) = addStmtsToCode stmts >> return a
   where (a, stmts) = W.runWriter cw
 
+addScopedFromCodeWriter :: TE.CodeWriter a -> StanBuilderM md gq a
+addScopedFromCodeWriter (TE.CodeWriter cw) = addStmtsToCode [TE.scoped stmts] >> return a
+  where (a, stmts) = W.runWriter cw
+
 applyToFoldable :: Foldl.Fold row a -> ToFoldable d row -> d -> a
 applyToFoldable fld (ToFoldable f) = Foldl.fold fld . f
 

@@ -174,14 +174,17 @@ parallelSampleDistV fPrefix rtt sDist args slicedVar@(SB.StanVar slicedName slic
 generateLogLikelihood :: SB.RowTypeTag r
                       -> SMD.StanDist t pts rts
                       -> TE.CodeWriter (TE.IntE -> TE.ExprList pts)
-                      -> (TE.IntE -> TE.UExpr t)
+                      -> TE.CodeWriter (TE.IntE -> TE.UExpr t)
                       -> SB.StanBuilderM md gq ()
-generateLogLikelihood rtt sDist slicedArgsFCW slicedYF =
-  generateLogLikelihood' $ addToLLSet rtt (LLDetails sDist slicedArgsFCW slicedYF) emptyLLSet
+generateLogLikelihood rtt sDist slicedArgsFCW slicedYFCW =
+  generateLogLikelihood' $ addToLLSet rtt (LLDetails sDist slicedArgsFCW slicedYFCW) emptyLLSet
 
 -- 2nd arg returns something which might need slicing at the loop index for paramters that depend on the index
 -- 3rd arg also
-data LLDetails r = forall t pts rts.LLDetails (SMD.StanDist t pts rts) (TE.CodeWriter (TE.UExpr TE.EInt -> TE.ExprList pts)) (TE.UExpr TE.EInt -> TE.UExpr t)
+data LLDetails r = forall t pts rts.LLDetails
+                   (SMD.StanDist t pts rts)
+                   (TE.CodeWriter (TE.UExpr TE.EInt -> TE.ExprList pts))
+                   (TE.CodeWriter (TE.UExpr TE.EInt -> TE.UExpr t))
 --  LLDetails :: forall args.SMD.StanDist args -> SB.StanBuilderM md gq args -> SME.StanVar -> LLDetails md gq r
 
 newtype LLDetailsList r = LLDetailsList [LLDetails r]
@@ -211,11 +214,12 @@ generateLogLikelihood' llSet =  SB.inBlock SB.SBLogLikelihood $ do
       llSizeE = TE.multiOpE TE.SAdd $ fmap namedIntE llSizeListNE
   logLikE <- SB.stanDeclareN $ TE.NamedDeclSpec "log_lik" $ TE.vectorSpec llSizeE []
   let doOne :: SB.RowTypeTag a -> LLDetails a -> StateT [TE.UExpr TE.EInt] (SB.StanBuilderM md gq) (SB.RowTypeTag a)
-      doOne rtt (LLDetails d pFCW yF) = do
+      doOne rtt (LLDetails d pFCW yFCW) = do
         prevSizes <- get
         let sizeE =  TE.multiOpE TE.SAdd $ namedIntE "n" :| prevSizes
-        lift $ SB.addFromCodeWriter $ do
+        lift $ SB.addScopedFromCodeWriter $ do
           pF <- pFCW
+          yF <- yFCW
           TE.addStmt $ TE.for "n" (TE.SpecificNumbered (TE.intE 1) (namedIntE $ dataSetSizeName rtt))
             $ \nE -> [TE.sliceE TE.s0 nE logLikE `TE.assign` SMD.familyLDF d (yF nE) (pF nE)]
         put $ TE.namedE (SB.dataSetSizeName rtt) TE.SInt: prevSizes
@@ -239,13 +243,14 @@ generatePosteriorPrediction' :: SB.RowTypeTag r
                              -> (TE.UExpr t -> TE.UExpr t)
                              -> SB.StanBuilderM md gq (TE.ArrayE t)
 generatePosteriorPrediction' rtt nds sDist psFCW f = SB.inBlock SB.SBGeneratedQuantities $ do
-  psF <- SB.addFromCodeWriter psFCW
-  let rngE nE = SMD.familyRNG sDist (psF nE)
   ppE <- SB.stanDeclareN nds
-  SB.addStmtToCode
-    $ TE.for "n" (TE.SpecificNumbered (TE.intE 1) (TE.namedE (SB.dataSetSizeName rtt) TE.SInt))
-    $ \nE -> [TE.sliceE TE.s0 nE ppE `TE.assign` f (rngE nE)]
-  return ppE
+  SB.addScopedFromCodeWriter $ do
+    psF <- psFCW
+    let rngE nE = SMD.familyRNG sDist (psF nE)
+    TE.addStmt
+      $ TE.for "n" (TE.SpecificNumbered (TE.intE 1) (TE.namedE (SB.dataSetSizeName rtt) TE.SInt))
+      $ \nE -> [TE.sliceE TE.s0 nE ppE `TE.assign` f (rngE nE)]
+    return ppE
 
 generatePosteriorPredictionV :: SB.RowTypeTag r
                              -> TE.NamedDeclSpec TE.ECVec

@@ -111,6 +111,24 @@ combineRowFuncs rFuncs =
   in FL.fold ((,) <$> nF <*> fF) rFuncs
 -}
 
+newtype BEProduct2 a b = BEProduct2 { unBEProduct2 :: (a, b) } deriving (Show, Eq, Ord, Bounded)
+
+instance (Bounded a, Enum a, Bounded b, Enum b) => Enum (BEProduct2 a b) where
+  toEnum n = let nB = length (universe @b) in BEProduct2 (toEnum $ n `div` nB, toEnum $ n `mod` nB)
+  fromEnum (BEProduct2 (a, b)) = let nB = length (universe @b) in nB * (fromEnum a) + fromEnum b
+
+newtype BEProduct3 a b c = BEProduct3 { unBEProduct3 :: (a, b, c) } deriving (Show, Eq, Ord, Bounded)
+
+toNested2 :: BEProduct3 a b c -> BEProduct2 a (BEProduct2 b c)
+toNested2 (BEProduct3 (a, b, c)) = BEProduct2 (a, BEProduct2 (b, c))
+
+fromNested2 :: BEProduct2 a (BEProduct2 b c) -> BEProduct3 a b c
+fromNested2 (BEProduct2 (a, BEProduct2 (b, c))) = BEProduct3 (a, b, c)
+
+instance  (Bounded a, Enum a, Bounded b, Enum b, Bounded c, Enum c) => Enum (BEProduct3 a b c) where
+  toEnum = fromNested2 . toEnum
+  fromEnum = fromEnum . toNested2
+
 -- first argument, if set, will encode as that is all zeroes.
 boundedEnumRowFunc :: forall r k.(Enum k, Bounded k, Eq k) => Maybe k -> (r -> k) -> (Int, r -> V.Vector Double)
 boundedEnumRowFunc encodeAsZerosM rToKey = case numKeys of
