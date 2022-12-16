@@ -24,6 +24,7 @@ module Stan.ModelBuilder.TypedExpressions.DAGTypes
   , mapped
   , Parameters
   , tagsAsExprs
+  , tagsAsParams
   , parametersAsExprs
   , DeclCode(..)
   , BuildParameter(..)
@@ -136,6 +137,11 @@ type Parameters ts = TE.TypedList Parameter ts
 tagsAsExprs :: TE.TypedList ParameterTag ts -> TE.ExprList ts
 tagsAsExprs = hfmap parameterTagExpr
 {-# INLINEABLE tagsAsExprs #-}
+
+tagsAsParams :: TE.TypedList ParameterTag ts -> Parameters ts
+tagsAsParams = hfmap build
+{-# INLINEABLE tagsAsParams #-}
+
 
 parametersAsExprs :: Parameters ts -> TE.ExprList ts
 parametersAsExprs = hfmap parameterExpr

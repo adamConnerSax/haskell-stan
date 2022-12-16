@@ -423,7 +423,7 @@ runModel config rScriptsToWrite dataWrangler cb makeResult toPredict md_C gq_C =
       writeRScripts @st @cd (shinyOf rScriptsToWrite) SC.MRNoGQ config
       return res
     case SC.mrcDoOnlyLL config of
-      False -> return ()
+      False -> K.logLE K.Diagnostic "No onlyLL run indicated by config."
       True -> do
         curModelOnlyLL_C <- SC.modelDependency SC.MROnlyLL runnerInputNames
         let runLLDeps  = (,) <$> modelIndices_C <*> curModelOnlyLL_C -- indices carries data update time

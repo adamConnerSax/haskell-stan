@@ -40,7 +40,7 @@ emptyStanProgram :: StanProgram
 emptyStanProgram = StanProgram $ Array.listArray (minBound, maxBound) $ repeat []
 
 programHasLLBlock :: StanProgram -> Bool
-programHasLLBlock p = null (unStanProgram p Array.! SBT.SBGeneratedQuantities)
+programHasLLBlock p = not $ null (unStanProgram p Array.! SBT.SBLogLikelihood)
 
 -- this is...precarious.  No way to check that we are using all of the array
 programToStmt :: SBT.GeneratedQuantities -> StanProgram -> TE.UStmt
