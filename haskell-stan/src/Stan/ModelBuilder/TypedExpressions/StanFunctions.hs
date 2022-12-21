@@ -58,6 +58,11 @@ inv :: VectorizedReal t => Function t '[t]
 inv = simpleFunction "inv"
 {-# INLINEABLE inv #-}
 
+abs :: VectorizedReal t => Function t '[t]
+abs = simpleFunction "abs"
+{-# INLINEABLE abs #-}
+
+
 mean :: (TypeOneOf t [ECVec, ERVec, EMat, ESqMat], GenSType t) => Function EReal '[t]
 mean = simpleFunction "mean"
 {-# INLINEABLE mean #-}
@@ -340,6 +345,11 @@ binomial_logit_lupmf = simpleDensity "binomial_logit_lupmf"
 beta :: (TypeOneOf t [EReal, ECVec], GenSType t) => Density t '[t, t]
 beta = simpleDensity "beta"
 {-# INLINEABLE beta #-}
+
+betaS :: (TypeOneOf t [EReal, ECVec, ERVec], GenSType t) => Density t '[EReal, EReal]
+betaS = simpleDensity "beta"
+{-# INLINEABLE betaS #-}
+
 
 beta_lpdf :: (TypeOneOf t [EReal, ECVec], GenSType t) => Density t '[t, t]
 beta_lpdf = simpleDensity "beta_lpdf"
