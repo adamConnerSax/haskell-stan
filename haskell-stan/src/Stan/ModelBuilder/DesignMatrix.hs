@@ -72,6 +72,10 @@ data DesignMatrixRow r = DesignMatrixRow { dmName :: TE.StanName
                                          , dmParts :: [DesignMatrixRowPart r]
                                          }
 
+
+instance Contravariant DesignMatrixRow where
+  contramap g (DesignMatrixRow n dmrps) = DesignMatrixRow n $ fmap (contramap g) dmrps
+
 stackDesignMatrixRows :: DesignMatrixRow r1 -> DesignMatrixRow r2 -> Either Text (DesignMatrixRow (Either r1 r2))
 stackDesignMatrixRows dm1 dm2 = do
   when (dmName dm1 /= dmName dm2) $ Left $ "stackDesignMatrixRows: Name mismatch! dm1=" <> dmName dm1 <> "; dm2=" <> dmName dm2
@@ -83,8 +87,6 @@ dmColIndexName :: DesignMatrixRow r -> Text
 dmColIndexName dmr = dmName dmr <> "_Cols"
 {-# INLINEABLE dmColIndexName #-}
 
-instance Contravariant DesignMatrixRow where
-  contramap g (DesignMatrixRow n dmrps) = DesignMatrixRow n $ fmap (contramap g) dmrps
 
 rowLengthF :: FL.Fold (DesignMatrixRowPart r) Int
 rowLengthF = FL.premap dmrpLength FL.sum

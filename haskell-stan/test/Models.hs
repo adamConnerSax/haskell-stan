@@ -154,7 +154,7 @@ spreadDiffNormal = do
   let at = TE.sliceE TE.s0
   SBB.generateLogLikelihood resultsData SD.normalDist
     (pure (\k -> at k (indexed resultsData favoriteG muVecE) :> at k (toVec resultsData sigmaE) :> TNil))
-    (\k -> at k spreadDiffE)
+    (pure $ \k -> at k spreadDiffE)
 
 --  (return (S.var mu_favV, S.var sigmaV)) spreadDiffV
 
@@ -167,7 +167,6 @@ normalParamCIs = SC.UseSummary f where
     resultIndexesE <- K.ignoreCacheTime $ fmap snd modelDataAndIndexes_C
     teamResultIM <- K.knitEither
       $  resultIndexesE >>= S.getGroupIndex (S.RowTypeTag @FB_Result SC.ModelData "Results") favoriteG
-
 
     gqDataAndIndexes_C <- K.knitMaybe "normalParamCIs: No GQ data/indices provided!" mGQDataAndIndexes_C
     matchupIndexesE <- K.ignoreCacheTime $ fmap snd gqDataAndIndexes_C
