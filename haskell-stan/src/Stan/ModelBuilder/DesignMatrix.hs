@@ -370,6 +370,22 @@ fixSDZeroFunction =  do
   SB.addFunctionOnce f (TE.Arg "x" :> TNil)
     $ \(x :> TNil) -> TE.writerL $ return $ TE.condE (TE.binaryOpE (TE.SBoolean TE.SEq) x (TE.realE 0)) (TE.realE 1) x
 
+shiftDataMatrixFunction :: SB.StanBuilderM md gq (TE.Function TE.EMat '[TE.EMat, TE.ECVec])
+shiftDataMatrixFunction =  do
+  let f :: TE.Function TE.EMat '[TE.EMat, TE.ECVec]
+      f = TE.simpleFunction "shiftDataMatrix"
+  SB.addFunctionOnce f (TE.DataArg "m" :> TE.DataArg "means" :> TNil)
+    $ \(m :> means :> TNil) -> TE.writerL $ do
+    newMatrix <- TE.declareNW (TE.NamedDeclSpec "shifted" $ TE.matrixSpec (SBB.mRowsE m) (SBB.mColsE m) [])
+    TE.addStmt $ TE.for "k" (TE.SpecificNumbered (TE.intE 1) $ SBB.mColsE m)
+      $ \ke ->
+          let colk :: TE.UExpr q -> TE.UExpr (TE.Sliced TE.N1 q)
+              colk = TE.sliceE TE.s1 ke
+              atk = TE.sliceE TE.s0 ke
+          in [colk newMatrix `TE.assign` (colk m `TE.minusE` atk means)]
+    return newMatrix
+
+
 shiftAndScaleDataMatrixFunction :: SB.StanBuilderM md gq (TE.Function TE.EMat '[TE.EMat, TE.ECVec, TE.ECVec])
 shiftAndScaleDataMatrixFunction =  do
   let f :: TE.Function TE.EMat '[TE.EMat, TE.ECVec, TE.ECVec]
@@ -382,18 +398,18 @@ shiftAndScaleDataMatrixFunction =  do
           let colk :: TE.UExpr q -> TE.UExpr (TE.Sliced TE.N1 q)
               colk = TE.sliceE TE.s1 ke
               atk = TE.sliceE TE.s0 ke
---              elDivide = TE.binaryOpE (TE.SElementWise TE.SDivide)
           in [colk newMatrix `TE.assign` ((colk m `TE.minusE` atk means) `TE.divideE` atk sds)]
     return newMatrix
 
 
-centerDataMatrix :: TE.UExpr TE.EMat -- matrix
+centerDataMatrix :: DMStandardization
+                 -> TE.UExpr TE.EMat -- matrix
                  -> Maybe (TE.UExpr TE.ECVec)
                  -> TE.StanName -- prefix for names
                  -> SB.StanBuilderM md gq (TE.UExpr TE.EMat -- standardized matrix, X - row_mean(X) or (X - row_mean(X))/row_stddev(X)
                                           , SB.InputDataType -> TE.UExpr TE.EMat -> TE.StanName -> SB.StanBuilderM md gq (TE.UExpr TE.EMat) -- \Y -> standardized Y (via mean/var of X)
                                           )
-centerDataMatrix m mwgtsV namePrefix = do
+centerDataMatrix dms m mwgtsV namePrefix = do
   vecMVF <- case mwgtsV of
     Nothing -> do
       mvF <- SBB.unWeightedMeanVarianceFunction
@@ -402,26 +418,46 @@ centerDataMatrix m mwgtsV namePrefix = do
     Just wgtsV -> do
       mvF <- SBB.weightedMeanVarianceFunction
       return $ \mc -> TE.functionE mvF (wgtsV :> mc :> TNil)
-  SB.inBlock SB.SBTransformedData $ do
-    fixSDZero <- fixSDZeroFunction
-    mVec <- SB.stanDeclareN $ TE.NamedDeclSpec (namePrefix <> "_means") $ TE.vectorSpec (SBB.mColsE m) []
-    sVec <- SB.stanDeclareN $ TE.NamedDeclSpec (namePrefix <> "_variances") $ TE.vectorSpec (SBB.mColsE m) []
-    SB.addStmtToCode
-      $ TE.for "k" (TE.SpecificNumbered (TE.intE 1) $ SBB.mColsE m)
-      $ \ke -> TE.writerL' $ do
-      let kCol = TE.sliceE TE.s1 ke
-          atk = TE.sliceE TE.s0 ke
-      mv <- TE.declareRHSNW (TE.NamedDeclSpec "mv" $ TE.vectorSpec (TE.intE 2) []) $ vecMVF (kCol m)
-      TE.addStmt $ atk mVec `TE.assign` (TE.sliceE TE.s0 (TE.intE 1) mv)
-      TE.addStmt $ atk sVec `TE.assign` TE.functionE fixSDZero (TE.functionE TE.sqrt ((TE.sliceE TE.s0 (TE.intE 2) mv) :> TNil) :> TNil)
-    shiftAndScaleF <- shiftAndScaleDataMatrixFunction
-    let stdize x = TE.functionE shiftAndScaleF (x :> mVec :> sVec :> TNil)
-    mStd <- SB.stanDeclareRHSN (TE.NamedDeclSpec (namePrefix <> "_standardized") $ TE.matrixSpec (SBB.mRowsE m) (SBB.mColsE m) [])
-            $ stdize m
-    let centerF idt m' n = do
-          let block = if idt == SB.ModelData then SB.SBTransformedData else SB.SBTransformedDataGQ
-          SB.inBlock block $ SB.stanDeclareRHSN (TE.NamedDeclSpec n $ TE.matrixSpec (SBB.mRowsE m') (SBB.mColsE m') []) $ stdize m'
-    return (mStd, centerF)
+  SB.inBlock SB.SBTransformedData $ case dms of
+    DMCenterAndScale -> do
+      fixSDZero <- fixSDZeroFunction
+      mVec <- SB.stanDeclareN $ TE.NamedDeclSpec (namePrefix <> "_means") $ TE.vectorSpec (SBB.mColsE m) []
+      sVec <- SB.stanDeclareN $ TE.NamedDeclSpec (namePrefix <> "_variances") $ TE.vectorSpec (SBB.mColsE m) []
+      SB.addStmtToCode
+        $ TE.for "k" (TE.SpecificNumbered (TE.intE 1) $ SBB.mColsE m)
+        $ \ke -> TE.writerL' $ do
+        let kCol = TE.sliceE TE.s1 ke
+            atk = TE.sliceE TE.s0 ke
+        mv <- TE.declareRHSNW (TE.NamedDeclSpec "mv" $ TE.vectorSpec (TE.intE 2) []) $ vecMVF (kCol m)
+        TE.addStmt $ atk mVec `TE.assign` (TE.sliceE TE.s0 (TE.intE 1) mv)
+        TE.addStmt $ atk sVec `TE.assign` TE.functionE fixSDZero (TE.functionE TE.sqrt ((TE.sliceE TE.s0 (TE.intE 2) mv) :> TNil) :> TNil)
+      shiftAndScaleF <- shiftAndScaleDataMatrixFunction
+      let stdize x = TE.functionE shiftAndScaleF (x :> mVec :> sVec :> TNil)
+      mStd <- SB.stanDeclareRHSN (TE.NamedDeclSpec (namePrefix <> "_standardized") $ TE.matrixSpec (SBB.mRowsE m) (SBB.mColsE m) [])
+              $ stdize m
+      let centerF idt m' n = do
+            let block = if idt == SB.ModelData then SB.SBTransformedData else SB.SBTransformedDataGQ
+            SB.inBlock block $ SB.stanDeclareRHSN (TE.NamedDeclSpec n $ TE.matrixSpec (SBB.mRowsE m') (SBB.mColsE m') []) $ stdize m'
+      return (mStd, centerF)
+    DMCenterOnly -> do
+      mVec <- SB.stanDeclareN $ TE.NamedDeclSpec (namePrefix <> "_means") $ TE.vectorSpec (SBB.mColsE m) []
+      SB.addStmtToCode
+        $ TE.for "k" (TE.SpecificNumbered (TE.intE 1) $ SBB.mColsE m)
+        $ \ke -> TE.writerL' $ do
+        let kCol = TE.sliceE TE.s1 ke
+            atk = TE.sliceE TE.s0 ke
+        mv <- TE.declareRHSNW (TE.NamedDeclSpec "mv" $ TE.vectorSpec (TE.intE 2) []) $ vecMVF (kCol m)
+        TE.addStmt $ atk mVec `TE.assign` (TE.sliceE TE.s0 (TE.intE 1) mv)
+      shiftF <- shiftDataMatrixFunction
+      let centered x = TE.functionE shiftF (x :> mVec :> TNil)
+      mCentered <- SB.stanDeclareRHSN (TE.NamedDeclSpec (namePrefix <> "_centered") $ TE.matrixSpec (SBB.mRowsE m) (SBB.mColsE m) [])
+              $ centered m
+      let centerF idt m' n = do
+            let block = if idt == SB.ModelData then SB.SBTransformedData else SB.SBTransformedDataGQ
+            SB.inBlock block $ SB.stanDeclareRHSN (TE.NamedDeclSpec n $ TE.matrixSpec (SBB.mRowsE m') (SBB.mColsE m') []) $ centered m'
+      return (mCentered, centerF)
+
+
 
 -- take a matrix x and return (thin) Q, R and inv(R)
 -- as Q_x, R_x, invR_x
