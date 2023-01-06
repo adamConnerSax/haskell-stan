@@ -9,7 +9,6 @@
 {-# LANGUAGE AllowAmbiguousTypes #-}
 {-# OPTIONS_GHC -fwarn-incomplete-patterns #-}
 {-# LANGUAGE TypeSynonymInstances #-}
-{-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE TypeApplications #-}
 
 module Stan.ModelBuilder.TypedExpressions.Operations
@@ -18,11 +17,9 @@ module Stan.ModelBuilder.TypedExpressions.Operations
   )
   where
 
-import qualified Stan.ModelBuilder.TypedExpressions.Recursion as TR
 import Stan.ModelBuilder.TypedExpressions.Types
 
 import Prelude hiding (Nat)
-import           Data.Kind (Type)
 
 import qualified GHC.TypeLits as TE
 import GHC.TypeLits (ErrorMessage((:<>:)))

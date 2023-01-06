@@ -12,8 +12,12 @@
 {-# OPTIONS_GHC -fwarn-incomplete-patterns #-}
 {-# LANGUAGE TypeOperators #-}
 
-module Stan.ModelBuilder.TypedExpressions.Evaluate where
-import qualified Stan.ModelBuilder.Expressions as SME
+module Stan.ModelBuilder.TypedExpressions.Evaluate
+  (
+    module Stan.ModelBuilder.TypedExpressions.Evaluate
+  )
+where
+--import qualified Stan.ModelBuilder.Expressions as SME
 import Prelude hiding (Nat)
 
 import Stan.ModelBuilder.TypedExpressions.Types
@@ -50,16 +54,17 @@ import qualified Prettyprinter as PP
 3c. Stmt (FormattedText) -> Text (Produce code for statement tree)
 -}
 
+--type IndexKey = Text
 type LookupM = StateT IndexLookupCtxt (Either Text)
 
-lookupIndex :: SME.IndexKey -> LookupM (LExpr (EArray (S Z) EInt))
+lookupIndex :: IndexKey -> LookupM (LExpr (EArray (S Z) EInt))
 lookupIndex k = do
   im <- gets indexes
   case Map.lookup k im of
     Just e -> pure e
     Nothing -> lift $ Left $ "lookupIndex: \"" <> k <> "\" not found in index map."
 
-lookupSize :: SME.IndexKey -> LookupM (LExpr EInt)
+lookupSize :: IndexKey -> LookupM (LExpr EInt)
 lookupSize k = do
   sm <- gets sizes
   case Map.lookup k sm of
@@ -112,14 +117,14 @@ type EExpr = IFix EExprF
 lExprToEExpr :: LExpr t -> EExpr t
 lExprToEExpr = iCata (IFix . EL)
 
-lookupIndexE :: SME.IndexKey -> LookupM (EExpr (EArray (S Z) EInt))
+lookupIndexE :: IndexKey -> LookupM (EExpr (EArray (S Z) EInt))
 lookupIndexE k =  do
   im <- gets indexes
   case Map.lookup k im of
     Just e -> pure $ lExprToEExpr e
     Nothing -> pure $ IFix $ EE $ "#index: " <> k <> "#"
 
-lookupSizeE :: SME.IndexKey -> LookupM (EExpr EInt)
+lookupSizeE :: IndexKey -> LookupM (EExpr EInt)
 lookupSizeE k =  do
   im <- gets sizes
   case Map.lookup k im of

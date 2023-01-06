@@ -23,10 +23,7 @@ module Stan.ModelBuilder.TypedExpressions.Types
   )
   where
 
-import qualified Stan.ModelBuilder.TypedExpressions.Recursion as TR
-
 import Prelude hiding (Nat)
-import           Data.Kind (Type)
 
 import Data.Type.Equality ((:~:)(Refl), TestEquality(testEquality))
 import Data.Type.Nat (Nat(..), SNat(..))
@@ -35,7 +32,6 @@ import qualified Data.Type.Nat as DT
 import qualified GHC.TypeLits as TE
 import GHC.TypeLits (ErrorMessage((:<>:)))
 import qualified Text.Show
---import Data.GADT.Compare (GEq(geq))
 
 -- possible types of terms
 -- NB: zero dimensional array will be treated as the underlying type
@@ -53,7 +49,7 @@ data EType where
   ESqMat :: EType
   EArray :: Nat -> EType -> EType
 --  (::->) :: EType -> EType -> EType
-  deriving (Eq, Ord, Show)
+  deriving stock (Eq, Ord, Show)
 
 class GenEType (e :: EType) where
   genEType :: EType
@@ -233,7 +229,7 @@ sTypeToEType = \case
     S n -> EArray (S n) $ sTypeToEType st
 --  sa :-> sb -> sTypeToEType sa ::-> sTypeToEType sb
 
-withSType :: forall t r.EType -> (forall t. SType t -> r) -> r
+withSType :: forall r . EType -> (forall t. SType t -> r) -> r
 withSType EVoid k = k SVoid
 withSType EString k = k SString
 withSType EBool k = k SBool
@@ -298,7 +294,7 @@ stanTypeName = \case
   StanInt -> "int"
   StanReal -> "real"
   StanComplex -> "complex"
-  StanArray sn st -> "array"
+  StanArray _ _ -> "array"
   StanVector -> "vector"
   StanOrdered -> "ordered"
   StanPositiveOrdered -> "positive_ordered"

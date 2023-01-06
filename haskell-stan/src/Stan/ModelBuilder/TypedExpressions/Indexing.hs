@@ -12,6 +12,7 @@
 {-# LANGUAGE TypeSynonymInstances #-}
 {-# LANGUAGE UndecidableInstances #-}
 {-# OPTIONS_GHC -fwarn-incomplete-patterns #-}
+{-# OPTIONS_GHC -Wno-missing-signatures #-}
 
 module Stan.ModelBuilder.TypedExpressions.Indexing
   ( module Stan.ModelBuilder.TypedExpressions.Indexing,
@@ -21,20 +22,15 @@ module Stan.ModelBuilder.TypedExpressions.Indexing
 where
 
 import Data.Fin (Fin (..))
-import Data.Kind (Type)
 import qualified Data.Type.Nat as DT
 import Data.Vec.Lazy (Vec (..))
 import qualified Data.Vec.Lazy as DT
-import GHC.TypeLits (ErrorMessage ((:<>:)))
 import qualified GHC.TypeLits as TE
 import qualified Stan.ModelBuilder.TypedExpressions.Recursion as TR
 import Stan.ModelBuilder.TypedExpressions.Types
 import Prelude hiding (Nat)
-import Data.Functor.Classes (eq1)
-import Data.Type.Equality ((:~:)(Refl), (:~~:)(HRefl), TestEquality(testEquality))
-import Data.GADT.Compare (GEq(geq))
-import Type.Reflection (Typeable(..),typeRep)
-import qualified Data.Monoid as Mon
+import Data.Type.Equality ((:~:)(Refl), TestEquality(testEquality))
+import Type.Reflection (typeRep)
 
 -- to simplify most indexing
 -- term level

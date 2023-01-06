@@ -2,11 +2,13 @@
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE ScopedTypeVariables #-}
-{-# LANGUAGE TupleSections #-}
-module Stan.JSON where
+module Stan.JSON
+  (
+    module Stan.JSON
+  )
+where
 
 import Prelude hiding (Product)
---import qualified Frames as F
 import qualified Control.Foldl as FL
 import qualified Control.Exception as X
 import qualified Data.Aeson as A
@@ -14,13 +16,11 @@ import qualified Data.Aeson as A
 import qualified Data.Aeson.Key as A
 #endif
 import qualified Data.Aeson.Encoding as A
---import qualified Data.Array as Array
 import qualified Data.ByteString.Lazy as BL
 import qualified Data.List as List
 import Data.List.Extra (nubOrd)
 import qualified Data.Map.Strict as M
 import qualified Data.IntMap.Strict as IM
---import qualified Data.Set as Set
 import qualified Data.Text as T
 
 import Data.Vector.Serialize()

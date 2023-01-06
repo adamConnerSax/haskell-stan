@@ -13,7 +13,11 @@
 {-# HLINT ignore "Use camelCase" #-}
 {-# LANGUAGE QuantifiedConstraints #-}
 
-module Stan.ModelBuilder.BuildingBlocks where
+module Stan.ModelBuilder.BuildingBlocks
+  (
+    module Stan.ModelBuilder.BuildingBlocks
+  )
+where
 
 
 import qualified Stan.ModelBuilder.TypedExpressions.Types as TE

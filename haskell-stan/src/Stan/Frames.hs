@@ -5,7 +5,11 @@
 {-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE TypeOperators #-}
 
-module Stan.Frames where
+module Stan.Frames
+  (
+    module Stan.Frames
+  )
+where
 
 import qualified Stan.JSON as SJ
 

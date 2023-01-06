@@ -13,15 +13,13 @@
 {-# LANGUAGE TypeFamilies #-}
 {-# OPTIONS_GHC -fwarn-incomplete-patterns #-}
 
-module Stan.ModelBuilder.Expressions where
+module Stan.ModelBuilder.Expressions (module Stan.ModelBuilder.Expressions) where
 
 import Prelude hiding (All, group)
-import qualified Control.Foldl as Fold
 import qualified Data.Functor.Classes as FC
 import qualified Data.Functor.Classes.Generic as FC
 import qualified Data.Functor.Foldable as Rec
 import qualified Data.Functor.Foldable.Monadic as Rec
-import qualified Data.Functor.Foldable.TH as Rec
 
 import qualified Data.Fix as Fix
 import qualified Data.Map.Strict as Map
@@ -31,7 +29,6 @@ import Stan.ModelBuilder.TypedExpressions.Statements (StanName)
 import qualified Text.PrettyPrint as Pretty
 
 import GHC.Generics (Generic1)
-import Data.ByteString.Lazy (foldlChunks)
 
 --type StanName = Text
 type IndexKey = Text
@@ -40,7 +37,7 @@ type DataConstraint = Text
 data StanDim = NamedDim IndexKey
              | GivenDim Int
              | ExprDim StanExpr
-             deriving (Show, Eq, Ord, Generic)
+             deriving stock (Show, Eq, Ord, Generic)
 
 -- we return False if dim is unchanged
 changeDimKey :: IndexKey -> IndexKey -> StanDim -> (StanDim, Bool)
@@ -60,17 +57,17 @@ data StanType = StanInt
               | StanCorrMatrix StanDim
               | StanCholeskyFactorCorr StanDim
               | StanCovMatrix StanDim
-              deriving (Show, Eq, Ord, Generic)
+              deriving stock (Show, Eq, Ord, Generic)
 
 data TExpr a = TExpr a StanType
   deriving  stock (Eq, Ord, Functor, Foldable, Traversable, Generic1)
   deriving   (FC.Show1, FC.Eq1, FC.Ord1) via FC.FunctorClassesDefault TExpr
 
-data StanVar = StanVar StanName StanType deriving (Show, Eq, Ord, Generic)
+data StanVar = StanVar StanName StanType deriving stock (Show, Eq, Ord, Generic)
 
 data PossiblyVectorized a = UnVectorized a
                           | Vectorized (Set.Set IndexKey) a
-                          deriving (Show, Functor)
+                          deriving stock (Show, Functor)
 
 varName :: StanVar -> StanName
 varName (StanVar n _) = n
@@ -130,7 +127,7 @@ dropFirstIndex :: StanType -> Either Text StanType
 dropFirstIndex StanInt = Left "Can't drop inner index from an Int"
 dropFirstIndex StanReal = Left "Can't drop inner index from a Real"
 dropFirstIndex (StanArray [] t) = dropFirstIndex t
-dropFirstIndex (StanArray (x:xs) t) = Right $ if null xs then t else StanArray xs t
+dropFirstIndex (StanArray (_ : xs) t) = Right $ if null xs then t else StanArray xs t
 dropFirstIndex (StanVector _) = Right StanReal
 dropFirstIndex (StanMatrix (_, rc)) = Right $ StanVector rc
 dropFirstIndex (StanCorrMatrix d) = Right $ StanVector d
@@ -157,7 +154,7 @@ getVarDims = getDims . varType
 indexKeys :: StanType -> [IndexKey]
 indexKeys = catMaybes . fmap dimToIndexKey . getDims where
   dimToIndexKey (NamedDim k) = Just k
-  dimToindexKey _ = Nothing
+  dimToIndexKey _ = Nothing
 
 stanDimToExpr :: StanDim -> StanExpr
 stanDimToExpr (NamedDim k) = index k
@@ -169,7 +166,7 @@ indexesToExprs = fmap stanDimToExpr
 
 collapseArray :: StanType -> StanType
 collapseArray (StanArray dims st) = case st of
-  StanArray dims' st -> collapseArray $ StanArray (dims ++ dims') st
+  StanArray dims' st' -> collapseArray $ StanArray (dims ++ dims') st'
   _ -> StanArray dims st
 collapseArray st = st
 
@@ -192,8 +189,8 @@ varArgTypeText x = case x of
   StanReal -> "real"
   StanVector _ -> "vector"
   StanMatrix _ -> "matrix"
-  s@(StanArray ds y) -> let StanArray cs z = collapseArray s
-                        in "[" <> T.replicate (length cs - 1) "," <> "]"
+  s@(StanArray _ _) -> let StanArray cs _ = collapseArray s
+                       in "[" <> T.replicate (length cs - 1) "," <> "]"
   _ -> error $ "varAsArgument: type=" <> show x <> " not supported as function argument"
 --  StanCorrMatrix dim -> withIndexes (name "corr_matrix") [dim]
 --  StanCholeskyFactorCorr dim -> withIndexes (name "cholesky_factor_corr") [dim]
@@ -371,7 +368,7 @@ fReturn e = bare "return" `spaced` e
 --data BindIndex = NoIndex | IndexE StanExpr --deriving (Show)
 data VarBindingStore = VarBindingStore { useBindings :: Map IndexKey StanExpr
                                        , declarationBindings :: Map IndexKey StanExpr
-                                       } deriving (Show)
+                                       } deriving stock Show
 
 bindings :: Map IndexKey StanExpr -> Map IndexKey StanExpr -> VarBindingStore
 bindings = VarBindingStore
@@ -442,7 +439,7 @@ mIndexesExpr vks exprs =
       z = fmap (fromMaybe nullE) y
   in viaNonEmpty (group "[" "]" . csExprs) z
 
-data LookupContext = Use | Declare deriving (Show, Eq, Ord)
+data LookupContext = Use | Declare deriving stock (Show, Eq, Ord)
 
 data AnaS = AnaS { lContext :: LookupContext, vectorizedIndexes :: Set IndexKey}
 
@@ -541,7 +538,7 @@ varsCoAlg _ (as@(AnaS _ vks), Fix.Fix (IndexesF xs)) = do
     Just x -> return $ ExprVF (as, group "[" "]" $ csExprs x)
 -}
 varsCoAlg _ (_, Fix.Fix NullF) = return NullVF
-varsCoAlg _ (_, Fix.Fix (BareF t)) = return NullVF
+varsCoAlg _ (_, Fix.Fix (BareF _)) = return NullVF
 varsCoAlg _ (as, Fix.Fix (AsIsF x)) = return $ ExprVF (as, x)
 varsCoAlg _ (as, Fix.Fix (NextToF l r)) = return $ PairVF (as, l) (as, r)
 
@@ -596,7 +593,7 @@ printIndexedAlg (UseTExprF _) = Left "Should not call printExpr before expanding
 printIndexedAlg (IndexF _) = Left "Should not call printExpr before binding declaration indexes (IndexF)"
 printIndexedAlg (VectorizedF _ _) = Left "Should not call printExpr before resolving vectorization use (VectorizedF)"
 printIndexedAlg (IndexesF _) = Left "Should not call printExpr before resolving indexes use (IndexesF)"
-printIndexedAlg (VectorFunctionF f e argEs) = Left "Should not call printExpr before resolving vectorization use (VectorFunctionF)"
+printIndexedAlg (VectorFunctionF _ _ _) = Left "Should not call printExpr before resolving vectorization use (VectorFunctionF)"
 
 {-
 data StanFormatConfig = StanFormatConfig

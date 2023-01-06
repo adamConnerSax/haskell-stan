@@ -106,7 +106,7 @@ library
                  , Stan.ModelBuilder.BuildingBlocks
                  , Stan.ModelBuilder.DesignMatrix
                  , Stan.ModelBuilder.Distributions
-                 , Stan.ModelBuilder.Expressions
+--                 , Stan.ModelBuilder.Expressions
                  , Stan.ModelBuilder.TypedExpressions.DAGTypes
                  , Stan.ModelBuilder.TypedExpressions.DAG
                  , Stan.ModelBuilder.TypedExpressions.Evaluate

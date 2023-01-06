@@ -21,7 +21,7 @@ module Stan.ModelBuilder
 where
 
 import qualified Stan.JSON as Stan
-import qualified Stan.ModelBuilder.Expressions as SME
+--import qualified Stan.ModelBuilder.Expressions as SME
 import qualified Stan.ModelBuilder.TypedExpressions.Program as TE
 import qualified Stan.ModelBuilder.TypedExpressions.Statements as TE
 import qualified Stan.ModelBuilder.TypedExpressions.Functions as TE
@@ -279,8 +279,8 @@ intMapsForDataSetFoldM (GroupIntMapBuilders imbs) = GroupIntMaps <$> DHash.trave
 indexBuildersForDataSetFold :: GroupIndexMakers r -> Foldl.Fold r (GroupIndexes r)
 indexBuildersForDataSetFold (GroupIndexMakers gims) = GroupIndexes <$> DHash.traverse makeIndexMapF gims
 
-indexType :: StanName -> SME.StanType
-indexType indexOf = SME.StanArray [SME.NamedDim indexOf] SME.StanInt
+--indexType :: StanName -> SME.StanType
+--indexType indexOf = SME.StanArray [SME.NamedDim indexOf] SME.StanInt
 
 useBindingsFromGroupIndexMakers :: RowTypeTag r -> GroupIndexMakers r -> TE.IndexArrayMap
 useBindingsFromGroupIndexMakers rtt (GroupIndexMakers gims) = Map.fromList l where
@@ -1281,7 +1281,7 @@ addFixedIntJson' idt tName mLower n = do
 -- But we only need it once per data set.
 addLengthJson :: RowTypeTag r
               -> Text
-              -> SME.IndexKey
+              -> TE.IndexKey
               -> StanBuilderM md gq (TE.UExpr TE.EInt)
 addLengthJson rtt tName _ = do
 --  addDeclBinding iKey name
@@ -1349,7 +1349,7 @@ addColumnMJsonOnce rtt ndsF toMX = do
     else pure $ TE.namedE tName sType
 
 -- NB: name has to be unique so it can also be the suffix of the num columns.  Presumably the name carries the data-set suffix if nec.
-data MatrixRowFromData r = MatrixRowFromData { rowName :: Text, colIndexM :: Maybe SME.IndexKey, rowLength :: Int, rowVec :: r -> VU.Vector Double }
+data MatrixRowFromData r = MatrixRowFromData { rowName :: Text, colIndexM :: Maybe TE.IndexKey, rowLength :: Int, rowVec :: r -> VU.Vector Double }
 
 add2dMatrixJson :: RowTypeTag r
                 -> MatrixRowFromData r

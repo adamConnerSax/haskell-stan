@@ -11,7 +11,7 @@
 module Stan.ModelBuilder.FixedEffects where
 
 import qualified Stan.ModelBuilder as SB
-import qualified Stan.ModelBuilder.Expressions as SME
+--import qualified Stan.ModelBuilder.Expressions as SME
 import qualified Stan.ModelBuilder.Distributions as SMD
 import qualified Stan.ModelBuilder.Parameters as MP
 import qualified Stan.ModelBuilder.BuildingBlocks as SBB

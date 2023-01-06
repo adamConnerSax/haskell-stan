@@ -383,7 +383,6 @@ type LStmt = Stmt LExpr
 type UStmt = Stmt UExpr
 type IndexArrayU = UExpr (EArray (S Z) EInt)
 type IndexArrayL = LExpr (EArray (S Z) EInt)
---type IndexKey = Text
 type IndexSizeMap = Map IndexKey (LExpr EInt)
 type IndexArrayMap = Map IndexKey IndexArrayL
 

@@ -10,8 +10,13 @@
 {-# LANGUAGE TypeApplications #-}
 {-# OPTIONS_GHC -Wno-unrecognised-pragmas #-}
 {-# HLINT ignore "Use for_" #-}
+{-# OPTIONS_GHC -Wno-redundant-constraints #-}
 
-module Stan.ModelBuilder.DesignMatrix where
+module Stan.ModelBuilder.DesignMatrix
+  (
+    module Stan.ModelBuilder.DesignMatrix
+  )
+where
 
 import Prelude hiding (All)
 

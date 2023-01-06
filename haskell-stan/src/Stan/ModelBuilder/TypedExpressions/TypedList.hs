@@ -25,13 +25,7 @@ import Stan.ModelBuilder.TypedExpressions.Types
 import Stan.ModelBuilder.TypedExpressions.Recursion
 
 import Prelude hiding (Nat)
-import           Data.Kind (Type)
-
-import qualified GHC.TypeLits as TE
-import GHC.TypeLits (ErrorMessage((:<>:)))
-import Data.Hashable.Generic (HashArgs)
 import Data.Type.Equality ((:~:)(Refl), TestEquality(testEquality))
-import Stan.ModelBuilder.TypedExpressions.Types (GenSType)
 
 -- singleton for a list of arguments
 data TypeList :: [EType] -> Type where
@@ -113,7 +107,7 @@ infixr 2 :>
 instance HFunctor TypedList where
   hfmap nat = \case
     TNil -> TNil
-    (:>) get al -> nat get :> hfmap nat al
+    (:>) g al -> nat g :> hfmap nat al
 
 instance HTraversable TypedList where
   htraverse natM = \case

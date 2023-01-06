@@ -22,7 +22,7 @@ import qualified Stan.ModelBuilder.TypedExpressions.StanFunctions as TE
 import Stan.ModelBuilder.TypedExpressions.Recursion (hfmap)
 
 import qualified Stan.ModelBuilder.BuildingBlocks as SBB
-import qualified Stan.ModelBuilder.Expressions as SE
+--import qualified Stan.ModelBuilder.Expressions as SE
 import qualified Stan.ModelBuilder.Distributions as SD
 --import qualified Stan.ModelBuilder.GroupModel as SGM
 import qualified Stan.ModelConfig as SC

@@ -11,9 +11,13 @@
 {-# LANGUAGE UndecidableInstances #-}
 {-# OPTIONS_GHC -fwarn-incomplete-patterns #-}
 
-module Stan.ModelBuilder.TypedExpressions.Recursion where
+module Stan.ModelBuilder.TypedExpressions.Recursion
+  (
+    module Stan.ModelBuilder.TypedExpressions.Recursion
+  )
+where
 
-import Data.Kind (Type)
+--import Data.Kind (Type)
 
 newtype Fix (f :: Type -> Type) = Fix { unFix :: f (Fix f) }
 

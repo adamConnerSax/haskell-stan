@@ -8,7 +8,11 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TypeFamilies #-}
 
-module Stan.ModelBuilder.SumToZero where
+module Stan.ModelBuilder.SumToZero
+  (
+    module Stan.ModelBuilder.SumToZero
+  )
+where
 
 import Prelude hiding (All)
 import qualified Stan.ModelBuilder as SB
