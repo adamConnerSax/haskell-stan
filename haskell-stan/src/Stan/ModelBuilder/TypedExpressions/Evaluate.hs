@@ -17,8 +17,6 @@ import qualified Stan.ModelBuilder.Expressions as SME
 import Prelude hiding (Nat)
 
 import Stan.ModelBuilder.TypedExpressions.Types
-import Stan.ModelBuilder.TypedExpressions.Indexing
-import Stan.ModelBuilder.TypedExpressions.Operations
 import Stan.ModelBuilder.TypedExpressions.Expressions
 import Stan.ModelBuilder.TypedExpressions.Statements
 import Stan.ModelBuilder.TypedExpressions.Recursion
@@ -27,28 +25,11 @@ import Stan.ModelBuilder.TypedExpressions.Format
 import qualified Data.Functor.Foldable.Monadic as RS
 import qualified Data.Functor.Foldable as RS
 
-import Control.Monad.State.Strict (modify, withStateT)
-import Data.Type.Nat (Nat(..), SNat(..))
-import Data.Foldable (maximum)
-import qualified Data.Functor.Classes as FC
-import qualified Data.Functor.Classes.Generic as FC
-import qualified Data.Functor.Foldable as Rec
-import qualified Data.Functor.Foldable.Monadic as Rec
+import Control.Monad.State.Strict (withStateT)
 
-import qualified Control.Error as X
-
-import qualified Data.IntMap.Strict as IM
 import qualified Data.Map.Strict as Map
 
-import          Data.Kind (Type)
-import          Data.List ((!!),(++))
-import qualified Data.Fix as Fix
-import qualified Data.Text as T
-
-
 import qualified Prettyprinter as PP
-import qualified Data.Type.Nat as DT
-import Stan.ModelBuilder.Expressions (LookupContext)
 
 
 {- Evaluation passes

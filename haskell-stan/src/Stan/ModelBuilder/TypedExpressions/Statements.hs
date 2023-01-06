@@ -4,14 +4,13 @@
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE LambdaCase #-}
-{-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE PolyKinds #-}
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TypeFamilies #-}
+{-# LANGUAGE TypeOperators #-}
 {-# LANGUAGE TypeSynonymInstances #-}
 {-# LANGUAGE UndecidableInstances #-}
-{-# OPTIONS_GHC -fwarn-incomplete-patterns #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 
 module Stan.ModelBuilder.TypedExpressions.Statements
@@ -29,8 +28,9 @@ import Stan.ModelBuilder.TypedExpressions.Indexing
 import Stan.ModelBuilder.TypedExpressions.Operations
 import Stan.ModelBuilder.TypedExpressions.Functions
 import Stan.ModelBuilder.TypedExpressions.StanFunctions
-import qualified Data.Vec.Lazy as Vec
 
+import qualified Data.Vec.Lazy as Vec
+import Data.Type.Equality (type (~))
 import Control.Monad.Writer.Strict as W
 
 import Prelude hiding (Nat)
@@ -178,7 +178,7 @@ for loopCounter ft bodyF = case ft of
   SpecificNumbered se' ee' -> SFor loopCounter se' ee' $ bodyF loopCounterE
   IndexedLoop ik -> SFor loopCounter (intE 1) (namedSizeE ik) $ bodyF loopCounterE --bodyWithLoopCounterContext ik
   SpecificIn e -> SForEach loopCounter e $ bodyF loopCounterE
-  IndexedIn ik e -> SForEach loopCounter e $ bodyF loopCounterE --bodyWithLoopCounterContext ik
+  IndexedIn _ e -> SForEach loopCounter e $ bodyF loopCounterE --bodyWithLoopCounterContext ik
   where
     loopCounterE = namedE loopCounter SInt
 --    bodyWithLoopCounterContext ik = SContext (Just $ insertUseBinding ik (lNamedE loopCounter SInt)) body :| []
@@ -211,7 +211,7 @@ simpleFunctionBody :: Function rt pts
                    -> (UExpr rt -> ExprList pts -> [UStmt])
                    -> ExprList pts
                    -> (NonEmpty UStmt, UExpr rt)
-simpleFunctionBody f n retDSF bF args = let rE = namedE n st in  (declare n (retDSF args) :| bF rE args, rE)
+simpleFunctionBody _ n retDSF bF args = let rE = namedE n st in  (declare n (retDSF args) :| bF rE args, rE)
   where
     st = sTypeFromStanType $ declType $ retDSF args
 
@@ -257,7 +257,7 @@ offsetM = VarOffset
 multiplierM :: UExpr t -> VarModifier UExpr t
 multiplierM = VarMultiplier
 
-newtype CodeWriter a = CodeWriter { unCodeWriter :: W.Writer [UStmt] a } deriving (Functor, Applicative, Monad, W.MonadWriter [UStmt])
+newtype CodeWriter a = CodeWriter { unCodeWriter :: W.Writer [UStmt] a } deriving newtype (Functor, Applicative, Monad, W.MonadWriter [UStmt])
 
 {-
 writerNE :: CodeWriter a -> Maybe (NonEmpty UStmt, a)
@@ -403,7 +403,7 @@ instance Functor (StmtF f) where
     SAssignF ft ft' -> SAssignF ft ft'
     SOpAssignF op ft ft' -> SOpAssignF op ft ft'
     STargetF f' -> STargetF f'
-    SSampleF fst dis al -> SSampleF fst dis al
+    SSampleF f_st dis al -> SSampleF f_st dis al
     SForF ctr startE endE body -> SForF ctr startE endE (f <$> body)
     SForEachF ctr fromE body -> SForEachF ctr fromE (f <$> body)
     SIfElseF x1 sf -> SIfElseF (secondF f x1) (f sf)
@@ -449,7 +449,7 @@ instance Traversable (StmtF f) where
     SAssignF ft ft' -> pure $ SAssignF ft ft'
     SOpAssignF op ft ft' -> pure $ SOpAssignF op ft ft'
     STargetF f -> pure $ STargetF f
-    SSampleF fst dis al -> pure $ SSampleF fst dis al
+    SSampleF f_st dis al -> pure $ SSampleF f_st dis al
     SForF txt f f' sfs -> SForF txt f f' <$> traverse g sfs
     SForEachF txt ft sfs -> SForEachF txt ft <$> traverse g sfs
     SIfElseF x0 sf -> SIfElseF <$> traverse (\(c, s) -> pure ((,) c) <*> g s) x0 <*> g sf
@@ -472,7 +472,7 @@ instance Functor (RS.Base (Stmt f)) => RS.Recursive (Stmt f) where
     SAssign ft ft' -> SAssignF ft ft'
     SOpAssign op ft ft' -> SOpAssignF op ft ft'
     STarget f -> STargetF f
-    SSample fst dis al -> SSampleF fst dis al
+    SSample f_st dis al -> SSampleF f_st dis al
     SFor txt f f' sts -> SForF txt f f' sts
     SForEach txt ft sts -> SForEachF txt ft sts
     SIfElse x0 st -> SIfElseF x0 st
@@ -495,7 +495,7 @@ instance Functor (RS.Base (Stmt f)) => RS.Corecursive (Stmt f) where
     SAssignF ft ft' -> SAssign ft ft'
     SOpAssignF op ft ft' -> SOpAssign op ft ft'
     STargetF f -> STarget f
-    SSampleF fst dis al -> SSample fst dis al
+    SSampleF f_st dis al -> SSample f_st dis al
     SForF txt f f' sts -> SFor txt f f' sts
     SForEachF txt ft sts -> SForEach txt ft sts
     SIfElseF x0 st -> SIfElse x0 st

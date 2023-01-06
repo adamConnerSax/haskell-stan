@@ -23,16 +23,10 @@ module Stan.ModelBuilder.TypedExpressions.Functions
 
 import Stan.ModelBuilder.TypedExpressions.Types
 import Stan.ModelBuilder.TypedExpressions.TypedList
-import Stan.ModelBuilder.TypedExpressions.Recursion
 
 
 import Prelude hiding (Nat)
-import           Data.Kind (Type)
-
-import qualified GHC.TypeLits as TE
-import GHC.TypeLits (ErrorMessage((:<>:)))
-import Data.Hashable.Generic (HashArgs)
-import Data.Type.Equality ((:~:)(Refl), TestEquality(testEquality))
+--import           Data.Kind (Type)
 
 
 data Function :: EType -> [EType] -> Type  where
@@ -77,7 +71,7 @@ withDensity :: (forall args' . Text -> SType t -> TypeList args -> (forall u.Typ
             -> r
 withDensity f (Density dn st tl g) = f dn st tl g
 
-simpleDensity :: (GenSType t, AllGenTypes ts, GenTypeList ts) => Text -> Density t ts
+simpleDensity :: (GenSType t, GenTypeList ts) => Text -> Density t ts
 simpleDensity t  = Density t genSType genTypeList id
 
 -- const functor for holding arguments to functions

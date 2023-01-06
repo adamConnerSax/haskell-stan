@@ -10,39 +10,36 @@ module Stan.RScriptBuilder where
 
 
 import qualified Stan.ModelConfig as SC
-import qualified Stan.ModelBuilder as SB
 
 import qualified Colonnade as Col
 import qualified Control.Foldl as Foldl
 import qualified Data.Map as M
-import Data.String.Here (here)
 import qualified Data.Text as T
-import qualified Data.Text.IO as T
 import qualified Frames as F
 import qualified Frames.Streamly.CSV as FStreamly
 import qualified Frames.Streamly.InCore as FStreamly
 import Frames.Streamly.Streaming.Streamly (StreamlyStream(..), SerialT)
-import qualified System.Directory as Dir
 import qualified System.Process as Process
 import qualified Streamly.Prelude as Streamly
 import qualified Text.Printf as Printf
-import qualified Data.Vinyl as V
 import qualified Knit.Report as K
-import qualified Stan.ModelConfig as SC
 
 
 
 type StreamlyS = StreamlyStream SerialT
 
-libsForShinyStan :: [Text] = ["rstan", "shinystan", "rjson"]
-libsForLoo :: [Text] = ["rstan", "shinystan", "loo", "bayesplot"]
+libsForShinyStan :: [Text]
+libsForShinyStan = ["rstan", "shinystan", "rjson"]
+
+libsForLoo :: [Text]
+libsForLoo = ["rstan", "shinystan", "loo", "bayesplot"]
 
 addLibs :: [T.Text] -> T.Text
 addLibs = foldMap addOneLib where
   addOneLib t = "library(" <> t <> ")\n"
 
 rArray :: (a -> T.Text) -> [a] -> T.Text
-rArray toText as = "c(" <> T.intercalate "," (fmap toText as) <> ")"
+rArray asText as = "c(" <> T.intercalate "," (fmap asText as) <> ")"
 
 {-
 rSetWorkingDirectory :: SC.ModelRunnerConfig -> T.Text -> IO T.Text
@@ -94,7 +91,7 @@ rPrintText t = rPrint $ "\"" <> t <> "\""
 
 -- Named version is simpler if you just need to copy a value from jsonData into global namespace
 -- Expr version lets you run R code to build the value to put in global namespace
-data UnwrapJSON = UnwrapNamed T.Text T.Text | UnwrapExpr T.Text T.Text deriving (Show, Eq, Ord)
+data UnwrapJSON = UnwrapNamed T.Text T.Text | UnwrapExpr T.Text T.Text deriving stock (Show, Eq, Ord)
 
 unwrap :: UnwrapJSON -> T.Text
 unwrap (UnwrapNamed jn rn) = rn <> " <- jsonData $ " <> jn <> "\n"
@@ -151,13 +148,13 @@ looScript mr config looName nCores =
 compareScript ::  Foldable f
               => SC.ModelRun -> f SC.ModelRunnerConfig -> Int -> Maybe Text -> Text
 compareScript mr configs nCores mOutCSV =
-  let  doOne (n, c) = looOne mr c (SC.outputPrefix mr $ SC.mrcInputNames c) (Just $ "model" <> show n) nCores
+  let  doOne (n, c) = looOne mr c (SC.outputPrefix mr $ SC.mrcInputNames c) (Just $ "model" <> show (n :: Int)) nCores
        (numModels, configList) = Foldl.fold ((,) <$> Foldl.length <*> Foldl.list) configs
-       compare = "c <- loo_compare(" <> T.intercalate "," (("model" <>) . show <$> [1..numModels]) <> ")\n"
+       tCompare = "c <- loo_compare(" <> T.intercalate "," (("model" <>) . show <$> [1..numModels]) <> ")\n"
        writeTable = rMessage "c,simplify=FALSE" <> "\n"
        writeCSV = "write.csv(c" <> maybe ")\n" (\csvName -> "," <> csvName <> ")\n") mOutCSV
        looScripts = mconcat $ fmap doOne  $ zip [1..] configList
-       rScript = addLibs libsForLoo <> looScripts  <> compare <> writeTable <> writeCSV
+       rScript = addLibs libsForLoo <> looScripts  <> tCompare <> writeTable <> writeCSV
   in rScript
 
 -- The below requires Frames and thus adds a dependency
@@ -191,7 +188,7 @@ compareModels mr configs nCores = do
                                  $ Streamly.map (T.split (== ','))
                                  $ Streamly.drop 1 sRText
   -- map results to models
-  let resultModelMap :: Map Text Text = M.fromList $ zip ((\n -> "model"<> show n) <$> [1..]) (Foldl.fold (Foldl.premap fst Foldl.list) configs)
+  let resultModelMap :: Map Text Text = M.fromList $ zip ((\n -> "model" <> show (n :: Int)) <$> [1..]) (Foldl.fold (Foldl.premap fst Foldl.list) configs)
       fixName :: F.Record LOO_R -> F.Record LOO_R
       fixName r =
         let oldName = F.rgetField @Model r

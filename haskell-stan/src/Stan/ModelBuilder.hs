@@ -28,13 +28,8 @@ import qualified Stan.ModelBuilder.TypedExpressions.Functions as TE
 import qualified Stan.ModelBuilder.TypedExpressions.DAGTypes as DT
 import qualified Data.Dependent.Map as DM
 import Stan.ModelBuilder.TypedExpressions.Statements (StanName)
-import Stan.ModelBuilder.TypedExpressions.Types (Nat(..))
-import qualified Stan.ModelBuilder.TypedExpressions.Expressions as TE
-import qualified Stan.ModelBuilder.TypedExpressions.Evaluate as TE
 import qualified Stan.ModelBuilder.TypedExpressions.Format as TE
 import qualified Stan.ModelBuilder.TypedExpressions.Types as TE
-
-import qualified Prettyprinter.Render.Text as PP
 
 import Stan.ModelBuilder.Expressions
 import Stan.ModelBuilder.Distributions
@@ -47,34 +42,19 @@ import qualified Control.Exception as X
 import qualified GHC.IO.Exception as X
 import qualified Data.Aeson as Aeson
 import qualified Data.Array as Array
-import qualified Data.Constraint.Extras.TH as CE
 import qualified Data.Dependent.HashMap as DHash
 import qualified Data.Dependent.Sum as DSum
-import qualified Data.GADT.Compare as GADT
 import qualified Data.IntMap.Strict as IntMap
-import qualified Data.List as List
 import qualified Data.List.NonEmpty as NE
 import qualified Data.Map.Strict as Map
-import qualified Data.Proxy as Proxy
-import qualified Data.Sequence as Seq
 import qualified Data.Set as Set
-import qualified Data.Some as Some
 import qualified Data.Text as T
 import qualified Data.Text.IO as T
-import qualified Data.Time.Clock as Time
-import qualified Data.Vector as Vector
 import qualified Data.Vector.Unboxed as VU
-import qualified Data.Hashable as Hashable
 import qualified Say
 import qualified System.Directory as Dir
-import qualified System.Environment as Env
-import qualified Type.Reflection as Reflection
-import qualified Data.GADT.Show as GADT
 import Stan.ModelConfig (InputDataType(..))
 import qualified Stan.ModelConfig as SC
-import qualified Data.Massiv.Array.Unsafe as X
-import qualified Data.Vinyl as TE
-import Data.Vector.Internal.Check (Checks(Bounds))
 
 {-
 stanCodeToStanModel :: StanCode -> StanModel
@@ -152,14 +132,14 @@ mapLookupE errMsg m k = case Map.lookup k m of
   Just a -> Right a
   Nothing -> Left $ errMsg k
 
-toIntMap :: Ord k => Map k Int -> IntMap k
+toIntMap :: Map k Int -> IntMap k
 toIntMap = IntMap.fromList . fmap (\(a, b) -> (b, a)) . Map.toList
 
 mapToIndexMap :: Ord k => (r -> k) -> Map k Int -> IndexMap r k
-mapToIndexMap h m = indexMap where
+mapToIndexMap h m = indxMap where
   lookupK = mapLookupE (const "key not found when building given index") m
   intIndex = IntIndex (Map.size m) (lookupK . h)
-  indexMap = IndexMap intIndex lookupK (toIntMap m) h
+  indxMap = IndexMap intIndex lookupK (toIntMap m) h
 
 makeIndexMapF :: MakeIndex r k -> Foldl.Fold r (IndexMap r k)
 makeIndexMapF (GivenIndex m h) = pure $ mapToIndexMap h m
@@ -183,9 +163,8 @@ makeIndexByCounting :: Ord k => (k -> Text) -> (r -> k) -> MakeIndex r k
 makeIndexByCounting printK h = FoldToIndex (Foldl.premap h $ indexFold printK 1) h
 
 indexFold :: Ord k => (k -> Text) -> Int -> Foldl.Fold k (Map k Int)
-indexFold printK start =  Foldl.Fold step init done where
+indexFold _ start =  Foldl.Fold step Set.empty done where
   step s k = Set.insert k s
-  init = Set.empty
   done s = mapToInt where
     keyedList = zip (Set.toList s) [start..]
     mapToInt = Map.fromList keyedList
@@ -197,7 +176,7 @@ type GroupRowMap r = DHash.DHashMap GroupTypeTag (RowMap r)
 emptyGroupRowMap :: GroupRowMap r
 emptyGroupRowMap = DHash.empty
 
-addRowMap :: Typeable k => GroupTypeTag k -> (r -> k) -> GroupRowMap r -> GroupRowMap r
+addRowMap :: GroupTypeTag k -> (r -> k) -> GroupRowMap r -> GroupRowMap r
 addRowMap gtt f grm = DHash.insert gtt (RowMap f) grm
 
 data Phantom k = Phantom
@@ -206,9 +185,8 @@ type GroupSet = DHash.DHashMap GroupTypeTag Phantom
 emptyGroupSet :: GroupSet
 emptyGroupSet = DHash.empty
 
-addGroupToSet :: Typeable k => GroupTypeTag k -> GroupSet -> GroupSet
+addGroupToSet :: GroupTypeTag k -> GroupSet -> GroupSet
 addGroupToSet gtt gs = DHash.insert gtt Phantom gs
-
 
 buildIntMapBuilderF :: (k -> Either Text Int) -> (r -> k) -> DataToIntMap r k --FL.FoldM (Either Text) r (IM.IntMap k)
 buildIntMapBuilderF eIntF keyF = DataToIntMap $ Foldl.FoldM step (return IntMap.empty) return where
@@ -221,7 +199,7 @@ dataToIntMapFromFoldable keyF keys = buildIntMapBuilderF lkUp keyF where
   keysM :: Map k Int = Map.fromList $ zip (Foldl.fold Foldl.list keys) [1..]
   lkUp k = maybe (Left $ "dataToIntMapFromFoldable.lkUp: " <> show k <> " not found ") Right $ Map.lookup k keysM
 
-dataToIntMapFromEnum :: forall k r f. (Show k, Enum k, Bounded k, Ord k) => (r -> k) -> DataToIntMap r k
+dataToIntMapFromEnum :: forall k r. (Show k, Enum k, Bounded k, Ord k) => (r -> k) -> DataToIntMap r k
 dataToIntMapFromEnum keyF = dataToIntMapFromFoldable keyF [minBound..maxBound]
 
 -- HERE
@@ -230,14 +208,14 @@ dataToIntMapFromKeyedRow key = DataToIntMap $ Foldl.generalize fld where
   fld = fmap (IntMap.fromList . zip [1..]) $ Foldl.premap key Foldl.list
 
 
-addRowKeyIntMapToGroupBuilder :: Typeable k => RowTypeTag r -> GroupTypeTag k -> (r -> k) ->  StanGroupBuilderM md gq ()
+addRowKeyIntMapToGroupBuilder :: RowTypeTag r -> GroupTypeTag k -> (r -> k) ->  StanGroupBuilderM md gq ()
 addRowKeyIntMapToGroupBuilder rtt gtt = addGroupIntMapForDataSet gtt rtt . dataToIntMapFromKeyedRow
 
-addRowKeyIntMap :: Typeable k => RowTypeTag r -> GroupTypeTag k -> (r -> k) ->  StanBuilderM md gq ()
+addRowKeyIntMap :: RowTypeTag r -> GroupTypeTag k -> (r -> k) ->  StanBuilderM md gq ()
 addRowKeyIntMap rtt gtt = addIntMapBuilder rtt gtt . dataToIntMapFromKeyedRow
 
 addIntMapFromGroup :: RowTypeTag r -> GroupTypeTag k -> (r -> k) -> StanBuilderM md gq ()
-addIntMapFromGroup rtt gtt rowToGroup = do
+addIntMapFromGroup rtt gtt rowToGrpF = do
   let dataMissingErr = "addIntMapFromGroup: data-set "
                          <> dataSetName rtt
                          <> " is missing from " <> show (inputDataType rtt) <> " rowBuilders."
@@ -251,21 +229,21 @@ addIntMapFromGroup rtt gtt rowToGroup = do
       f rowInfo = do
         let (GroupIndexes gis) = groupIndexes rowInfo
         kToIntE <- groupKeyToGroupIndex <$> stanBuildMaybe groupIndexMissingErr (DHash.lookup gtt gis)
-        addIntMapBuilder rtt gtt $  buildIntMapBuilderF kToIntE rowToGroup -- for extracting results
+        addIntMapBuilder rtt gtt $  buildIntMapBuilderF kToIntE rowToGrpF -- for extracting results
   withRowInfo (stanBuildError dataMissingErr) f rtt
 
 -- To HERE
-getGroupIndex :: forall d r k. Typeable k
-              => RowTypeTag r
+getGroupIndex :: forall r k.
+              RowTypeTag r
               -> GroupTypeTag k
               -> DataSetGroupIntMaps
               -> Either Text (IntMap k)
-getGroupIndex rtt gtt groupIndexes =
-  case DHash.lookup rtt groupIndexes of
+getGroupIndex rtt gtt grpIndexes =
+  case DHash.lookup rtt grpIndexes of
     Nothing -> Left
                $ "getGroupIndex: " <> dataSetName rtt <> " (idt="
                <> show (inputDataType rtt) <> ") not found in data-set group int maps: "
-               <> displayDataSetGroupIntMaps groupIndexes <> "."
+               <> displayDataSetGroupIntMaps grpIndexes <> "."
                <> " If this error is complaining about a data-set key that appears to be present, double check the *types* used when constructing the row-type-tags"
 
     Just (GroupIntMaps gim) -> case DHash.lookup gtt gim of
@@ -281,14 +259,14 @@ getGroupIndexVar :: forall md gq r k.
                  -> GroupTypeTag k
                  -> StanBuilderM md gq (TE.UExpr TE.EIndexArray)
 getGroupIndexVar rtt gtt = do
-  let varName = groupIndexVarName rtt gtt
+  let vName = groupIndexVarName rtt gtt
       dsNotFoundErr = stanBuildError
                       $ "getGroupIndexVar: data-set=" <> dataSetName rtt <> " (input type=" <> show (inputDataType rtt) <> ") not found."
       varIfGroup :: forall x d.RowInfo d x -> StanBuilderM md gq (TE.UExpr TE.EIndexArray)
       varIfGroup ri =
         let (GroupIndexes gis) = groupIndexes ri
         in case DHash.lookup gtt gis of
-          Just _ -> return $ TE.namedE varName TE.sIndexArray --SME.StanVar varName (SME.StanArray [SME.NamedDim $ dataSetName rtt] SME.StanInt)
+          Just _ -> return $ TE.namedE vName TE.sIndexArray --SME.StanVar varName (SME.StanArray [SME.NamedDim $ dataSetName rtt] SME.StanInt)
           Nothing -> stanBuildError
             $ "getGroupIndexVar: group=" <> taggedGroupName gtt
             <> " not found in data-set=" <> dataSetName rtt <> " (input type=" <> show (inputDataType rtt) <> ") not found."
@@ -318,9 +296,9 @@ useBindingsFromGroupIndexMakers rtt (GroupIndexMakers gims) = Map.fromList l whe
 buildRowInfo :: d -> RowTypeTag r -> GroupIndexAndIntMapMakers d r -> RowInfo d r
 buildRowInfo d rtt (GroupIndexAndIntMapMakers tf@(ToFoldable f) ims imbs) = Foldl.fold fld $ f d  where
   gisFld = indexBuildersForDataSetFold $ ims
-  useBindings = Map.insert (dataSetName rtt) (TE.namedLIndex ("N_" <> dataSetName rtt))
+  uBindings = Map.insert (dataSetName rtt) (TE.namedLIndex ("N_" <> dataSetName rtt))
                 $ useBindingsFromGroupIndexMakers rtt ims
-  fld = RowInfo tf useBindings <$> gisFld <*> pure imbs <*> pure mempty
+  fld = RowInfo tf uBindings <$> gisFld <*> pure imbs <*> pure mempty
 
 groupIntMap :: IndexMap r k -> IntMap.IntMap k
 groupIntMap (IndexMap _ _ im _) = im
@@ -329,11 +307,11 @@ groupIntMap (IndexMap _ _ im _) = im
 
 
 unIndexedRowInfo :: forall d r. ToFoldable d r -> Text -> RowInfo d r
-unIndexedRowInfo tf groupName  = RowInfo tf mempty (GroupIndexes DHash.empty) (GroupIntMapBuilders DHash.empty) mempty
+unIndexedRowInfo tf _  = RowInfo tf mempty (GroupIndexes DHash.empty) (GroupIntMapBuilders DHash.empty) mempty
 
 
-addFoldToDBuilder :: forall d r.(Typeable d)
-                  => RowTypeTag r
+addFoldToDBuilder :: forall d r.
+                  RowTypeTag r
                   -> Stan.StanJSONF r Aeson.Series
                   -> RowInfos d
                   -> Maybe (RowInfos d)
@@ -343,35 +321,35 @@ addFoldToDBuilder rtt fld ris =
     Just (RowInfo x ubs y z (JSONSeriesFold fld'))
       -> Just $ DHash.insert rtt (RowInfo x ubs y z (JSONSeriesFold $ fld' <> fld)) ris
 
-buildJSONSeries :: forall d f. RowInfos d -> d -> Either Text Aeson.Series
+buildJSONSeries :: forall d. RowInfos d -> d -> Either Text Aeson.Series
 buildJSONSeries rbm d =
   let foldOne :: RowBuilder d -> Either Text Aeson.Series
-      foldOne ((RowTypeTag _ _) DSum.:=> ri@(RowInfo (ToFoldable f) _ _ _ (JSONSeriesFold fld))) = Foldl.foldM fld (f d)
+      foldOne ((RowTypeTag _ _) DSum.:=> (RowInfo (ToFoldable f) _ _ _ (JSONSeriesFold fld))) = Foldl.foldM fld (f d)
   in mconcat <$> (traverse foldOne $ DHash.toList rbm)
 
 data JSONRowFold d r = JSONRowFold (ToFoldable d r) (Stan.StanJSONF r Aeson.Series)
 
 buildJSONFromRows :: DHash.DHashMap RowTypeTag (JSONRowFold d) -> d -> Either Text Aeson.Series
 buildJSONFromRows rowFoldMap d = do
-  let toSeriesOne (rtt DSum.:=> JSONRowFold (ToFoldable tf) fld) = Foldl.foldM fld (tf d)
+  let toSeriesOne (_ DSum.:=> JSONRowFold (ToFoldable tf) fld) = Foldl.foldM fld (tf d)
   fmap mconcat $ traverse toSeriesOne $ DHash.toList rowFoldMap
 
 
 -- The Maybe return values are there just to satisfy the (returned) type of DHash.traverseWithKey
-buildGroupIndexes :: (Typeable md, Typeable gq) => StanBuilderM md gq ()
+buildGroupIndexes :: StanBuilderM md gq ()
 buildGroupIndexes = do
-  let buildIndexJSONFold :: (Typeable md, Typeable gq) => RowTypeTag r -> GroupTypeTag k -> IndexMap r k -> StanBuilderM md gq (Maybe k)
+  let buildIndexJSONFold :: RowTypeTag r -> GroupTypeTag k -> IndexMap r k -> StanBuilderM md gq (Maybe k)
       buildIndexJSONFold rtt gtt@(GroupTypeTag gName) (IndexMap (IntIndex gSize mIntF) _ _ _) = do
-        let dsName = dataSetName rtt
+        let --dsName = dataSetName rtt
             indexName = groupIndexVarName rtt gtt --dsName <> "_" <> gName
 --            nds = TE.NamedDeclSpec indexName $  TE.intArraySpec (TE.namedSizeE dsName) [TE.lowerM $ TE.intE 1]
             ndsF lE = TE.NamedDeclSpec indexName $  TE.intArraySpec lE [TE.lowerM $ TE.intE 1]
-        addFixedIntJson' (inputDataType rtt) ("J_" <> gName) (Just 1) gSize
+        _ <- addFixedIntJson' (inputDataType rtt) ("J_" <> gName) (Just 1) gSize
         _ <- addColumnMJson rtt ndsF mIntF
 --        _ <- addColumnMJson rtt indexName (SME.StanArray [SME.NamedDim dsName] SME.StanInt) "<lower=1>" mIntF
         addDeclBinding gName $ "J_" <> gName
         return Nothing
-      buildRowFolds :: (Typeable md, Typeable gq) => RowTypeTag r -> RowInfo d r -> StanBuilderM md gq (Maybe r)
+      buildRowFolds :: RowTypeTag r -> RowInfo d r -> StanBuilderM md gq (Maybe r)
       buildRowFolds rtt (RowInfo _ _ (GroupIndexes gis) _ _) = do
         _ <- DHash.traverseWithKey (buildIndexJSONFold rtt) gis
         return Nothing
@@ -379,14 +357,14 @@ buildGroupIndexes = do
   _ <- gets gqRowBuilders >>= DHash.traverseWithKey buildRowFolds
   pure ()
 
-buildModelJSONF :: forall md gq.(Typeable md) => StanBuilderM md gq (DHash.DHashMap RowTypeTag (JSONRowFold md))
+buildModelJSONF :: forall md gq . StanBuilderM md gq (DHash.DHashMap RowTypeTag (JSONRowFold md))
 buildModelJSONF = do
   rowInfos <- modelRowBuilders <$> get
-  let buildRowJSONFolds :: RowInfo md r -> StanBuilderM md gq (JSONRowFold md r)
-      buildRowJSONFolds (RowInfo tf _ _ _ (JSONSeriesFold jsonF)) = return $ JSONRowFold tf jsonF
-  DHash.traverse buildRowJSONFolds rowInfos
+  let bldRowJSONFolds :: RowInfo md r -> StanBuilderM md gq (JSONRowFold md r)
+      bldRowJSONFolds (RowInfo tf _ _ _ (JSONSeriesFold jsonF)) = return $ JSONRowFold tf jsonF
+  DHash.traverse bldRowJSONFolds rowInfos
 
-buildGQJSONF :: forall md gq.(Typeable gq) => StanBuilderM md gq (DHash.DHashMap RowTypeTag (JSONRowFold gq))
+buildGQJSONF :: forall md gq . StanBuilderM md gq (DHash.DHashMap RowTypeTag (JSONRowFold gq))
 buildGQJSONF = do
   rowInfos <- gqRowBuilders <$> get
   DHash.traverse buildRowJSONFolds rowInfos
@@ -395,7 +373,7 @@ buildRowJSONFolds :: RowInfo d r -> StanBuilderM env d (JSONRowFold d r)
 buildRowJSONFolds ri = return $ JSONRowFold (toFoldable ri) jsonF where
   JSONSeriesFold jsonF = jsonSeries ri
 
-buildModelJSONFromDataM :: Typeable md => StanBuilderM md gq (md -> Either Text Aeson.Series)
+buildModelJSONFromDataM :: StanBuilderM md gq (md -> Either Text Aeson.Series)
 buildModelJSONFromDataM = do
   (JSONSeriesFold constJSONFld) <- constModelJSON <$> get
   dataSetJSON <- buildModelJSONF
@@ -404,7 +382,7 @@ buildModelJSONFromDataM = do
         ds =  buildJSONFromRows dataSetJSON d
     in (<>) <$> c <*> ds
 
-buildGQJSONFromDataM :: Typeable gq => StanBuilderM md gq (gq -> Either Text Aeson.Series)
+buildGQJSONFromDataM :: StanBuilderM md gq (gq -> Either Text Aeson.Series)
 buildGQJSONFromDataM = do
   (JSONSeriesFold constJSONFld) <- constGQJSON <$> get
   dataSetJSON <- buildGQJSONF
@@ -413,14 +391,14 @@ buildGQJSONFromDataM = do
         ds =  buildJSONFromRows dataSetJSON d
     in (<>) <$> c <*> ds
 
-data VariableScope = GlobalScope | ModelScope | GQScope deriving (Show, Eq, Ord)
+data VariableScope = GlobalScope | ModelScope | GQScope deriving stock (Show, Eq, Ord)
 
-newtype DeclarationMap = DeclarationMap (Map TE.StanName TE.EType) deriving (Show)
+newtype DeclarationMap = DeclarationMap (Map TE.StanName TE.EType) deriving stock (Show)
 data ScopedDeclarations = ScopedDeclarations { currentScope :: VariableScope
                                              , globalScope :: NonEmpty DeclarationMap
                                              , modelScope :: NonEmpty DeclarationMap
                                              , gqScope :: NonEmpty DeclarationMap
-                                             } deriving (Show)
+                                             } deriving stock (Show)
 
 changeVarScope :: VariableScope -> ScopedDeclarations -> ScopedDeclarations
 changeVarScope vs sd = sd { currentScope = vs}
@@ -485,7 +463,7 @@ alreadyDeclared sd sn st =
     Right et ->  if et == TE.eTypeFromStanType st
                  then Left $ sn <> " already declared (with same type= " <> show et <> ")!"
                  else Left $ sn <> " (" <> show (TE.eTypeFromStanType st)
-                      <> ")already declared (with different type="<> show et <> ")!"
+                      <> ")already declared (with different type=" <> show et <> ")!"
     Left _ -> pure ()
 
 alreadyDeclaredAllScopes :: ScopedDeclarations -> TE.StanName -> TE.StanType t -> Either Text ()
@@ -494,7 +472,7 @@ alreadyDeclaredAllScopes sd sn st =
     Right et ->  if et == TE.eTypeFromStanType st
                  then Left $ sn <> " already declared (with same type= " <> show et <> ")!"
                  else Left $ sn <> " (" <> show (TE.eTypeFromStanType st)
-                      <> ")already declared (with different type="<> show et <> ")!"
+                      <> ")already declared (with different type=" <> show et <> ")!"
     Left _ -> pure ()
 {-
 addVarInScope :: TE.StanName -> SME.StanType -> StanBuilderM env d SME.StanVar
@@ -729,7 +707,7 @@ modifyFunctionNames :: (Set Text -> Set Text) -> BuilderState md gq -> BuilderSt
 modifyFunctionNames f bs = bs { hasFunctions = f (hasFunctions bs)}
 --(BuilderState dv vbs mrb gqrb cj hf c) = BuilderState dv vbs mrb gqrb cj (f hf) c
 
-initialBuilderState :: Typeable md => RowInfos md -> RowInfos gq -> BuilderState md gq
+initialBuilderState :: RowInfos md -> RowInfos gq -> BuilderState md gq
 initialBuilderState modelRowInfos gqRowInfos =
   BuilderState
   initialScopedDeclarations
@@ -755,7 +733,7 @@ modifyGBGQS f (GroupBuilderS mRims gqRims) = GroupBuilderS mRims (f gqRims)
 
 newtype StanGroupBuilderM md gq a
   = StanGroupBuilderM { unStanGroupBuilderM :: ExceptT Text (State (GroupBuilderS md gq)) a }
-  deriving (Functor, Applicative, Monad, MonadState (GroupBuilderS md gq))
+  deriving newtype (Functor, Applicative, Monad, MonadState (GroupBuilderS md gq))
 
 stanGroupBuildError :: Text -> StanGroupBuilderM md gq a
 stanGroupBuildError t = StanGroupBuilderM $ ExceptT (pure $ Left t)
@@ -815,8 +793,8 @@ addGQDataToGroupBuilder dsName tf = do
       modify $ \x -> x { gbGQS = newRims}
       return rtt
 
-addGroupIndexForData :: forall r k md gq.Typeable k
-                        => GroupTypeTag k
+addGroupIndexForData :: forall r k md gq .
+                        GroupTypeTag k
                         -> RowTypeTag r
                         -> MakeIndex r k
                         -> StanGroupBuilderM md gq ()
@@ -839,11 +817,11 @@ addGroupIndexForModelCrosswalk :: forall k r md gq.Typeable k
                                -> StanGroupBuilderM md gq ()
 addGroupIndexForModelCrosswalk rtt mkIndex = do
   let gttX :: GroupTypeTag k = GroupTypeTag $ "I_" <> (dataSetName rtt)
-      idt = inputDataType rtt
+--      idt = inputDataType rtt
   addGroupIndexForData gttX rtt mkIndex
 
-addGroupIntMapForDataSet :: forall r k md gq.Typeable k
-                         => GroupTypeTag k
+addGroupIntMapForDataSet :: forall r k md gq .
+                         GroupTypeTag k
                          -> RowTypeTag r
                          -> DataToIntMap r k
                          -> StanGroupBuilderM md gq ()
@@ -860,20 +838,20 @@ addGroupIntMapForDataSet gtt rtt mkIntMap = withRowInfoMakers f idt where
           return (Just newRims, ())
 
 -- This builds the indexes but not the IntMaps.  Those need to be built at the end.
-runStanGroupBuilder :: (Typeable md, Typeable gq) => StanGroupBuilderM md gq () -> md -> gq -> BuilderState md gq
+runStanGroupBuilder :: StanGroupBuilderM md gq () -> md -> gq -> BuilderState md gq
 runStanGroupBuilder sgb md gq =
-  let (resE, gbs) = usingState (GroupBuilderS DHash.empty DHash.empty) $ runExceptT $ unStanGroupBuilderM sgb
+  let (_, gbs) = usingState (GroupBuilderS DHash.empty DHash.empty) $ runExceptT $ unStanGroupBuilderM sgb
       modelRowInfos = DHash.mapWithKey (buildRowInfo md) $ gbModelS gbs
       gqRowInfos = DHash.mapWithKey (buildRowInfo gq) $ gbGQS gbs
   in initialBuilderState modelRowInfos gqRowInfos
 
 newtype StanBuilderM md gq a = StanBuilderM { unStanBuilderM :: ExceptT Text (State (BuilderState md gq)) a }
-                             deriving (Functor, Applicative, Monad, MonadState (BuilderState md gq))
+                             deriving newtype (Functor, Applicative, Monad, MonadState (BuilderState md gq))
 
-dataSetTag :: forall r env md gq. Typeable r => InputDataType -> Text -> StanBuilderM md gq (RowTypeTag r)
-dataSetTag idt name = do
-  let rtt :: RowTypeTag r = RowTypeTag idt name
-      err = stanBuildError $ "dataSetTag: Data-set " <> name <> " not found in " <> show idt <> " row builders."
+dataSetTag :: forall r md gq. Typeable r => InputDataType -> Text -> StanBuilderM md gq (RowTypeTag r)
+dataSetTag idt tName = do
+  let rtt :: RowTypeTag r = RowTypeTag idt tName
+      err = stanBuildError $ "dataSetTag: Data-set " <> tName <> " not found in " <> show idt <> " row builders."
   withRowInfo err (const $ return rtt) rtt
 {-
   rowInfos <- rowBuilders <$> get
@@ -897,14 +875,15 @@ addFunctionsOnce functionsName fCode = do
              modify $ modifyFunctionNames $ Set.insert functionsName
          )
 
-addFunctionOnce :: (Traversable g, TE.GenSType rt)
+addFunctionOnce :: Traversable g
                 => TE.Function rt ats -> TE.TypedArgNames ats -> (TE.ExprList ats -> (g TE.UStmt, TE.UExpr rt)) -> StanBuilderM md gq (TE.Function rt ats)
 addFunctionOnce f@(TE.Function fn _ _ _) argNames fBF = do
   fsNames <- gets hasFunctions
   when (not $  fn `Set.member` fsNames) $ do
     inBlock SBFunctions $ addStmtToCode $ TE.function f argNames fBF
     modify $ modifyFunctionNames (Set.insert fn)
-  return f
+  pure f
+addFunctionOnce f@(TE.IdentityFunction _) _ _ = pure f
 
 -- TODO: We should error if added twice but that doesn't quite work with post-stratifation code now.  Fix.
 addIntMapBuilder :: forall r k md gq.
@@ -943,18 +922,18 @@ gqIntMapsBuilder = intMapsFromRowInfos . gqRowBuilders <$> get
 intMapsFromRowInfos :: RowInfos d -> d -> Either Text DataSetGroupIntMaps
 intMapsFromRowInfos rowInfos d =
   let f :: d -> RowInfo d r -> Either Text (GroupIntMaps r)
-      f d (RowInfo (ToFoldable h) _ _ gims _) = Foldl.foldM (intMapsForDataSetFoldM gims) (h d)
+      f d' (RowInfo (ToFoldable h) _ _ gims _) = Foldl.foldM (intMapsForDataSetFoldM gims) (h d')
   in DHash.traverse (f d) rowInfos
 
 addModelDataSet :: forall md gq r.Typeable r
                 => Text
                 -> ToFoldable md r
                 -> StanBuilderM md gq (RowTypeTag r)
-addModelDataSet name toFoldable = do
-  let rtt = RowTypeTag ModelData name
+addModelDataSet tName toFldble = do
+  let rtt = RowTypeTag ModelData tName
       alreadyPresent _ = stanBuildError "Attempt to add 2nd data set with same type and name in ModelData"
       add = do
-        let rowInfo = unIndexedRowInfo toFoldable name
+        let rowInfo = unIndexedRowInfo toFldble tName
             newRowInfoF = DHash.insert rtt rowInfo
         modify $ runIdentity . modifyModelRowInfosA (Identity . newRowInfoF)
         return rtt
@@ -966,11 +945,11 @@ addGQDataSet :: Typeable r
                 => Text
                 -> ToFoldable gq r
                 -> StanBuilderM md gq (RowTypeTag r)
-addGQDataSet name toFoldable = do
-  let rtt = RowTypeTag GQData name
+addGQDataSet tName toFldble = do
+  let rtt = RowTypeTag GQData tName
       alreadyPresent _ = stanBuildError "Attempt to add 2nd data set with same type and name in ModelData"
       add = do
-        let rowInfo = unIndexedRowInfo toFoldable name
+        let rowInfo = unIndexedRowInfo toFldble tName
             newRowInfoF = DHash.insert rtt rowInfo
         modify $ runIdentity . modifyGQRowInfosA (Identity . newRowInfoF)
         return rtt
@@ -1021,34 +1000,20 @@ byGroupIndexE rtt gtt = TE.namedE (dataByGroupIndexName rtt gtt) TE.sIndexArray
 -- build an index from each data-sets relationship to the common group.
 -- only works when both data sets are model data or both are GQ data.
 -- add Json and use-binding
-addDataSetsCrosswalk :: forall k rFrom rTo md gq.(Typeable md, Typeable gq, Typeable k)
+addDataSetsCrosswalk :: forall k rFrom rTo md gq . Typeable k
                      => RowTypeTag rFrom
                      -> RowTypeTag rTo
                      -> GroupTypeTag k
                      -> StanBuilderM md gq ()
 addDataSetsCrosswalk  rttFrom rttTo gtt = do
-{-
-  when (inputDataType rttFrom /= inputDataType rttTo)
-    $ stanBuildError
-    $ "addDataSetsCrosswalk: From=" <> dataSetName rttFrom
-    <> " (" <> show (inputDataType rttFrom) <> ")  and to="
-    <> dataSetName rttTo <> " (" <> show (inputDataType rttTo)
-    <> ") have different input data types (Model/GQ)"
--}
-  let --idt = inputDataType rttFrom
-      gttX :: GroupTypeTag k = GroupTypeTag $ "I_" <> (dataSetName rttTo)
+  let gttX :: GroupTypeTag k = GroupTypeTag $ "I_" <> (dataSetName rttTo)
   fromToGroup <- rowToGroup <$> indexMap rttFrom gtt -- rFrom -> k
   toGroupToIndexE <- groupKeyToGroupIndex <$> indexMap rttTo gttX -- k -> Either Text Int
   let xWalkName = dataSetCrosswalkName rttFrom rttTo
       xWalkIndexKey = crosswalkIndexKey rttTo
---      xWalkType = SME.StanArray [SME.NamedDim $ dataSetName rttFrom] SME.StanInt
---      xWalkVar = SME.StanVar xWalkName xWalkType
       xWalkF = toGroupToIndexE . fromToGroup
---      xWalkNDS = TE.NamedDeclSpec xWalkName $ TE.intArraySpec (TE.namedSizeE $ dataSetName rttFrom) [TE.lowerM $ TE.intE 1]
       xWalkNDSF lE = TE.NamedDeclSpec xWalkName $ TE.intArraySpec lE [TE.lowerM $ TE.intE 1]
-  addColumnMJson rttFrom xWalkNDSF xWalkF
---  addColumnMJson rttFrom xWalkName xWalkType "<lower=1>" xWalkF
---  addUseBindingToDataSet rttFrom xWalkIndexKey $ SME.indexBy (SME.name xWalkName) $ dataSetName rttFrom
+  _ <- addColumnMJson rttFrom xWalkNDSF xWalkF
   addUseBindingToDataSet rttFrom xWalkIndexKey xWalkName
   addDeclBinding xWalkIndexKey $ dataSetSizeName rttFrom
   pure ()
@@ -1094,8 +1059,7 @@ indexMap rtt gtt = withRowInfo err f rtt where
                  Just im -> return im
 -}
 
-runStanBuilder :: (Typeable md, Typeable gq)
-               => md
+runStanBuilder :: md
                -> gq
                -> StanGroupBuilderM md gq ()
                -> StanBuilderM md gq a
@@ -1255,15 +1219,15 @@ typeForName sn = do
   dvs <- declaredVars <$> get
   stanBuildEither $ varLookup dvs sn
 
-addJson :: forall t r md gq. (Typeable md, Typeable gq)
-        => RowTypeTag r
+addJson :: forall t r md gq .
+        RowTypeTag r
         -> TE.NamedDeclSpec t
         -> Stan.StanJSONF r Aeson.Series
         -> StanBuilderM md gq (TE.UExpr t)
 addJson rtt nds fld = do
   let codeBlock = if inputDataType rtt == ModelData then SBData else SBDataGQ
   ve <- inBlock codeBlock $ stanDeclareN nds
-  let addFold :: Typeable x => RowInfos x -> StanBuilderM md gq (RowInfos x)
+  let addFold :: RowInfos x -> StanBuilderM md gq (RowInfos x)
       addFold rowInfos = case addFoldToDBuilder rtt fld rowInfos of
         Nothing -> stanBuildError $ "Attempt to add Json to an uninitialized dataset (" <> dataSetName rtt <> ")"
         Just x -> return x
@@ -1284,59 +1248,49 @@ addJson rtt nds fld = do
 
 -- things like lengths may often be re-added
 -- maybe work on a cleaner way...
-addJsonOnce :: (Typeable md, Typeable gq)
-            => RowTypeTag r
+addJsonOnce :: RowTypeTag r
             -> TE.NamedDeclSpec t
             -> Stan.StanJSONF r Aeson.Series
             -> StanBuilderM md gq (TE.UExpr t)
 addJsonOnce rtt nds fld = do
-  alreadyDeclared <- isDeclaredAllScopes $ TE.declName nds
-  if not alreadyDeclared
+  alreadyDeclared' <- isDeclaredAllScopes $ TE.declName nds
+  if not alreadyDeclared'
     then addJson rtt nds fld
     else pure $ TE.namedE (TE.declName nds) (TE.sTypeFromStanType $ TE.declType $ TE.decl nds)
 
-addFixedIntJson :: (Typeable md, Typeable gq) => InputDataType -> Text -> Maybe Int -> Int -> StanBuilderM md gq (TE.UExpr TE.EInt)
-addFixedIntJson idt name mLower n = do
-  let ds = TE.intSpec $ maybe [] (pure. TE.lowerM . TE.intE) $ mLower
+addFixedIntJson :: InputDataType -> Text -> Maybe Int -> Int -> StanBuilderM md gq (TE.UExpr TE.EInt)
+addFixedIntJson idt tName mLower n = do
+  let ds = TE.intSpec $ maybe [] (pure. TE.lowerM . TE.intE) mLower
       codeBlock = if idt == ModelData then SBData else SBDataGQ
-  inBlock codeBlock $ stanDeclare name ds  -- this will error if we already declared
-  modify $ addConstJson idt (JSONSeriesFold $ Stan.constDataF name n)
-  return $ TE.namedE name TE.SInt
+  _ <- inBlock codeBlock $ stanDeclare tName ds  -- this will error if we already declared
+  modify $ addConstJson idt (JSONSeriesFold $ Stan.constDataF tName n)
+  return $ TE.namedE tName TE.SInt
 
-addFixedIntJson' :: (Typeable md, Typeable gq)
-                 => InputDataType
+addFixedIntJson' :: InputDataType
                  -> Text
                  -> Maybe Int
                  -> Int
                  -> StanBuilderM md gq (TE.UExpr TE.EInt)
-addFixedIntJson' idt name mLower n = do
-  alreadyDeclared <- isDeclaredAllScopes name
-  if not alreadyDeclared
-    then addFixedIntJson idt name mLower n
-    else return $ TE.namedE name TE.SInt
+addFixedIntJson' idt tName mLower n = do
+  alreadyDeclared' <- isDeclaredAllScopes tName
+  if not alreadyDeclared'
+    then addFixedIntJson idt tName mLower n
+    else return $ TE.namedE tName TE.SInt
 
 -- These get re-added each time something adds a column built from the data-set.
 -- But we only need it once per data set.
-addLengthJson :: (Typeable md, Typeable gq)
-              => RowTypeTag r
+addLengthJson :: RowTypeTag r
               -> Text
               -> SME.IndexKey
               -> StanBuilderM md gq (TE.UExpr TE.EInt)
-addLengthJson rtt name iKey = do
+addLengthJson rtt tName _ = do
 --  addDeclBinding iKey name
-  addJsonOnce rtt (TE.NamedDeclSpec name (TE.intSpec [TE.lowerM $ TE.intE 1])) (Stan.namedF name Foldl.length)
+  addJsonOnce rtt (TE.NamedDeclSpec tName (TE.intSpec [TE.lowerM $ TE.intE 1])) (Stan.namedF tName Foldl.length)
 
 nameSuffixMsg :: TE.StanName -> Text -> Text
 nameSuffixMsg n dsName = "name=\"" <> show n <> "\" data-set=\"" <> show dsName <> "\""
 
-addColumnJson :: (Typeable md, Typeable gq, Aeson.ToJSON x
-{-                 , TE.TypeOneOf t [TE.EArray (S Z) TE.EInt
-                                  , TE.EArray (S Z) TE.EReal
-                                  , TE.ECVec
-                                  , TE.EMat
-                                  ]
--}
-                 )
+addColumnJson :: (Aeson.ToJSON x)
               => RowTypeTag r
               -> (TE.UExpr TE.EInt -> TE.NamedDeclSpec t)
               -> (r -> x)
@@ -1346,8 +1300,8 @@ addColumnJson rtt ndsF toX = do
   let nds = ndsF lE
   addJson rtt nds (Stan.valueToPairF (TE.declName nds) $ Stan.jsonArrayF toX)
 
-addColumnJsonOnce :: (Typeable md, Typeable gq, Aeson.ToJSON x
-                     , TE.TypeOneOf t [TE.EArray (S Z) TE.EInt, TE.ECVec, TE.EMat]
+addColumnJsonOnce :: (Aeson.ToJSON x
+--                     , TE.TypeOneOf t [TE.EArray (S Z) TE.EInt, TE.ECVec, TE.EMat]
                      )
                   => RowTypeTag r
                   -> (TE.UExpr TE.EInt -> TE.NamedDeclSpec t)
@@ -1356,16 +1310,15 @@ addColumnJsonOnce :: (Typeable md, Typeable gq, Aeson.ToJSON x
 addColumnJsonOnce rtt ndsF toX = do
   let lE = TE.namedE (dataSetSizeName rtt) TE.SInt
       nds = ndsF lE
-      name = TE.declName nds
+      tName = TE.declName nds
       sType = TE.sTypeFromStanType $ TE.declType $ TE.decl nds
-  alreadyDeclared <- isDeclared name
-  if not alreadyDeclared
+  alreadyDeclared' <- isDeclared tName
+  if not alreadyDeclared'
     then addColumnJson rtt ndsF toX
-    else pure $ TE.namedE name sType
+    else pure $ TE.namedE tName sType
 
-
-addColumnMJson :: (Typeable md, Typeable gq, Aeson.ToJSON x
-                  , TE.TypeOneOf t [TE.EArray (S Z) TE.EInt, TE.ECVec, TE.EMat]
+addColumnMJson :: (Aeson.ToJSON x
+--                  , TE.TypeOneOf t [TE.EArray (S Z) TE.EInt, TE.ECVec, TE.EMat]
                   )
                => RowTypeTag r
                -> (TE.UExpr TE.EInt -> TE.NamedDeclSpec t)
@@ -1378,8 +1331,8 @@ addColumnMJson rtt ndsF toMX = do
   addJson rtt nds (Stan.valueToPairF (TE.declName nds) $ Stan.jsonArrayEF toMX)
 
 
-addColumnMJsonOnce :: (Typeable md, Typeable gq, Aeson.ToJSON x
-                      , TE.TypeOneOf t [TE.EArray (S Z) TE.EInt, TE.ECVec, TE.EMat]
+addColumnMJsonOnce :: (Aeson.ToJSON x
+--                      , TE.TypeOneOf t [TE.EArray (S Z) TE.EInt, TE.ECVec, TE.EMat]
                       )
                => RowTypeTag r
                -> (TE.UExpr TE.EInt -> TE.NamedDeclSpec t)
@@ -1388,29 +1341,28 @@ addColumnMJsonOnce :: (Typeable md, Typeable gq, Aeson.ToJSON x
 addColumnMJsonOnce rtt ndsF toMX = do
   let lE = TE.namedE (dataSetSizeName rtt) TE.SInt
       nds = ndsF lE
-      name = TE.declName nds
+      tName = TE.declName nds
       sType = TE.sTypeFromStanType $ TE.declType $ TE.decl nds
-  alreadyDeclared <- isDeclared name
-  if not alreadyDeclared
+  alreadyDeclared' <- isDeclared tName
+  if not alreadyDeclared'
     then addColumnMJson rtt ndsF toMX
-    else pure $ TE.namedE name sType
+    else pure $ TE.namedE tName sType
 
 -- NB: name has to be unique so it can also be the suffix of the num columns.  Presumably the name carries the data-set suffix if nec.
 data MatrixRowFromData r = MatrixRowFromData { rowName :: Text, colIndexM :: Maybe SME.IndexKey, rowLength :: Int, rowVec :: r -> VU.Vector Double }
 
-add2dMatrixJson :: (Typeable md, Typeable gq)
-                => RowTypeTag r
+add2dMatrixJson :: RowTypeTag r
                 -> MatrixRowFromData r
                 -> [TE.VarModifier TE.UExpr TE.EReal]
 --                -> TE.UExpr TE.EInt -- row dimension
                 -> StanBuilderM md gq (TE.UExpr TE.EMat)
-add2dMatrixJson rtt (MatrixRowFromData name colIndexM cols vecF) cs = do
+add2dMatrixJson rtt (MatrixRowFromData tName cIndexM cols vecF) cs = do
   let dsName = dataSetName rtt
-      wdName = name <> underscoredIf dsName
+      wdName = tName <> underscoredIf dsName
       ndsF rowsE = TE.NamedDeclSpec wdName $ TE.matrixSpec rowsE (TE.namedE colName TE.SInt) cs
-      colIndex = fromMaybe name colIndexM
+      colIndex = fromMaybe tName cIndexM
       colName = "K" <> "_" <> colIndex
-      colDimName = colIndex <> "_Cols"
+--      colDimName = colIndex <> "_Cols"
 --      colDimVar = SME.StanVar colIndex SME.StanInt
   _ <- addFixedIntJson' (inputDataType rtt) colName Nothing cols
 --  addDeclBinding' colDimName (SME.name colName)
@@ -1420,7 +1372,7 @@ add2dMatrixJson rtt (MatrixRowFromData name colIndexM cols vecF) cs = do
   addColumnJson rtt ndsF vecF
 
 modifyCode' :: (TE.StanProgram -> TE.StanProgram) -> BuilderState md gq -> BuilderState md gq
-modifyCode' f bs = let (StanCode curBlock oldProg) = code bs in bs { code = StanCode curBlock $ f oldProg }
+modifyCode' f bs = let (StanCode currentBlock oldProg) = code bs in bs { code = StanCode currentBlock $ f oldProg }
 
 modifyCode :: (TE.StanProgram -> TE.StanProgram) -> StanBuilderM md gq ()
 modifyCode f = modify $ modifyCode' f
@@ -1504,8 +1456,8 @@ profileStanBlock b = modifyCode g where
   g :: TE.StanProgram -> TE.StanProgram
   g sp = newProgram
     where
-      curBlock = TE.unStanProgram sp Array.! b
-      newBlock = TE.profile (stanProfileName b) [] : curBlock
+      currentBlock = TE.unStanProgram sp Array.! b
+      newBlock = TE.profile (stanProfileName b) [] : currentBlock
       newProgram = TE.StanProgram $ TE.unStanProgram sp Array.// [(b, newBlock)]
 
 stanProfileName :: StanBlock -> Text
@@ -1639,14 +1591,14 @@ stanModelAsText gq sm =
 -}
 -- The file is either not there, there but the same, or there but different so we
 -- need an available file name to proceed
-data ModelState = New | Same | Updated T.Text deriving (Show)
+data ModelState = New | Same | Updated T.Text deriving stock Show
 
 renameAndWriteIfNotSame :: GeneratedQuantities -> TE.StanProgram -> T.Text -> T.Text -> IO ModelState
 renameAndWriteIfNotSame gq p modelDir modelName = do
   let fileName d n = T.unpack $ d <> "/" <> n <> ".stan"
       curFile = fileName modelDir modelName
-      findAvailableName modelDir modelName n = do
-        let newName = fileName modelDir (modelName <> "_o" <> T.pack (show n))
+      findAvailableName modelDir' modelName' n = do
+        let newName = fileName modelDir' (modelName' <> "_o" <> T.pack (show n))
         newExists <- Dir.doesFileExist newName
         if newExists then findAvailableName modelDir modelName (n + 1) else return $ T.pack newName
   newModel <- case TE.programAsText gq p of

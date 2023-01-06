@@ -11,14 +11,10 @@
 module Stan.ModelBuilder.SumToZero where
 
 import Prelude hiding (All)
-import qualified Data.Map as Map
-import qualified Stan.ModelBuilder.Distributions as SD
 import qualified Stan.ModelBuilder as SB
 import qualified Stan.ModelBuilder.TypedExpressions.Types as TE
 import qualified Stan.ModelBuilder.TypedExpressions.TypedList as TE
-import qualified Stan.ModelBuilder.TypedExpressions.Program as TE
 import qualified Stan.ModelBuilder.TypedExpressions.Statements as TE
-import qualified Stan.ModelBuilder.TypedExpressions.Expressions as TE
 import qualified Stan.ModelBuilder.TypedExpressions.StanFunctions as TE
 import qualified Stan.ModelBuilder.TypedExpressions.Indexing as TE
 

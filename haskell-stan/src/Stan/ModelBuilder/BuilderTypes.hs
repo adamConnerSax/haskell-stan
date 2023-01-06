@@ -13,8 +13,6 @@ module Stan.ModelBuilder.BuilderTypes
 where
 
 import qualified Stan.JSON as Stan
-import qualified Stan.ModelBuilder.Expressions as SME
-import Stan.ModelBuilder.Expressions
 import Stan.ModelBuilder.Distributions ()
 
 import qualified Stan.ModelBuilder.TypedExpressions.Statements as TE
@@ -23,36 +21,15 @@ import Prelude hiding (All)
 import qualified Control.Foldl as Foldl
 import qualified Data.Aeson as Aeson
 import qualified Data.Array as Array
-import Data.Constraint (Dict(..))
-import qualified Data.Constraint.Extras as CE
-import qualified Data.Constraint.Extras.TH as CE
 import qualified Data.Dependent.HashMap as DHash
-import qualified Data.Dependent.Sum as DSum
 import qualified Data.GADT.Compare as GADT
 import qualified Data.IntMap.Strict as IntMap
-import qualified Data.List as List
-import qualified Data.List.NonEmpty as NE
-import qualified Data.Map.Strict as Map
-import qualified Data.Proxy as Proxy
-import qualified Data.Sequence as Seq
-import qualified Data.Set as Set
 import qualified Data.Some as Some
 import qualified Data.Text as T
-import qualified Data.Text.IO as T
-import qualified Data.Time.Clock as Time
-import qualified Data.Vector as Vector
-import qualified Data.Vector.Unboxed as VU
 import qualified Data.Hashable as Hashable
-import qualified Say
-import qualified System.Directory as Dir
-import qualified System.Environment as Env
 import qualified Type.Reflection as Reflection
 import qualified Data.GADT.Show as GADT
-import Frames.Streamly.TH (declareColumnType)
-import Text.Printf (errorMissingArgument)
 import Stan.ModelConfig (InputDataType(..))
-import Knit.Report (crimson)
-import qualified Data.Hashable.Lifted as Hashable
 
 type FunctionsBlock = T.Text
 type DataBlock = T.Text
@@ -62,7 +39,7 @@ type TransformedParametersBlock = T.Text
 type ModelBlock = T.Text
 type GeneratedQuantitiesBlock = T.Text
 
-data GeneratedQuantities = NoGQ | NoLL | OnlyLL | All deriving (Show, Eq)
+data GeneratedQuantities = NoGQ | NoLL | OnlyLL | All deriving stock (Show, Eq)
 
 data StanModel = StanModel
   { functionsBlock :: Maybe FunctionsBlock,
@@ -76,7 +53,7 @@ data StanModel = StanModel
     generatedQuantitiesBlockM :: Maybe GeneratedQuantitiesBlock,
     genLogLikelihoodBlock :: GeneratedQuantitiesBlock
   }
-  deriving (Show, Eq, Ord)
+  deriving stock (Show, Eq, Ord)
 
 data StanBlock = SBFunctions
                | SBData
@@ -87,7 +64,7 @@ data StanBlock = SBFunctions
                | SBTransformedParameters
                | SBModel
                | SBGeneratedQuantities
-               | SBLogLikelihood deriving (Show, Eq, Ord, Enum, Bounded, Array.Ix)
+               | SBLogLikelihood deriving stock (Show, Eq, Ord, Enum, Bounded, Array.Ix)
 
 --data WithIndent = WithIndent Text Int
 
@@ -178,9 +155,9 @@ newtype GroupIntMaps r = GroupIntMaps (DHash.DHashMap GroupTypeTag IntMap.IntMap
 type DataSetGroupIntMaps = DHash.DHashMap RowTypeTag GroupIntMaps
 
 displayDataSetGroupIntMaps :: DataSetGroupIntMaps -> Text
-displayDataSetGroupIntMaps x = DHash.foldrWithKey g "" x
+displayDataSetGroupIntMaps = DHash.foldrWithKey g ""
   where
-    h x = DHash.foldrWithKey (\gtt _ t -> t <> ", " <> taggedGroupName gtt) "" x
+    h = DHash.foldrWithKey (\gtt _ t -> t <> ", " <> taggedGroupName gtt) ""
     g rtt (GroupIntMaps gim) t = t <> "rtt=" <> dataSetName rtt <> " (idt=" <> show (inputDataType rtt) <> "): " <> h gim <> "\n"
 
 data GroupIndexAndIntMapMakers d r = GroupIndexAndIntMapMakers (ToFoldable d r) (GroupIndexMakers r) (GroupIntMapBuilders r)

@@ -26,18 +26,11 @@ import Stan.ModelBuilder.TypedExpressions.TypedList
 import Stan.ModelBuilder.TypedExpressions.Indexing
 import Stan.ModelBuilder.TypedExpressions.Operations
 import Stan.ModelBuilder.TypedExpressions.Functions
---import qualified Stan.ModelBuilder.Expressions as SME
 import Prelude hiding (Nat)
-import Relude.Extra
-import qualified Data.Map.Strict as Map
-import qualified Data.Monoid as Mon
 import qualified Data.Vec.Lazy as Vec
 import qualified Data.Type.Nat as DT
-import qualified Data.GADT.Compare as DT
 
-import Data.Type.Equality ((:~:)(Refl),TestEquality(testEquality))
-import Data.GADT.Compare (GEq(geq))
-import Data.Typeable (typeRep)
+import Data.Type.Equality ((:~:)(Refl), TestEquality(testEquality), type (~))
 
 type IndexKey = Text
 
@@ -256,8 +249,8 @@ sliceInnerN e v = Vec.withDict v $ go e v where
   go :: DT.SNatI m => UExpr u -> Vec m (UExpr EInt) -> UExpr (SliceInnerN m u)
   go = go' DT.snat
   go' :: DT.SNat k -> UExpr a -> Vec k (UExpr EInt) -> UExpr (SliceInnerN k a)
-  go' SZ e _ = e
-  go' SS e (i ::: v') = go' DT.snat (sliceInner e i) v'
+  go' SZ e' _ = e'
+  go' SS e' (i ::: v') = go' DT.snat (sliceInner e' i) v'
 
 sliceAll :: UExpr t -> Vec (Dimension t) (UExpr EInt) -> UExpr (SliceInnerN (Dimension t) t)
 sliceAll = sliceInnerN
@@ -363,7 +356,7 @@ eqLExprOf = go
             Nothing -> False
       in fna == fnb && eqArgs
     go (TR.IFix (LFunction (IdentityFunction _) _)) (TR.IFix (LFunction (IdentityFunction _) _)) = True
-    go (TR.IFix (LDensity (Density dna gta ata aRF) ga ala)) (TR.IFix (LDensity (Density dnb gtb atb bRF) gb alb)) =
+    go (TR.IFix (LDensity (Density dna gta ata aRF) _ ala)) (TR.IFix (LDensity (Density dnb gtb atb bRF) _ alb)) =
       let eqGivens = case testEquality gta gtb of
             Just Refl -> True
             Nothing -> False
@@ -404,122 +397,3 @@ uExprToSameTypeLExpr = TR.iCata f where
 
 exprTypeIs :: UExpr t -> SType t' -> Bool
 exprTypeIs ue = lExprTypeIs (uExprToSameTypeLExpr ue)
-
-
--- Expression to Expression transformations
-{- Can't figure this out! The nested type-family is not resolving and the nats are annoying
-   Doing at the term-level.  Which...yuck.
-embedSlicesAlg :: forall z.LExprF LExpr z -> LExpr z
-embedSlicesAlg x = case x of
-  LSlice sn ie (TR.IFix (LIndex sm re e)) ->
-    DT.withSNat sn $ DT.withSNat sm $ case DT.cmpNat of
-    DT.GEQ -> TR.IFix $ LSlice sn (TR.IFix (LSlice SZ ie re)) e
---    DT.GGT -> LIndex
-  x -> TR.IFix x
-{-
-  where
-    embedIf :: _ --forall n m u.SNat n -> SNat m -> LExpr EInt -> LExpr (EArray (S Z) EInt) -> LExpr u -> LExpr (Sliced n u)
-    embedIf sn sm ie re e = DT.withSNat sn  $ DT.withSNat sm $ (embedIf' @n @m) ie re e
-    embedIf' :: forall n m u.(DT.SNatI n, DT.SNatI m) =>  LExpr EInt -> LExpr (EArray (S Z) EInt) -> LExpr u -> LExpr (Sliced n u)
-    embedIf' ie re e = undefined IFix $ case DT.cmpNat of
-      DT.GEQ -> LSlice (DT.snat @n) (IFix (LSlice Z ie re)) e
-      DT.GGT -> LIndex (DT.snat @m) re (LSlice (DT.snat @n) ie e)
-      DT.GLT -> case DT.snat @m of
-        DT.SZ -> undefined
-        DT.SS -> LIndex DT.snat (LSlice (DT.snat @n) ie e)
--}
--}
-{-
-plusE :: UExprF ta a -> UExprF tb a -> UExprF (BinaryResultT BAdd ta tb) a
-plusE = BinaryOpE SAdd
--}
-
-{-
-useVar :: forall r.SME.StanVar -> (forall t.UExpr t -> r) -> r
-useVar (SME.StanVar n x) k = case x of
-  StanInt -> k $ NamedE n x SInt
-  StanReal -> k $ NamedE n x SReal
-  StanArray _ st -> toSType (fromStanType st) (k . NamedE n x . SArray)
-  StanVector _ -> k $ NamedE n x SCVec
-  StanMatrix _ -> k $ NamedE n x SMat
-  StanCorrMatrix sd -> k $ NamedE n x SMat
-  StanCholeskyFactorCorr sd -> k $ NamedE n x SMat
-  StanCovMatrix sd -> k $ NamedE n x SMat
--}
-{-
-data StanType = StanInt
-              | StanReal
-              | StanArray [SME.StanDim] StanType
-              | StanVector SME.StanDim
-              | StanMatrix (SME.StanDim, SME.StanDim)
-              | StanCorrMatrix SME.StanDim
-              | StanCholeskyFactorCorr SME.StanDim
-              | StanCovMatrix SME.StanDim
-              deriving (Show, Eq, Ord, Generic)
-
-fromStanType :: StanType -> EType
-fromStanType = \case
-  StanInt -> EInt
-  StanReal -> EReal
-  StanArray _ st -> EArray (fromStanType st)
-  StanVector _ -> ECVec
-  StanMatrix _ -> EMat
-  StanCorrMatrix _ -> EMat
-  StanCholeskyFactorCorr _ -> EMat
-  StanCovMatrix _ -> EMat
--}
-{-
-class ToEType a where
-  toEType :: EType
-
-instance ToEType SInt where
-  toEType = EInt
-instance ToEType SInt where
-
-  toEType SReal = EReal
-  toEType SCVec = ECVec
-  toEType SRVec = ERVec
-  toEType SMat = EMat
-  toEType (SArray st) = EArray (toEType st)
-  toEType (sa ::-> sb) = toEType sa :-> toEType sb
--}
-{-
-  toSType (fromStanType x) f where
-  f :: forall u.SType u -> r
-  f = case x of
-    StanInt -> k $ UNamedE n x SInt
-    StanReal -> k $ UNamedE n x SReal
-    StanArray _ st -> k $ toSType (fromStanType st) $ UNamedE n x . SArray
-    StanVector sd -> _
-    StanMatrix x1 -> _
-    StanCorrMatrix sd -> _
-    StanCholeskyFactorCorr sd -> _
-    StanCovMatrix sd -> _
--}
-
-{-
-intE :: Int -> UExpr EInt
-intE = IntE
-
-realE :: Double -> UExpr EReal
-realE = RealE
-
-varE :: SType t -> Text -> UExpr t
-varE _ = VarE
-
-plusOpE :: UExpr t -> UExpr (t :-> t)
-plusOpE a = FunE ()
--}
-
-{-
-instance TR.HFoldable UExprF where
-  hfoldMap co = \case
-    DeclareEF st divf -> mempty
-    NamedEF txt st -> mempty
-    IntEF n -> mempty
-    RealEF x -> mempty
-    ComplexEF x y -> mempty
-    BinaryOpEF sbo ata atb -> co ata <> co atb
-    SliceEF sn a at -> co a <> co at
-    NamedIndexEF txt -> mempty
--}

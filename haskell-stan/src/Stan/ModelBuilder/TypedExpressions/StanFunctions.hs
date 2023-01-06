@@ -14,6 +14,7 @@
 {-# LANGUAGE TypeSynonymInstances #-}
 {-# OPTIONS_GHC -Wno-unrecognised-pragmas #-}
 {-# HLINT ignore "Use camelCase" #-}
+{-# OPTIONS_GHC -Wno-redundant-constraints #-}
 
 module Stan.ModelBuilder.TypedExpressions.StanFunctions
   (
@@ -25,13 +26,12 @@ module Stan.ModelBuilder.TypedExpressions.StanFunctions
 import Stan.ModelBuilder.TypedExpressions.Types
 import Stan.ModelBuilder.TypedExpressions.TypedList
 import Stan.ModelBuilder.TypedExpressions.Functions
-import Stan.ModelBuilder.TypedExpressions.Expressions
 import Stan.ModelBuilder.TypedExpressions.Indexing
 
-import Data.Vec.Lazy (Vec)
 import qualified GHC.TypeLits as TE
 import GHC.TypeLits (ErrorMessage((:<>:)))
 import Data.Type.Nat (SNatI)
+import Data.Type.Equality (type (~))
 import Prelude hiding (Nat)
 
 -- this needs fixingf for higher dimensi
@@ -135,10 +135,8 @@ type family RepArgs (t :: EType) :: [EType] where
 rep_container :: (TypeOneOf t '[ECVec, EMat, ESqMat]) => SType t -> Function t (RepArgs t)
 rep_container st = case st of
   SCVec -> rep_vector
-  SRVec -> rep_row_vector
   SMat -> rep_matrix
   SSqMat -> rep_sq_matrix
-  _ -> error "rep_container should be impossible ot call at type other than SCVec, SMat or SSqMat"
 {-# INLINEABLE rep_container #-}
 
 rep_matrix :: Function EMat '[EReal, EInt, EInt]

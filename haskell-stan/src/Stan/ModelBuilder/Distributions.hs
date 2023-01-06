@@ -1,25 +1,18 @@
 {-# LANGUAGE DataKinds #-}
-{-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE GADTs #-}
-{-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE ScopedTypeVariables #-}
-{-# LANGUAGE StandaloneDeriving #-}
-{-# LANGUAGE TupleSections #-}
 {-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE TypeFamilies #-}
-{-# LANGUAGE TypeOperators #-}
 
 module Stan.ModelBuilder.Distributions where
 
 --import Stan.ModelBuilder.Expressions as SME
 import qualified Stan.ModelBuilder.TypedExpressions.Types as TE
-import qualified Stan.ModelBuilder.TypedExpressions.Functions as TE
-import qualified Stan.ModelBuilder.TypedExpressions.TypedList as TE
 import Stan.ModelBuilder.TypedExpressions.TypedList (TypedList(..))
 import qualified Stan.ModelBuilder.TypedExpressions.Expressions as TE
 import qualified Stan.ModelBuilder.TypedExpressions.Statements as TE
@@ -28,10 +21,8 @@ import Data.Type.Equality ((:~:)(Refl),TestEquality(testEquality))
 
 import Prelude hiding (All)
 import qualified Stan.ModelBuilder.TypedExpressions.Operations as TE
-import Stan.ModelBuilder.TypedExpressions.Expressions (rangeIndexE)
-import qualified Stan.ModelBuilder.TypedExpressions.Statements as TE
 
-data DistType = Discrete | Continuous deriving (Show, Eq)
+data DistType = Discrete | Continuous deriving stock (Show, Eq)
 
 data StanDist :: TE.EType -> [TE.EType] -> [TE.EType] -> Type where
   StanDist :: DistType
@@ -162,7 +153,8 @@ scaledIntVec :: TE.UExpr TE.EReal
              -> TE.UExpr TE.ECVec
 scaledIntVec x iv = x `TE.timesE` intsToVec iv
 
-countScaledBetaBinomialDist :: forall t t'.TE.BinDensityC t t'
+countScaledBetaBinomialDist :: forall t t'.(TE.BinDensityC t t'
+                                           , TE.TypeOneOf t' '[TE.EReal, TE.ECVec])
                             => Bool -> SimpleDist t '[t, t', t']
 countScaledBetaBinomialDist sampleWithConstants = StanDist Discrete sample lpmf lupmf rng
   where
@@ -211,7 +203,7 @@ categoricalDist = StanDist Discrete sample lpmf lupmf rng
       _ -> error "categorical_rng is not vectorized. For a vector of results, call from a loop."
 
 
-categoricalLogitDist :: forall t t'.(TE.TypeOneOf t [TE.EInt, TE.EIntArray], TE.GenSType t) => SimpleDist t '[TE.ECVec]
+categoricalLogitDist :: forall t . (TE.TypeOneOf t [TE.EInt, TE.EIntArray], TE.GenSType t) => SimpleDist t '[TE.ECVec]
 categoricalLogitDist = StanDist Discrete sample lpmf lupmf rng
   where
     sample y = TE.sample y TE.categorical_logit

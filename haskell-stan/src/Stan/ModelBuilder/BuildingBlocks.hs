@@ -7,45 +7,29 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE ScopedTypeVariables #-}
-{-# LANGUAGE TupleSections #-}
-{-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE TypeFamilies #-}
 {-# OPTIONS_GHC -Wno-unrecognised-pragmas #-}
 {-# HLINT ignore "Use for_" #-}
 {-# HLINT ignore "Use camelCase" #-}
-{-# LANGUAGE TypeOperators #-}
 {-# LANGUAGE QuantifiedConstraints #-}
 
 module Stan.ModelBuilder.BuildingBlocks where
 
 
 import qualified Stan.ModelBuilder.TypedExpressions.Types as TE
-import qualified Stan.ModelBuilder.TypedExpressions.TypedList as TE
 import Stan.ModelBuilder.TypedExpressions.TypedList (TypedList(..))
-import Stan.ModelBuilder.TypedExpressions.Types (Nat(..), ScalarType)
 import qualified Stan.ModelBuilder.TypedExpressions.Statements as TE
 import qualified Stan.ModelBuilder.TypedExpressions.Indexing as TE
 import qualified Stan.ModelBuilder.TypedExpressions.Operations as TE
 import qualified Stan.ModelBuilder.TypedExpressions.StanFunctions as TE
 import qualified Stan.ModelBuilder as SB
-import qualified Stan.ModelBuilder.Expressions as SME
 import qualified Stan.ModelBuilder.Distributions as SMD
 
 import Prelude hiding (sum, All)
-import qualified Data.List.NonEmpty as NE
 import qualified Data.Dependent.HashMap as DHash
-import qualified Data.Dependent.Sum as DSum
-import qualified Data.Map as Map
-import qualified Data.Set as Set
-import qualified Data.Text as T
-import qualified Data.Vector as V
 import qualified Data.Vector.Unboxed as VU
 import qualified Stan.ModelConfig as SB
 import Stan.ModelBuilder.BuilderTypes (dataSetSizeName)
-import qualified Stan.ModelBuilder.TypedExpressions.Types as TE
-import qualified Stan.ModelBuilder.TypedExpressions.Operations as TE
-import Stan.ModelBuilder (addFromCodeWriter)
-import qualified Stan.ModelBuilder.TypedExpressions.Expressions as TE
 
 {-
 namedVectorIndex :: SB.StanVar -> SB.StanBuilderM md gq SB.IndexKey
@@ -69,11 +53,10 @@ namedMatrixColIndex x = case SME.varType x of
   _ -> SB.stanBuildError $ "namedMatrixColIndex: bad type=" <> show x
 -}
 
-addFixedInt :: (Typeable md, Typeable gq) => Text -> Int -> SB.StanBuilderM md gq TE.IntE
+addFixedInt :: Text -> Int -> SB.StanBuilderM md gq TE.IntE
 addFixedInt t n = SB.addFixedIntJson SB.ModelData t Nothing n
 
-addIntData :: (Typeable md, Typeable gq)
-            => SB.RowTypeTag r
+addIntData :: SB.RowTypeTag r
             -> TE.StanName
             -> Maybe Int
             -> Maybe Int
@@ -84,15 +67,13 @@ addIntData rtt varName mLower mUpper f = do
       ndsF lE = TE.NamedDeclSpec varName $ TE.intArraySpec lE cs
   SB.addColumnJson rtt ndsF f
 
-addCountData :: forall r md gq.(Typeable md, Typeable gq)
-             => SB.RowTypeTag r
+addCountData :: SB.RowTypeTag r
              -> TE.StanName
              -> (r -> Int)
              -> SB.StanBuilderM md gq TE.IntArrayE
 addCountData rtt varName f = addIntData rtt varName (Just 0) Nothing f
 
-addRealData :: (Typeable md, Typeable gq)
-            => SB.RowTypeTag r
+addRealData :: SB.RowTypeTag r
             -> TE.StanName
             -> Maybe Double
             -> Maybe Double
@@ -103,8 +84,7 @@ addRealData rtt varName mLower mUpper f = do
       ndsF lE = TE.NamedDeclSpec varName $ TE.vectorSpec lE cs
   SB.addColumnJson rtt ndsF f
 
-addIntArrayData :: (Typeable md, Typeable gq)
-              => SB.RowTypeTag r
+addIntArrayData :: SB.RowTypeTag r
               -> TE.StanName
               -> TE.IntE
               -> Maybe Int
@@ -116,8 +96,7 @@ addIntArrayData rtt varName innerSizeE mLower mUpper f = do
       ndsF lE = TE.NamedDeclSpec varName $ TE.array1Spec lE (TE.array1Spec innerSizeE $ TE.intSpec cs)
   SB.addColumnJson rtt ndsF f
 
-add2dMatrixData :: (Typeable md, Typeable gq)
-                => SB.RowTypeTag r
+add2dMatrixData :: SB.RowTypeTag r
                 -> SB.MatrixRowFromData r
                 -> Maybe Double
                 -> Maybe Double
@@ -133,7 +112,7 @@ printExpr :: Text -> TE.UExpr t -> SB.StanBuilderM md gq ()
 printExpr t e = SB.addStmtToCode $ TE.print (TE.stringE ("\"" <> t <> "\"=") :> e :> TNil)
 
 printTarget :: Text -> SB.StanBuilderM md gq ()
-printTarget t = printExpr "target" (TE.functionE TE.targetVal TNil)
+printTarget _ = printExpr "target" (TE.functionE TE.targetVal TNil)
 
 {-
 parallelSampleDistV :: (Typeable md, Typeable gq) => Text -> SB.RowTypeTag r -> SMD.StanDist args -> args -> SB.StanVar -> SB.StanBuilderM md gq ()
@@ -216,7 +195,7 @@ generateLogLikelihood' llSet =  SB.inBlock SB.SBLogLikelihood $ do
   let doOne :: SB.RowTypeTag a -> LLDetails a -> StateT [TE.UExpr TE.EInt] (SB.StanBuilderM md gq) (SB.RowTypeTag a)
       doOne rtt (LLDetails d pFCW yFCW) = do
         prevSizes <- get
-        let sizeE =  TE.multiOpE TE.SAdd $ namedIntE "n" :| prevSizes
+        let --sizeE =  TE.multiOpE TE.SAdd $ namedIntE "n" :| prevSizes
         lift $ SB.addScopedFromCodeWriter $ do
           pF <- pFCW
           yF <- yFCW
@@ -234,13 +213,13 @@ generatePosteriorPrediction :: SB.RowTypeTag r
                             -> SMD.StanDist t pts rts
                             -> TE.CodeWriter (TE.IntE -> TE.ExprList rts)
                             -> SB.StanBuilderM md gq (TE.ArrayE t)
-generatePosteriorPrediction rtt nds sDist psFCW = generatePosteriorPrediction' rtt nds sDist psFCW id
+generatePosteriorPrediction rtt nds sDist psFCW = generatePosteriorPrediction' rtt nds sDist psFCW (const id)
 
 generatePosteriorPrediction' :: SB.RowTypeTag r
                              -> TE.NamedDeclSpec (TE.EArray1 t)
                              -> SMD.StanDist t pts rts
                              -> TE.CodeWriter (TE.IntE -> TE.ExprList rts)
-                             -> (TE.UExpr t -> TE.UExpr t)
+                             -> (TE.IntE -> TE.UExpr t -> TE.UExpr t)
                              -> SB.StanBuilderM md gq (TE.ArrayE t)
 generatePosteriorPrediction' rtt nds sDist psFCW f = SB.inBlock SB.SBGeneratedQuantities $ do
   ppE <- SB.stanDeclareN nds
@@ -249,15 +228,14 @@ generatePosteriorPrediction' rtt nds sDist psFCW f = SB.inBlock SB.SBGeneratedQu
     let rngE nE = SMD.familyRNG sDist (psF nE)
     TE.addStmt
       $ TE.for "n" (TE.SpecificNumbered (TE.intE 1) (TE.namedE (SB.dataSetSizeName rtt) TE.SInt))
-      $ \nE -> [TE.sliceE TE.s0 nE ppE `TE.assign` f (rngE nE)]
+      $ \nE -> [TE.sliceE TE.s0 nE ppE `TE.assign` f nE (rngE nE)]
     return ppE
 
-generatePosteriorPredictionV :: SB.RowTypeTag r
-                             -> TE.NamedDeclSpec TE.ECVec
+generatePosteriorPredictionV :: TE.NamedDeclSpec TE.ECVec
                              -> SMD.StanDist TE.ECVec pts rts
                              -> TE.ExprList rts
                              -> SB.StanBuilderM md gq TE.VectorE
-generatePosteriorPredictionV rtt nds sDist ps =
+generatePosteriorPredictionV nds sDist ps =
   SB.inBlock SB.SBGeneratedQuantities
   $ SB.stanDeclareRHSN nds $ SMD.familyRNG sDist ps
 
@@ -267,7 +245,7 @@ diagVectorFunction = do
       f = TE.simpleFunction "index_both"
       dsF :: TE.ExprList [TE.EArray1 TE.ECVec, TE.EInt] -> TE.DeclSpec TE.ECVec
       dsF (_ :> n :> TNil) = TE.vectorSpec n []
-  SB.addFunctionOnce f (TE.Arg "vs" :> TE.Arg "N" :> TNil)
+  _ <- SB.addFunctionOnce f (TE.Arg "vs" :> TE.Arg "N" :> TNil)
     $ TE.simpleFunctionBody f "out_vec" dsF
     $ \rvE (vs :> n :> TNil) ->
         [TE.for "n" (TE.SpecificNumbered (TE.intE 1) n) $ \nE ->
@@ -320,17 +298,6 @@ weightedMeanVarianceFunction = do
     y <- TE.declareRHSW "y" (TE.vectorSpec n []) $ xs `TE.minusE` meanVar 1
     TE.addStmt $ meanVar 2 `TE.assign` (sum (ws `eTimes` y `eTimes` y) `TE.divideE` sum ws)
     return mv
-{-
-  SB.addFunctionsOnce "weighted_mean_variance"
-                        $ SB.declareStanFunction "vector weighted_mean_variance(vector ws, vector xs)" $ do
-  SB.addStanLine "int N = num_elements(xs)"
-  SB.addStanLine "vector[N] wgtdXs = ws .* xs"
-  SB.addStanLine "vector[2] meanVar"
-  SB.addStanLine "meanVar[1] = sum(wgtdXs)/sum(ws)"
-  SB.addStanLine "vector[N] y = (xs - meanVar[1])"
-  SB.addStanLine "meanVar[2] = sum(ws .* y .* y)/sum(ws)"
-  SB.addStanLine "return meanVar"
--}
 
 unWeightedMeanVarianceFunction :: SB.StanBuilderM md gq (TE.Function TE.ECVec [TE.ECVec, TE.ECVec])
 unWeightedMeanVarianceFunction = do
@@ -338,29 +305,17 @@ unWeightedMeanVarianceFunction = do
       f = TE.simpleFunction "unweighted_mean_variance"
   SB.addFunctionOnce f (TE.Arg "ws" :> TE.Arg "xs" :> TNil)
     $ \(_ :> xs :> TNil) -> TE.writerL $ do
-    n <- TE.declareRHSW "N" (TE.intSpec []) $ TE.functionE TE.size (xs :> TNil)
+    _ <- TE.declareRHSW "N" (TE.intSpec []) $ TE.functionE TE.size (xs :> TNil)
     mv <- TE.declareW "meanVar" (TE.vectorSpec (TE.intE 2) [])
     let meanVar i = TE.sliceE TE.s0 (TE.intE i) mv
     TE.addStmt $ meanVar 1 `TE.assign` TE.functionE TE.mean (xs :> TNil)
     TE.addStmt $ meanVar 2 `TE.assign` TE.functionE TE.variance (xs :> TNil)
     return mv
-{-
-unWeightedMeanVarianceFunction :: SB.StanBuilderM md gq ()
-unWeightedMeanVarianceFunction =  SB.addFunctionsOnce "unweighted_mean_variance"
-                        $ SB.declareStanFunction "vector unweighted_mean_variance(vector xs)" $ do
-  SB.addStanLine "int N = num_elements(xs)"
-  SB.addStanLine "vector[2] meanVar"
-  SB.addStanLine "meanVar[1] = mean(xs)"
-  SB.addStanLine "meanVar[2] = variance(xs)"
-  SB.addStanLine "return meanVar"
--}
-
 
 realIntRatio :: TE.UExpr TE.EInt -> TE.UExpr TE.EInt -> TE.UExpr TE.EReal
 realIntRatio k l = let f x = (TE.realE 1 `TE.timesE` x) in f k `TE.divideE` f l
 
-declTranspose :: TE.TypeOneOf t [TE.EMat, TE.ESqMat, TE.ECVec, TE.ERVec]
-              => TE.NamedDeclSpec (TE.UnaryResultT TE.UTranspose t)
+declTranspose :: TE.NamedDeclSpec (TE.UnaryResultT TE.UTranspose t)
               -> TE.UExpr t
               -> SB.StanBuilderM md gq (TE.UExpr (TE.UnaryResultT TE.UTranspose t))
 declTranspose nds m = do
@@ -369,7 +324,7 @@ declTranspose nds m = do
 indexedConstIntArray :: SB.RowTypeTag r -> Maybe Text -> TE.UExpr TE.EInt -> TE.UExpr TE.EInt -> SB.StanBuilderM md gq TE.IntArrayE
 indexedConstIntArray rtt mSuffix lengthE nE =
   let dsName = SB.dataSetName rtt
-      sizeName = SB.dataSetSizeName rtt
+--      sizeName = SB.dataSetSizeName rtt
       nds = TE.NamedDeclSpec ("constIndex_" <> dsName <> maybe "" ("_" <>) mSuffix) $ TE.intArraySpec lengthE []
   in SB.inBlock SB.SBTransformedData
      $ SB.stanDeclareRHSN nds $ TE.functionE TE.rep_array (nE :> lengthE :> TNil)
@@ -416,8 +371,7 @@ psByGroupFunction = SB.addFunctionsOnce "psByGroup"
   SB.addStanLine "return SumByGroup"
 -}
 
-postStratifiedParameterF :: (Typeable md, Typeable gq)
-                         => Bool
+postStratifiedParameterF :: Bool
                          -> SB.StanBlock
                          -> Maybe Text
                          -> SB.RowTypeTag r -- data set to post-stratify
@@ -428,18 +382,18 @@ postStratifiedParameterF :: (Typeable md, Typeable gq)
                          -> Maybe (SB.RowTypeTag r', TE.UExpr TE.EIndexArray) -- re-index?
                          -> SB.StanBuilderM md gq (TE.UExpr TE.ECVec)
 postStratifiedParameterF prof block varNameM rtt gtt grpIndex wgtsV pV reIndexRttM = do
-  psByGroupFunction
+  _ <- psByGroupFunction
   let dsName = SB.dataSetName rtt
       gName = SB.taggedGroupName gtt
       dsSizeE = TE.namedE (SB.dataSetSizeName rtt) TE.SInt
       grpSizeE = TE.namedE (SB.groupSizeName gtt) TE.SInt
       psDataByGroupName = dsName <> "_By_" <> gName
-      indexName = SB.dataSetName rtt <> "_" <> SB.taggedGroupName gtt
+--      indexName = SB.dataSetName rtt <> "_" <> SB.taggedGroupName gtt
       varName = case reIndexRttM of
         Nothing -> fromMaybe psDataByGroupName varNameM
         Just (reIndexRtt, _) -> fromMaybe (dsName <> "_By_" <> SB.dataSetName reIndexRtt) varNameM
       grpVecDS =  TE.vectorSpec grpSizeE [] --SB.StanVector $ SB.NamedDim gName
-      psVecDS =  TE.vectorSpec dsSizeE [] --SB.StanVector $ SB.NamedDim dsName
+--      psVecDS =  TE.vectorSpec dsSizeE [] --SB.StanVector $ SB.NamedDim dsName
       scopeF :: [TE.UStmt] -> TE.UStmt
       scopeF stmts = if prof then TE.profile varName stmts else TE.scoped stmts
   SB.inBlock block $ case reIndexRttM of
@@ -448,11 +402,11 @@ postStratifiedParameterF prof block varNameM rtt gtt grpIndex wgtsV pV reIndexRt
       SB.addStmtToCode $ scopeF
         [probV `TE.assign` TE.functionE ps_by_group (dsSizeE :>  grpSizeE :> grpIndex :> wgtsV :> pV :> TNil)]
       pure probV
-    Just (reIndexRtt, reIndex) -> do
+    Just (reIndexRtt, reIndex') -> do
       riProb <-  SB.stanDeclare varName $ TE.vectorSpec (TE.namedE (SB.dataSetSizeName reIndexRtt) TE.SInt) [] --(SB.StanVector $ SB.NamedDim reIndexKey) ""
       SB.addStmtToCode $ scopeF $ TE.writerL' $ do
         gProb <- TE.declareRHSW psDataByGroupName grpVecDS $ TE.functionE ps_by_group (dsSizeE :>  grpSizeE :> grpIndex :> wgtsV :> pV :> TNil)
-        TE.addStmt $ riProb `TE.assign` TE.indexE TE.s0 reIndex gProb
+        TE.addStmt $ riProb `TE.assign` TE.indexE TE.s0 reIndex' gProb
       pure riProb
 
 mRowsE :: (TE.TypeOneOf t [TE.EMat, TE.ESqMat], TE.GenSType t) => TE.UExpr t -> TE.IntE

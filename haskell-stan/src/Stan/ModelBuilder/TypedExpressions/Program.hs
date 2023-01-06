@@ -20,13 +20,9 @@ module Stan.ModelBuilder.TypedExpressions.Program (
 import qualified Control.Foldl as FL
 import Data.Array ((!), (//))
 import qualified Data.Array as Array
-import qualified Data.List.NonEmpty as NE
-import Relude.Extra
 import qualified Stan.ModelBuilder.BuilderTypes as SBT
 import qualified Stan.ModelBuilder.TypedExpressions.Statements as TE
 import qualified Stan.ModelBuilder.TypedExpressions.Evaluate as TE
-import qualified Stan.ModelBuilder.TypedExpressions.Recursion as TE
-import qualified Stan.ModelBuilder.TypedExpressions.Format as TE
 
 import qualified Prettyprinter.Render.Text as PP
 import qualified Prettyprinter as PP
@@ -112,13 +108,13 @@ addStmtToBlockTop = addStmtToBlock' $ flip (:)
 addStmtsToBlock :: Traversable f => SBT.StanBlock -> f TE.UStmt -> Either Text (StanProgram -> StanProgram)
 addStmtsToBlock b stmts = do
   fs <- traverse (addStmtToBlock b) stmts
-  let g sp = foldl' (\sp f -> f sp) sp fs
+  let g sp = foldl' (\sp' f -> f sp') sp fs
   return g
 
 addStmtsToBlockTop :: Traversable f => SBT.StanBlock -> f TE.UStmt -> Either Text (StanProgram -> StanProgram)
 addStmtsToBlockTop b stmts = do
   fs <- traverse (addStmtToBlockTop b) $ reverse $ FL.fold FL.list stmts
-  let g sp = foldl' (\sp f -> f sp) sp fs
+  let g sp = foldl' (\sp' f -> f sp') sp fs
   return g
 
 programAsText :: SBT.GeneratedQuantities -> StanProgram -> Either Text Text

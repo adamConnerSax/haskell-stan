@@ -1,7 +1,6 @@
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE GADTs #-}
-{-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE TypeOperators #-}
@@ -13,6 +12,8 @@ import qualified Stan.JSON as SJ
 import qualified Frames as F
 import qualified Data.Vinyl as V
 import qualified Data.Vinyl.TypeLevel as V
+
+import Data.Type.Equality (type (~))
 
 recProduct :: forall a b. (a F.⊆ (a V.++ b), b F.⊆ (a V.++ b)) => SJ.Product (F.Record a) (F.Record b) (F.Record (a V.++ b))
 recProduct = SJ.Product (uncurry V.rappend) (V.rcast @a) (V.rcast @b)

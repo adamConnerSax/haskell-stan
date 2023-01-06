@@ -26,7 +26,7 @@ import qualified Stan.ModelBuilder.TypedExpressions.Types as TE
 import qualified Stan.ModelBuilder.TypedExpressions.TypedList as TE
 import qualified Stan.ModelBuilder.TypedExpressions.Statements as TE
 import qualified Stan.ModelBuilder.TypedExpressions.StanFunctions as TE
-import Stan.ModelBuilder.TypedExpressions.Recursion (hfmap, htraverse, K(..))
+import Stan.ModelBuilder.TypedExpressions.Recursion (hfmap, K(..))
 
 import qualified Data.Dependent.Map as DM
 import qualified Data.Dependent.Sum as DM
@@ -70,7 +70,7 @@ depOrderedPParameters pc =  (\(pp, _, _) -> pp) . vToBuildInfo <$> Gr.topSort pG
   bParameterNames = catMaybes . TE.typedKToList . hfmap (K . parameterNameM)
   dSumToGBuildInfo :: DM.DSum DT.ParameterTag DT.BuildParameter -> (PhantomP, TE.StanName, [TE.StanName])
   dSumToGBuildInfo (_ DM.:=> bp) = (PhantomP bp, DT.bParameterName bp, withBPDeps bp bParameterNames)
-  (pGraph, vToBuildInfo, nameToVertex) = Gr.graphFromEdges . fmap dSumToGBuildInfo . DM.toList $ DT.pdm pc
+  (pGraph, vToBuildInfo, _) = Gr.graphFromEdges . fmap dSumToGBuildInfo . DM.toList $ DT.pdm pc
 --  orderedVList = Gr.topSort pGraph
 
 
@@ -127,8 +127,8 @@ rawName t = t <> "_raw"
 --
 
 -- should be used in place of runStanBuilder
-runStanBuilderDAG :: forall md gq a.(Typeable md, Typeable gq)
-                  => md
+runStanBuilderDAG :: forall md gq a .
+                     md
                   -> gq
                   -> SB.StanGroupBuilderM md gq ()
                   -> SB.StanBuilderM md gq a
@@ -214,7 +214,7 @@ addTransformedHP :: TE.NamedDeclSpec t
                  -> (TE.UExpr t -> TE.UExpr t)
                  -> SB.StanBuilderM md gq (ParameterTag t)
 addTransformedHP nds rawCsM rawPrior fromRawF = do
-  let TE.DeclSpec st dims cs = TE.decl nds
+  let TE.DeclSpec st dims _ = TE.decl nds
       rawNDS = TE.NamedDeclSpec (rawName $ TE.declName nds) $ maybe (TE.decl nds) (TE.DeclSpec st dims) rawCsM
   rawPT <- addIndependentPriorP rawNDS rawPrior
   addBuildParameter $ simpleTransformedP nds [] (BuildP rawPT TE.:> TE.TNil)  (\(e TE.:> TE.TNil) -> DeclRHS $ fromRawF e) -- (ExprList qs -> DeclCode t)
@@ -236,7 +236,7 @@ withIIDRawMatrix :: TE.NamedDeclSpec TE.EMat
                  -> (TE.ExprList qs -> TE.MatrixE -> TE.MatrixE)
                  -> SB.StanBuilderM md gq (DT.ParameterTag TE.EMat)
 withIIDRawMatrix nds rawCsM dwa qs f = do
- let TE.DeclSpec _ (rowsE ::: colsE ::: VNil) cs = TE.decl nds
+ let TE.DeclSpec _ (rowsE ::: colsE ::: VNil) _ = TE.decl nds
      rawNDS = TE.NamedDeclSpec (rawName $ TE.declName nds) $ TE.matrixSpec rowsE colsE $ fromMaybe [] rawCsM
  rawPT <- TE.withDWA (\d tl -> iidMatrixP rawNDS [] (exprListToParameters tl) d) dwa
  addBuildParameter $ simpleTransformedP nds [] (BuildP rawPT TE.:> qs) (\(rmE TE.:> qsE) -> DeclRHS $ f qsE rmE)

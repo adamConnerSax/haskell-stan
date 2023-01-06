@@ -37,22 +37,17 @@ import qualified Data.Foldable as Foldable
 import qualified Data.IntMap.Strict as IM
 import qualified Data.List as List
 import qualified Data.List.NonEmpty as NE
-import Data.List ((!!))
 import qualified Data.Vec.Lazy as DT
 import qualified Data.Type.Nat as DT
-import qualified Data.Fin as DT
+import Data.Type.Equality (type (~))
 import qualified Data.Text as T
 
-import qualified Stan.ModelBuilder.Expressions as SME
 import Prelude hiding (Nat)
-import Relude.Extra
 import qualified Data.Map.Strict as Map
 
 import qualified Prettyprinter as PP
 import Prettyprinter ((<+>))
-import qualified Data.GADT.Compare as DT
 import qualified Prettyprinter.Render.Text as PP
---import qualified Data.List.NonEmpty.Extra as List
 
 
 type CodePP = PP.Doc ()
@@ -101,7 +96,7 @@ stmtToCodeAlg = \case
   SCommentF cs -> case toList cs of
     [] -> Right mempty
     [c] -> Right $ "//" <+> PP.pretty c
-    cs -> Right $ "{*" <> PP.line <> PP.indent 2 (PP.vsep $ PP.pretty <$> cs) <> PP.line <> "*}"
+    cs' -> Right $ "{*" <> PP.line <> PP.indent 2 (PP.vsep $ PP.pretty <$> cs') <> PP.line <> "*}"
   SProfileF t body -> (\b -> "profile" <> PP.parens (PP.dquotes $ PP.pretty t) <+> bracketBlock b) <$> sequenceA body
   SPrintF al -> Right $ "print" <+> PP.parens (csArgList al) <> PP.semi
   SRejectF al -> Right $ "reject" <+> PP.parens (csArgList al) <> PP.semi
@@ -134,7 +129,7 @@ snatSum sn1 x = case sn1 of
 
 stanDeclHead :: forall t.StanType t -> [CodePP] -> [VarModifier (K CodePP) (ScalarType t)] -> CodePP
 stanDeclHead st il vms = case st of
-  StanArray sn st -> arrayDeclHead (fromIntegral $ DT.snatToNatural sn) st
+  StanArray sn st' -> arrayDeclHead (fromIntegral $ DT.snatToNatural sn) st'
 --  _ -> PP.pretty (stanTypeName st)  <> indexCodeL il <> varModifiersToCode vms
   _ -> PP.pretty (stanTypeName st) <> varModifiersToCode vms <> indexCodeL il
   where
@@ -143,13 +138,13 @@ stanDeclHead st il vms = case st of
       VarUpper x -> "upper" <> PP.equals <> unK x
       VarOffset x -> "offset" <> PP.equals <> unK x
       VarMultiplier x -> "multiplier" <> PP.equals <> unK x
-    varModifiersToCode vms =
-      if null vms
+    varModifiersToCode vms' =
+      if null vms'
       then mempty
       else PP.langle <> (PP.hsep $ PP.punctuate  (PP.comma <> PP.space) $ fmap vmToCode vms) <> PP.rangle
     arrayDeclHead :: (ScalarType t ~ ScalarType t') => Int -> StanType t' -> CodePP
-    arrayDeclHead ad st = case st of
-      StanArray sn' st' -> arrayDeclHead (ad + (fromIntegral $ DT.snatToNatural sn')) st'
+    arrayDeclHead ad st' = case st' of
+      StanArray sn' st'' -> arrayDeclHead (ad + (fromIntegral $ DT.snatToNatural sn')) st''
       _ -> let (adl, sdl) = List.splitAt ad il
            in "array" <> indexCodeL adl <+> stanDeclHead st sdl vms
 
@@ -176,7 +171,7 @@ blockCode ne = PP.vsep $ toList ne
 blockCode' :: Traversable f => f CodePP -> CodePP
 blockCode' cs = case toList cs of
   [] -> mempty
-  (c : cs) -> c <> PP.vsep cs
+  (c : cs') -> c <> PP.vsep cs'
 
 appendAsList :: Traversable f => f a -> [a] -> [a]
 appendAsList fa as = toList fa ++ as
@@ -195,7 +190,7 @@ functionArgs argTypes argNames = PP.parens $ formatFunctionArgs argCodeList
 
     handleType :: SType t -> CodePP
     handleType st = case st of
-      SArray sn st -> "array" <> arrayIndices sn <+> handleType st
+      SArray sn st' -> "array" <> arrayIndices sn <+> handleType st'
       _ -> PP.pretty $ sTypeName st
 
     f :: SType t -> FuncArg Text t -> K CodePP t
@@ -212,8 +207,8 @@ ifElseCode ecNE c = do
       condCode (e :| es) = "if" <+> PP.parens (unK e) <> PP.space :| fmap (\le -> "else if" <+> PP.parens (unK le) <> PP.space) es
       condCodeNE = condCode conds `appendNEList` ["else"]
   ifTrueCodes <- sequenceA (ifTrueCodeEs `appendNEList` [c])
-  let ecNE = NE.zipWith (<+>) condCodeNE (fmap (PP.group . bracketBlock . pure @[]) ifTrueCodes)
-  return $ blockCode' ecNE
+  let ecNE' = NE.zipWith (<+>) condCodeNE (fmap (PP.group . bracketBlock . pure @[]) ifTrueCodes)
+  return $ blockCode' ecNE'
 
 data OpType = RangeOp | BOp BinaryOp
 
@@ -235,7 +230,7 @@ instance Functor IExprCodeF where
 
 instance Foldable IExprCodeF where
   foldMap f = \case
-    BareF doc -> mempty
+    BareF _ -> mempty
     OpedF _ _ -> mempty
     IndexedF _ _ im -> foldMap f im
 
@@ -287,10 +282,10 @@ formatDensityArgs cs = PP.align . PP.group
 
 
 encloseSep' :: CodePP -> CodePP -> CodePP -> CodePP -> [CodePP] -> CodePP
-encloseSep' l r s1 s ds = case ds of
+encloseSep' l r s1' s ds = case ds of
   [] -> l <> r
   [d] -> l <> d <> r
-  _ -> PP.cat (zipWith (<>) (l : s1 : repeat s) ds) <> r
+  _ -> PP.cat (zipWith (<>) (l : s1' : repeat s) ds) <> r
 
 csArgList :: TypedList (K CodePP) args -> CodePP
 csArgList = formatFunctionArgs . typedKToList
@@ -301,7 +296,7 @@ prefixSurroundPrefer ifUnsplit ifSplit ls rs c = PP.group $ PP.flatAlt ifSplit i
 -- I am not sure about/do not understand the quantified constraint here.
 exprToDocAlg :: IAlg LExprF (K IExprCode) -- LExprF ~> K IExprCode
 exprToDocAlg = K . \case
-  LNamed txt st -> Bare $ PP.pretty txt
+  LNamed txt _ -> Bare $ PP.pretty txt
   LInt n -> Bare $ PP.pretty n
   LReal x -> Bare $ PP.pretty x
   LComplex x y -> Bare $ PP.parens $ PP.pretty x <+> "+" <+> "i" <> PP.pretty y -- (x + iy))
@@ -338,12 +333,12 @@ exprToDocAlg = K . \case
     parenthesizeOped :: K IExprCode ~> K IExprCode
     parenthesizeOped x = case unK x of
        Oped bop doc -> K $ Oped bop $ PP.parens doc
-       x -> K x
+       y -> K y
     addSlice :: SNat n -> K IExprCode EInt -> K IExprCode d -> [Int] -> IM.IntMap IExprCode -> ([Int], IM.IntMap IExprCode)
-    addSlice sn kei ke si im = (si', im')
+    addSlice sn kei _ si im = (si', im')
       where
         newIndex :: Int = fromIntegral $ DT.snatToNatural sn
-        origIndex = let f n = if n `elem` si then f (n + 1) else n in f newIndex -- find the correct index in the original
+        origIndex = let g n = if n `elem` si then g (n + 1) else n in g newIndex -- find the correct index in the original
         si' = origIndex : si
         im' = IM.alter (Just . maybe (unK kei) (sliced s0 kei . K)) origIndex im
     sliced :: SNat n -> K IExprCode EInt -> K IExprCode t -> IExprCode
@@ -352,10 +347,10 @@ exprToDocAlg = K . \case
       Oped _ c -> let (si, im) = addSlice sn kei ke [] IM.empty in Indexed (PP.parens c) si im
       Indexed c si im -> let (si', im') = addSlice sn kei ke si im in Indexed c si' im'
     addIndex :: SNat n -> K IExprCode (EArray (S Z) EInt) -> K IExprCode d -> [Int] -> IM.IntMap IExprCode -> IM.IntMap IExprCode
-    addIndex sn kre ke si im = im'
+    addIndex sn kre _ si im = im'
       where
         newIndex :: Int = fromIntegral $ DT.snatToNatural sn
-        origIndex = let f n = if n `elem` si then f (n + 1) else n in f newIndex
+        origIndex = let g n = if n `elem` si then g (n + 1) else n in g newIndex
         im' = IM.alter (Just . maybe (unK kre) (indexed s0 kre . K)) origIndex im
     indexed :: SNat n -> K IExprCode (EArray (S Z) EInt) -> K IExprCode t -> IExprCode
     indexed sn kei ke = case unK ke of
@@ -412,14 +407,14 @@ nestedVecToCode nv = unNestedToCode PP.braces (drop 1 $ reverse dims) itemsCode
 unNestedToCode :: (CodePP -> CodePP) -> [Int] -> [CodePP] -> CodePP
 unNestedToCode surroundF dims items = surround $ go dims items
   where
-    rdims = reverse dims
+--    rdims = reverse dims
     surround = surroundF . PP.hsep . PP.punctuate ", "
-    group :: Int -> [CodePP] -> [CodePP] -> [CodePP]
-    group _ [] bs = bs
-    group n as bs = let (g , as') = List.splitAt n as in group n as' (bs ++ [surround g]) -- this is quadratic. Fix.
+    group' :: Int -> [CodePP] -> [CodePP] -> [CodePP]
+    group' _ [] bs = bs
+    group' n as bs = let (g , as') = List.splitAt n as in group' n as' (bs ++ [surround g]) -- this is quadratic. Fix.
     go :: [Int] -> [CodePP] -> [CodePP]
     go [] as = as
-    go (x : xs) as = go xs (group x as [])
+    go (x : xs) as = go xs (group' x as [])
 
 stmtBlockHeader :: StmtBlock -> Text
 stmtBlockHeader = \case
@@ -442,4 +437,4 @@ printLookupCtxt (IndexLookupCtxt s i) = "sizes: " <> T.intercalate ", " (printF 
                                         <> "indexes: " <> T.intercalate ", " (printF <$> Map.toList i)
   where
     printF :: forall t.(Text, LExpr t) -> Text
-    printF (ik, le) = "("<> ik <> ", " <> exprToText le  <> ")"
+    printF (ik, le) = "(" <> ik <> ", " <> exprToText le  <> ")"

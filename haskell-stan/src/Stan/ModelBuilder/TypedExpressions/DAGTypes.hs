@@ -52,7 +52,7 @@ import qualified Data.GADT.Show as GC
 import qualified Data.Type.Equality as GC
 import qualified Data.Dependent.Map as DM
 
-import Data.Type.Equality ((:~:)(Refl),TestEquality(testEquality))
+import Data.Type.Equality (TestEquality(testEquality))
 import qualified Text.Show
 import qualified Data.Set as Set
 import Stan.ModelBuilder.TypedExpressions.Expressions (UExpr)
@@ -77,9 +77,11 @@ instance GC.GCompare ParameterTag where
       EQ -> GC.GEQ
       LT -> GC.GLT
       GT -> GC.GGT
+    -- The below is "incomplete" since it's missing the "EQ" case. But that won't compile since a and b are not provably the same
     Nothing -> case compare (sTypeToEType $ taggedParameterType a) (sTypeToEType $ taggedParameterType b) of
       LT -> GC.GLT
       GT -> GC.GGT
+
 
 instance Show (ParameterTag t) where
   show (ParameterTag st n) = "<" <> show st <> ": " <> show n <> ">"
@@ -171,8 +173,8 @@ instance TestEquality TData where
 --withTData :: TData t -> (forall ts.TE.NamedDeclSpec t -> TE.TypedList TData ts -> (TE.ExprList ts -> TE.UExpr t) -> r) -> r
 --withTData (TData nds tds eF) f = f nds tds eF
 
-tDataNamedDecl :: TData t -> TE.NamedDeclSpec t
-tDataNamedDecl (TData nds _ _ _) = nds
+--tDataNamedDecl :: TData t -> TE.NamedDeclSpec t
+--tDataNamedDecl (TData nds _ _ _) = nds
 
 
 data BuildParameter :: TE.EType -> Type where
@@ -226,13 +228,14 @@ getNamedDecl = \case
   ModelP x _ _ _ -> x
 --  TransformedDiffTypeP x _ _ _ _ _ _ -> x
 
+{-
 setNamedDecl :: TE.NamedDeclSpec t -> BuildParameter t -> BuildParameter t --SB.StanBuilderM md gq (Parameter t)
 setNamedDecl x = \case
   TransformedDataP (TData _ y z a) -> TransformedDataP (TData x y z a)
   UntransformedP _ y z a -> UntransformedP x y z a
   TransformedP _ y z a b c  -> TransformedP x y z a b c
   ModelP _ y z a  -> ModelP x y z a
-
+-}
 --  TransformedDiffTypeP _ y z a b c d -> TransformedDiffTypeP x y z a b c d
 
 bParameterName :: BuildParameter t -> TE.StanName
@@ -247,7 +250,7 @@ bParameterSType = TE.sTypeFromStanType . bParameterStanType
 addBuildParameterE :: BuildParameter t -> BParameterCollection -> Either Text (BParameterCollection, ParameterTag t)
 addBuildParameterE bp bpc = do
   let pName =  bParameterName bp
-      pSType = bParameterSType bp
+--      pSType = bParameterSType bp
   if Set.member pName (usedNames bpc)
     then Left $ "Attempt to add " <> pName <> "to parameter collection but a parameter of that name is already present."
     else Right $ let ttn = parameterTagFromBP bp in (BParameterCollection (DM.insert ttn bp $ pdm bpc) (Set.insert pName $ usedNames bpc), ttn)
@@ -261,7 +264,7 @@ lookupParameterExpressions ps eMap = htraverse f ps where
         case DM.lookup ttn eMap of
           Just e -> Right e
           Nothing -> Left $ taggedParameterName ttn <> " not found in expression map.  Dependency ordering issue??"
-      MappedP g p -> g <$> f p
+      MappedP g p' -> g <$> f p'
 --    MappedP g p -> g <$> f p
 
 lookupTDataExpressions :: TE.TypedList TData ts -> DM.DMap ParameterTag TE.UExpr -> Either Text (TE.TypedList TE.UExpr ts)
