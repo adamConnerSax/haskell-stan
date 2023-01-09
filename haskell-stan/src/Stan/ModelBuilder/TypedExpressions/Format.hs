@@ -96,7 +96,7 @@ stmtToCodeAlg = \case
   SCommentF cs -> case toList cs of
     [] -> Right mempty
     [c] -> Right $ "//" <+> PP.pretty c
-    cs' -> Right $ "{*" <> PP.line <> PP.indent 2 (PP.vsep $ PP.pretty <$> cs') <> PP.line <> "*}"
+    csList -> Right $ "{*" <> PP.line <> PP.indent 2 (PP.vsep $ PP.pretty <$> csList) <> PP.line <> "*}"
   SProfileF t body -> (\b -> "profile" <> PP.parens (PP.dquotes $ PP.pretty t) <+> bracketBlock b) <$> sequenceA body
   SPrintF al -> Right $ "print" <+> PP.parens (csArgList al) <> PP.semi
   SRejectF al -> Right $ "reject" <+> PP.parens (csArgList al) <> PP.semi
@@ -127,9 +127,9 @@ snatSum sn1 x = case sn1 of
 
 --sta1 -> NatSum
 
-stanDeclHead :: forall t.StanType t -> [CodePP] -> [VarModifier (K CodePP) (ScalarType t)] -> CodePP
+stanDeclHead :: forall t . StanType t -> [CodePP] -> [VarModifier (K CodePP) (ScalarType t)] -> CodePP
 stanDeclHead st il vms = case st of
-  StanArray sn st' -> arrayDeclHead (fromIntegral $ DT.snatToNatural sn) st'
+  StanArray sn arrayType -> arrayDeclHead (fromIntegral $ DT.snatToNatural sn) arrayType
 --  _ -> PP.pretty (stanTypeName st)  <> indexCodeL il <> varModifiersToCode vms
   _ -> PP.pretty (stanTypeName st) <> varModifiersToCode vms <> indexCodeL il
   where
@@ -138,15 +138,15 @@ stanDeclHead st il vms = case st of
       VarUpper x -> "upper" <> PP.equals <> unK x
       VarOffset x -> "offset" <> PP.equals <> unK x
       VarMultiplier x -> "multiplier" <> PP.equals <> unK x
-    varModifiersToCode vms' =
-      if null vms'
+    varModifiersToCode varModifierList =
+      if null varModifierList
       then mempty
-      else PP.langle <> (PP.hsep $ PP.punctuate  (PP.comma <> PP.space) $ fmap vmToCode vms) <> PP.rangle
+      else PP.langle <> (PP.hsep $ PP.punctuate  (PP.comma <> PP.space) $ fmap vmToCode varModifierList) <> PP.rangle
     arrayDeclHead :: (ScalarType t ~ ScalarType t') => Int -> StanType t' -> CodePP
-    arrayDeclHead ad st' = case st' of
-      StanArray sn' st'' -> arrayDeclHead (ad + (fromIntegral $ DT.snatToNatural sn')) st''
+    arrayDeclHead ad declArrayType = case declArrayType of
+      StanArray innerDeclArrayDim innerDeclArrayType -> arrayDeclHead (ad + (fromIntegral $ DT.snatToNatural innerDeclArrayDim)) innerDeclArrayType
       _ -> let (adl, sdl) = List.splitAt ad il
-           in "array" <> indexCodeL adl <+> stanDeclHead st sdl vms
+           in "array" <> indexCodeL adl <+> stanDeclHead declArrayType sdl vms
 
 -- add brackets and indent the lines of code
 bracketBlock :: Traversable f => f CodePP -> CodePP
@@ -171,7 +171,7 @@ blockCode ne = PP.vsep $ toList ne
 blockCode' :: Traversable f => f CodePP -> CodePP
 blockCode' cs = case toList cs of
   [] -> mempty
-  (c : cs') -> c <> PP.vsep cs'
+  (c : csTail) -> c <> PP.vsep csTail
 
 appendAsList :: Traversable f => f a -> [a] -> [a]
 appendAsList fa as = toList fa ++ as
@@ -190,7 +190,7 @@ functionArgs argTypes argNames = PP.parens $ formatFunctionArgs argCodeList
 
     handleType :: SType t -> CodePP
     handleType st = case st of
-      SArray sn st' -> "array" <> arrayIndices sn <+> handleType st'
+      SArray sn arrayType -> "array" <> arrayIndices sn <+> handleType arrayType
       _ -> PP.pretty $ sTypeName st
 
     f :: SType t -> FuncArg Text t -> K CodePP t
@@ -200,15 +200,15 @@ functionArgs argTypes argNames = PP.parens $ formatFunctionArgs argCodeList
 
 -- This might be wrong after switch from NE to
 ifElseCode :: NonEmpty (K CodePP EBool, Either Text CodePP) -> Either Text CodePP -> Either Text CodePP
-ifElseCode ecNE c = do
-  let appendNEList :: NonEmpty a -> [a] -> NonEmpty a
-      appendNEList (a :| as) as' = a :| as ++ as'
-      (conds, ifTrueCodeEs) = NE.unzip ecNE
+ifElseCode condAndCodeNE c = do
+  let appendToNE :: NonEmpty a -> [a] -> NonEmpty a
+      appendToNE (a :| as) as' = a :| as ++ as'
+      (conds, ifTrueCodeEs) = NE.unzip condAndCodeNE
       condCode (e :| es) = "if" <+> PP.parens (unK e) <> PP.space :| fmap (\le -> "else if" <+> PP.parens (unK le) <> PP.space) es
-      condCodeNE = condCode conds `appendNEList` ["else"]
-  ifTrueCodes <- sequenceA (ifTrueCodeEs `appendNEList` [c])
-  let ecNE' = NE.zipWith (<+>) condCodeNE (fmap (PP.group . bracketBlock . pure @[]) ifTrueCodes)
-  return $ blockCode' ecNE'
+      condCodeNE = condCode conds `appendToNE` ["else"]
+  ifTrueCodes <- sequenceA (ifTrueCodeEs `appendToNE` [c])
+  let codeNE = NE.zipWith (<+>) condCodeNE (fmap (PP.group . bracketBlock . pure @[]) ifTrueCodes)
+  return $ blockCode' codeNE
 
 data OpType = RangeOp | BOp BinaryOp
 
@@ -230,7 +230,7 @@ instance Functor IExprCodeF where
 
 instance Foldable IExprCodeF where
   foldMap f = \case
-    BareF _ -> mempty
+    BareF _doc -> mempty
     OpedF _ _ -> mempty
     IndexedF _ _ im -> foldMap f im
 
@@ -296,7 +296,7 @@ prefixSurroundPrefer ifUnsplit ifSplit ls rs c = PP.group $ PP.flatAlt ifSplit i
 -- I am not sure about/do not understand the quantified constraint here.
 exprToDocAlg :: IAlg LExprF (K IExprCode) -- LExprF ~> K IExprCode
 exprToDocAlg = K . \case
-  LNamed txt _ -> Bare $ PP.pretty txt
+  LNamed txt _st -> Bare $ PP.pretty txt
   LInt n -> Bare $ PP.pretty n
   LReal x -> Bare $ PP.pretty x
   LComplex x y -> Bare $ PP.parens $ PP.pretty x <+> "+" <+> "i" <> PP.pretty y -- (x + iy))
@@ -347,7 +347,7 @@ exprToDocAlg = K . \case
       Oped _ c -> let (si, im) = addSlice sn kei ke [] IM.empty in Indexed (PP.parens c) si im
       Indexed c si im -> let (si', im') = addSlice sn kei ke si im in Indexed c si' im'
     addIndex :: SNat n -> K IExprCode (EArray (S Z) EInt) -> K IExprCode d -> [Int] -> IM.IntMap IExprCode -> IM.IntMap IExprCode
-    addIndex sn kre _ si im = im'
+    addIndex sn kre _ke si im = im'
       where
         newIndex :: Int = fromIntegral $ DT.snatToNatural sn
         origIndex = let g n = if n `elem` si then g (n + 1) else n in g newIndex
