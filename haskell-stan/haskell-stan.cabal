@@ -45,7 +45,6 @@ common common-options
                        LambdaCase
                        OverloadedStrings
                        ScopedTypeVariables
-                       StrictData
                        TupleSections
                        TypeApplications
 

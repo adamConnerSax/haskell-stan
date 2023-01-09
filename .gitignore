@@ -28,4 +28,5 @@ data/*.json
 /*.html
 /*.csv
 /*.eventlog
-/.hie/
+/haskell-stan/.hie/
+/haskell-stan/test/stan/

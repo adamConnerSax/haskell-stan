@@ -57,7 +57,8 @@ runModel' :: forall st cd md gq b c r.
           -> K.ActionWithCacheTime r gq
           -> K.Sem r (K.ActionWithCacheTime r c)
 runModel' cacheDirE configE dataWrangler stanProgram resultAction rScripts modelData_C gqData_C =
-  K.wrapPrefix "haskell-stan-test.runModel" $ do
+  K.wrapPrefix "haskell-stan-test.runModel'" $ do
+  K.logLE K.Diagnostic "building config"
   (rin, stanConfig) <- case configE of
     Left mrc -> pure (SC.mrcInputNames mrc, mrc)
     Right rin' -> do
@@ -76,6 +77,7 @@ runModel' cacheDirE configE dataWrangler stanProgram resultAction rScripts model
       cacheKey d = d <> outputLabel <> ".bin"
   resultCacheKey <- case cacheDirE of
     Left d -> do
+      K.logLE K.Diagnostic "clearing caches for a fresh run"
       deleteStaleFiles @st @cd stanConfig [StaleData]
       K.clearIfPresent @Text @cd $ cacheKey d
       pure $ cacheKey d
@@ -144,6 +146,7 @@ makeDefaultModelRunnerConfig runnerInputNames modelM stanMCParameters mStancConf
         Nothing -> False
         Just (_, p) ->  TE.programHasLLBlock p
       stanMakeConfig mr = do
+        K.logLE K.Diagnostic $ "Making config for " <> show mr <> " run."
         writeModel runnerInputNames mr modelM
         stanMakeNoGQConfig' <- K.liftKnit $ CS.makeDefaultMakeConfig (toString $ SC.modelPath mr runnerInputNames)
         return $  stanMakeNoGQConfig' {CS.stancFlags = mStancConfig}
@@ -154,9 +157,9 @@ makeDefaultModelRunnerConfig runnerInputNames modelM stanMCParameters mStancConf
       makeConfigs SC.MRNoGQ = stanMakeNoGQConfig
       makeConfigs SC.MROnlyLL = stanMakeOnlyLLConfig
       makeConfigs SC.MRFull = stanMakeFullConfig
-  stanSummaryConfig <-
-    K.liftKnit $
-      CS.useCmdStanDirForStansummary (CS.makeDefaultSummaryConfig [])
+  stanSummaryConfig <- do
+    K.logLE K.Diagnostic "Making summary config"
+    K.liftKnit $ CS.useCmdStanDirForStansummary (CS.makeDefaultSummaryConfig [])
   return $
     SC.ModelRunnerConfig
       doOnlyLL
@@ -185,8 +188,10 @@ writeModel runnerInputNames modelRun modelM = do
   case modelM of
     Nothing -> return ()
     Just (gq', m) -> do
+      K.logLE K.Diagnostic "Creating model code directory if neccessary."
       createDirIfNecessary modelDir
       let gq = modelGQ modelRun gq'
+      K.logLE K.Diagnostic "Renaming old if neccessary, writing if new."
       modelState <- K.liftKnit $ SB.renameAndWriteIfNotSame gq m modelDir mName
       case modelState of
         SB.New -> K.logLE K.Diagnostic "Given model was new."
