@@ -91,7 +91,7 @@ rowFuncF = appConcat . sequenceA <$> FL.premap dmrpVecF FL.list
   where appConcat g r = V.concat (g r)
 {-# INLINEABLE rowFuncF #-}
 
-matrixFromRowData :: DesignMatrixRow r -> Maybe SB.IndexKey -> SB.MatrixRowFromData r
+matrixFromRowData :: DesignMatrixRow r -> Maybe TE.IndexKey -> SB.MatrixRowFromData r
 matrixFromRowData (DesignMatrixRow name rowParts) indexKeyM = SB.MatrixRowFromData name indexKeyM length' f
   where (length', f) = FL.fold ((,) <$> rowLengthF <*> rowFuncF) rowParts
 {-# INLINEABLE matrixFromRowData #-}
@@ -184,12 +184,12 @@ rowPartFromBoundedEnumFunctions encodeAsZerosM name f = DesignMatrixRowPart name
 -- "Int K_Design;"
 -- "matrix[N_myDat, K_Design] Design_myDat;"
 -- with accompanying json
-addDesignMatrix :: SB.RowTypeTag r -> DesignMatrixRow r -> Maybe SB.IndexKey -> SB.StanBuilderM md gq (TE.UExpr TE.EMat)
+addDesignMatrix :: SB.RowTypeTag r -> DesignMatrixRow r -> Maybe TE.IndexKey -> SB.StanBuilderM md gq (TE.UExpr TE.EMat)
 addDesignMatrix rtt dmr colIndexM = SB.add2dMatrixJson rtt (matrixFromRowData dmr colIndexM) []
 {-# INLINEABLE addDesignMatrix #-}
 
 
-designMatrixColDimBinding ::  DesignMatrixRow r -> Maybe SB.IndexKey -> (SB.IndexKey, TE.UExpr TE.EInt)
+designMatrixColDimBinding ::  DesignMatrixRow r -> Maybe TE.IndexKey -> (TE.IndexKey, TE.UExpr TE.EInt)
 designMatrixColDimBinding dmr indexKeyM = (colIndex, colExpr)
   where
     ik = fromMaybe (dmName dmr) indexKeyM

@@ -8,27 +8,29 @@
 {-# LANGUAGE KindSignatures #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE ScopedTypeVariables #-}
-module Stan.ModelConfig where
+
+module Stan.ModelConfig
+  (
+    module Stan.ModelConfig
+  )
+where
 
 import qualified CmdStan as CS
 import qualified CmdStan.Types as CS
 import qualified Knit.Report as K
-import qualified Data.Serialize as Cereal
 import qualified Data.Aeson as A
-import qualified Data.Aeson.Encoding as A
-import qualified Data.Map as M
 import qualified Data.Text as T
 
-data GQNames = GQNames { gqModelName :: Text, gqDataName :: Text} deriving (Show, Eq, Ord)
+data GQNames = GQNames { gqModelName :: Text, gqDataName :: Text} deriving stock (Show, Eq, Ord)
 
 data RunnerInputNames = RunnerInputNames
   { rinModelDir :: Text
   , rinModel :: Text
   , rinGQ :: Maybe GQNames
   , rinData :: Text
-  }  deriving (Show, Ord, Eq)
+  }  deriving stock (Show, Ord, Eq)
 
-data ModelRun = MRNoGQ | MROnlyLL | MRFull deriving (Show, Eq)
+data ModelRun = MRNoGQ | MROnlyLL | MRFull deriving stock (Show, Eq)
 
 -- for merged samples
 llSuffix :: Text
@@ -81,7 +83,7 @@ data StanMCParameters = StanMCParameters
   , smcAdaptDeltaM :: Maybe Double
   , smcMaxTreeDepth :: Maybe Int
   , smcRandomSeed :: Maybe Int
-  } deriving (Show, Eq, Ord)
+  } deriving stock (Show, Eq, Ord)
 
 data StanExeConfigWrapper = MultiThreadedExeConfig CS.StanExeConfig |  SingleThreadedExeConfig (Int -> CS.StanExeConfig)
 
@@ -130,7 +132,7 @@ combinedDataFileName rin = rinData rin <> maybe "" ("_" <>) (gqDataName <$> rinG
 combineData :: K.KnitEffects r => RunnerInputNames -> K.Sem r (K.ActionWithCacheTime r ())
 combineData rin = do
   modelDataDep <- modelDataDependency rin
-  gqDataDependencyM <- gqDataDependency rin
+--  gqDataDependencyM <- gqDataDependency rin
   case gqDataFileName rin of
     Nothing -> return modelDataDep
     Just gqName -> do
@@ -191,7 +193,7 @@ noLogOfSummary sc = sc { mrcLogSummary = False }
 noDiagnose :: ModelRunnerConfig -> ModelRunnerConfig
 noDiagnose sc = sc { mrcRunDiagnose = False }
 
-data InputDataType = ModelData | GQData deriving (Show, Eq, Ord, Enum, Bounded, Generic)
+data InputDataType = ModelData | GQData deriving stock (Show, Eq, Ord, Enum, Bounded, Generic)
 instance Hashable InputDataType
 
 -- produce indexes and json producer from the data as well as a data-set to predict.

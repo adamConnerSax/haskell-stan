@@ -9,7 +9,11 @@
 {-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE TypeFamilies #-}
 
-module Stan.ModelBuilder.Distributions where
+module Stan.ModelBuilder.Distributions
+  (
+    module Stan.ModelBuilder.Distributions
+  )
+where
 
 --import Stan.ModelBuilder.Expressions as SME
 import qualified Stan.ModelBuilder.TypedExpressions.Types as TE

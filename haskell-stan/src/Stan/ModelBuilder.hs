@@ -15,7 +15,7 @@ module Stan.ModelBuilder
 (
   module Stan.ModelBuilder
   , module Stan.ModelBuilder.BuilderTypes
-  , module Stan.ModelBuilder.Expressions
+--  , module Stan.ModelBuilder.Expressions
   , module Stan.ModelBuilder.Distributions
   )
 where
@@ -31,7 +31,7 @@ import Stan.ModelBuilder.TypedExpressions.Statements (StanName)
 import qualified Stan.ModelBuilder.TypedExpressions.Format as TE
 import qualified Stan.ModelBuilder.TypedExpressions.Types as TE
 
-import Stan.ModelBuilder.Expressions
+--import Stan.ModelBuilder.Expressions
 import Stan.ModelBuilder.Distributions
 import Stan.ModelBuilder.BuilderTypes
 
@@ -1080,35 +1080,35 @@ stanBuildMaybe msg = maybe (stanBuildError msg) return
 stanBuildEither :: Either Text a -> StanBuilderM md gq a
 stanBuildEither = either stanBuildError return
 
-getDeclBinding :: IndexKey -> StanBuilderM md gq (TE.LExpr TE.EInt)
+getDeclBinding :: TE.IndexKey -> StanBuilderM md gq (TE.LExpr TE.EInt)
 getDeclBinding k = do
   dbm <- gets (TE.sizes . indexBindings)
   case Map.lookup k dbm of
     Nothing -> stanBuildError $ "declaration key (\"" <> k <> "\") not in binding store."
     Just e -> return e
 
-addDeclBinding' :: IndexKey -> TE.LExpr TE.EInt -> StanBuilderM md gq ()
+addDeclBinding' :: TE.IndexKey -> TE.LExpr TE.EInt -> StanBuilderM md gq ()
 addDeclBinding' k e = modify $ modifyIndexBindings f where
   f lc = lc { TE.sizes = Map.insert k e $ TE.sizes lc}
 
-addDeclBinding :: IndexKey -> TE.StanName -> StanBuilderM md gq ()
+addDeclBinding :: TE.IndexKey -> TE.StanName -> StanBuilderM md gq ()
 addDeclBinding k = addDeclBinding' k . TE.namedLSize
 
-addUseBinding' :: IndexKey -> TE.IndexArrayL -> StanBuilderM md gq ()
+addUseBinding' :: TE.IndexKey -> TE.IndexArrayL -> StanBuilderM md gq ()
 addUseBinding' k e = modify $ modifyIndexBindings f where
   f lc = lc { TE.indexes = Map.insert k e $ TE.indexes lc }
 
-addUseBinding :: IndexKey -> TE.StanName -> StanBuilderM md gq ()
+addUseBinding :: TE.IndexKey -> TE.StanName -> StanBuilderM md gq ()
 addUseBinding k = addUseBinding' k . TE.namedLIndex
 
-getUseBinding :: IndexKey -> StanBuilderM md gq TE.IndexArrayL
+getUseBinding :: TE.IndexKey -> StanBuilderM md gq TE.IndexArrayL
 getUseBinding k = do
   ubm  <- gets (TE.indexes . indexBindings)
   case Map.lookup k ubm of
     Just e -> return e
     Nothing -> stanBuildError $ "getUseBinding: k=" <> show k <> " not found in use-binding map"
 
-addUseBindingToDataSet' :: forall r md gq.RowTypeTag r -> IndexKey -> TE.IndexArrayL -> StanBuilderM md gq ()
+addUseBindingToDataSet' :: forall r md gq.RowTypeTag r -> TE.IndexKey -> TE.IndexArrayL -> StanBuilderM md gq ()
 addUseBindingToDataSet' rtt key e = do
   let dataNotFoundErr = "addUseBindingToDataSet: Data-set \"" <> dataSetName rtt <> "\" not found in StanBuilder.  Maybe you haven't added it yet?"
       bindingChanged newExpr oldExpr = when (not $ TE.eqLExpr newExpr oldExpr)
@@ -1132,7 +1132,7 @@ addUseBindingToDataSet' rtt key e = do
              GQData -> modifyGQRowInfosA f bs
   put bs'
 
-addUseBindingToDataSet :: RowTypeTag r -> IndexKey -> TE.StanName -> StanBuilderM md gq ()
+addUseBindingToDataSet :: RowTypeTag r -> TE.IndexKey -> TE.StanName -> StanBuilderM md gq ()
 addUseBindingToDataSet rtt key = addUseBindingToDataSet' rtt key . TE.namedLIndex
 
 indexBindingScope :: StanBuilderM md gq a -> StanBuilderM md gq a
@@ -1598,7 +1598,7 @@ renameAndWriteIfNotSame gq p modelDir modelName = do
   let fileName d n = T.unpack $ d <> "/" <> n <> ".stan"
       curFile = fileName modelDir modelName
       findAvailableName modelDir' modelName' n = do
-        let newName = fileName modelDir' (modelName' <> "_o" <> T.pack (show n))
+        let newName = fileName modelDir' (modelName' <> "_o" <> T.pack (show (n :: Int)))
         newExists <- Dir.doesFileExist newName
         if newExists then findAvailableName modelDir modelName (n + 1) else return $ T.pack newName
   Say.say "Generating model stan code"

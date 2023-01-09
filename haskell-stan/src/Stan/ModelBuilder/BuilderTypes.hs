@@ -9,7 +9,9 @@
 {-# LANGUAGE TypeFamilies #-}
 
 module Stan.ModelBuilder.BuilderTypes
-
+  (
+    module Stan.ModelBuilder.BuilderTypes
+  )
 where
 
 import qualified Stan.JSON as Stan
