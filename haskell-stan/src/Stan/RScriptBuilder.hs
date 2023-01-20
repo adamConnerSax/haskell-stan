@@ -6,7 +6,11 @@
 {-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE TypeOperators #-}
-module Stan.RScriptBuilder where
+module Stan.RScriptBuilder
+  (
+    module Stan.RScriptBuilder
+  )
+where
 
 
 import qualified Stan.ModelConfig as SC
@@ -30,6 +34,9 @@ type StreamlyS = StreamlyStream SerialT
 
 libsForShinyStan :: [Text]
 libsForShinyStan = ["rstan", "shinystan", "rjson"]
+
+libsForPPC :: [Text]
+libsForPPC = ["rstan", "rjson", "bayesplot"]
 
 libsForLoo :: [Text]
 libsForLoo = ["rstan", "shinystan", "loo", "bayesplot"]
@@ -97,21 +104,24 @@ unwrap :: UnwrapJSON -> T.Text
 unwrap (UnwrapNamed jn rn) = rn <> " <- jsonData $ " <> jn <> "\n"
 unwrap (UnwrapExpr je rn) = rn <> " <- " <> je <> "\n"
 
+unwrapCode :: SC.ModelRunnerConfig -> [UnwrapJSON] -> T.Text
+unwrapCode config unwrapJSONs =
+  if null unwrapJSONs
+  then ""
+  else
+    let unwraps = mconcat $ fmap unwrap unwrapJSONs
+    in rReadJSON config
+       <> "\n"
+       <> unwraps
+
 shinyStanScript :: SC.ModelRun -> SC.ModelRunnerConfig -> [UnwrapJSON] -> T.Text
 shinyStanScript mr config unwrapJSONs =
   let readStanCSV = rReadStanCSV mr config "stanfit"
-      unwrapCode = if null unwrapJSONs
-                   then ""
-                   else
-                     let unwraps = mconcat $ fmap unwrap unwrapJSONs
-                     in rReadJSON config
-                        <> "\n"
-                        <> unwraps
       rScript = addLibs libsForShinyStan
                 <> "\n"
                 <> rMessageText "Loading csv output.  Might take a minute or two..." <> "\n"
                 <> readStanCSV <> "\n"
-                <> unwrapCode
+                <> unwrapCode config unwrapJSONs
 --                <> "stanfit@stanModel <- " <> rStanModel config
                 <> rMessageText "Launching shinystan...." <> "\n"
                 <> "launch_shinystan(stanfit)\n"
@@ -144,6 +154,18 @@ looScript mr config looName nCores =
   let justLoo = looOne mr config "stanfit" (Just looName) nCores
   in addLibs libsForLoo <> justLoo
 
+{-
+ppcScript :: SC.ModelRun -> SC.ModelRunnerConfig -> [UnwrapJSON] -> T.Text
+ppcScript mr config unwrapJSONs =
+  let readSTanCSV = rReadStanCSV mr config "stanfit"
+      rScript = addLibs libsForPPC
+        <> "\n"
+        <> rMessageText "Loading csv output.  Might take a minute or two..." <> "\n"
+        <> readStanCSV <> "\n"
+        <> unwrapCode config unwrapJSONs
+        <> rMessageText "Making PPC charts..."
+        <> "ppc_parms <- extract(stanfit)"
+-}
 
 compareScript ::  Foldable f
               => SC.ModelRun -> f SC.ModelRunnerConfig -> Int -> Maybe Text -> Text

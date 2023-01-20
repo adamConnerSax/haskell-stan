@@ -1605,13 +1605,13 @@ renameAndWriteIfNotSame gq p modelDir modelName = do
   newModel <- case TE.programAsText gq p of
     Right x -> pure x
     Left msg -> X.throwIO $ X.userError $ toString msg
-  Say.say $ "new model is\n" <> newModel
+--  Say.say $ "new model is\n" <> newModel
   Say.say $ "Checking if file=" <> toText curFile <> " exists."
   exists <- Dir.doesFileExist curFile
   if exists then (do
-    Say.say $ "reading file=" <> toText curFile
+--    Say.say $ "reading file=" <> toText curFile
     extant <- T.readFile curFile
-    Say.say $ "read file=" <> toText curFile
+--    Say.say $ "read file=" <> toText curFile
     if extant == newModel then Say.say ("model file:" <> toText curFile <> " exists and is identical to model.") >> return Same else (do
       Say.say $ "model file:" <> T.pack curFile <> " exists and is different. Renaming and writing new model to file."
       newName <- findAvailableName modelDir modelName 1
