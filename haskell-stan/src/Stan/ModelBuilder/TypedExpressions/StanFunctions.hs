@@ -147,7 +147,6 @@ repV_matrix :: (TypeOneOf t '[ECVec, ERVec], GenSType t) => Function EMat '[t, E
 repV_matrix = simpleFunction "rep_matrix"
 {-# INLINEABLE repV_matrix #-}
 
-
 rep_sq_matrix :: Function ESqMat '[EReal, EInt]
 rep_sq_matrix = Function "rep_matrix" SSqMat (SReal ::> SInt ::> TypeNil) f
   where
@@ -158,6 +157,14 @@ rep_sq_matrix = Function "rep_matrix" SSqMat (SReal ::> SInt ::> TypeNil) f
 vecArrayToMatrix :: (TypeOneOf t [ECVec, ERVec], GenSType t) => Function EMat '[EArray1 t]
 vecArrayToMatrix = simpleFunction "to_matrix"
 {-# INLINEABLE vecArrayToMatrix #-}
+
+diagPreMultiply :: Function EMat '[ERVec, EMat]
+diagPreMultiply = simpleFunction "diag_pre_multiply"
+{-# INLINEABLE diagPreMultiply #-}
+
+diagPostMultiply :: Function EMat '[EMat, ECVec]
+diagPostMultiply = simpleFunction "diag_post_multiply"
+{-# INLINEABLE diagPostMultiply #-}
 
 segment :: (IsContainer t, GenSType t) => Function t [t, EInt, EInt]
 segment = simpleFunction "segment"
