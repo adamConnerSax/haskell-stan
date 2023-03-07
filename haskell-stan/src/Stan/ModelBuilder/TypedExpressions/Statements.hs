@@ -70,6 +70,9 @@ complexSpec = DeclSpec StanComplex VNil
 vectorSpec :: UExpr EInt -> [VarModifier UExpr EReal] -> DeclSpec ECVec
 vectorSpec ie = DeclSpec StanVector (ie ::: VNil)
 
+rowVectorSpec :: UExpr EInt -> [VarModifier UExpr EReal] -> DeclSpec ERVec
+rowVectorSpec ie = DeclSpec StanRowVector (ie ::: VNil)
+
 orderedSpec :: UExpr EInt -> [VarModifier UExpr EReal] -> DeclSpec ECVec
 orderedSpec ie = DeclSpec StanOrdered (ie ::: VNil)
 
@@ -81,9 +84,6 @@ simplexSpec ie = DeclSpec StanSimplex (ie ::: VNil)
 
 unitVectorSpec :: UExpr EInt -> [VarModifier UExpr EReal] -> DeclSpec ECVec
 unitVectorSpec ie = DeclSpec StanUnitVector (ie ::: VNil)
-
-rowVectorSpec :: UExpr EInt -> [VarModifier UExpr EReal] -> DeclSpec ERVec
-rowVectorSpec ie = DeclSpec StanRowVector (ie ::: VNil)
 
 matrixSpec :: UExpr EInt -> UExpr EInt -> [VarModifier UExpr EReal] -> DeclSpec EMat
 matrixSpec re ce = DeclSpec StanMatrix (re ::: ce ::: VNil)

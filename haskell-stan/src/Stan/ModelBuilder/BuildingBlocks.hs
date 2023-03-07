@@ -104,7 +104,7 @@ add2dMatrixData :: SB.RowTypeTag r
                 -> SB.MatrixRowFromData r
                 -> Maybe Double
                 -> Maybe Double
-            -> SB.StanBuilderM md gq TE.MatrixE
+                -> SB.StanBuilderM md gq TE.MatrixE
 add2dMatrixData rtt matrixRowFromData mLower mUpper = do
   let cs = maybe [] (pure . TE.lowerM . TE.realE) mLower ++ maybe [] (pure . TE.upperM . TE.realE) mUpper
   SB.add2dMatrixJson rtt matrixRowFromData cs -- (SB.NamedDim $ SB.dataSetName rtt)  --stanType bounds f
@@ -217,28 +217,29 @@ generatePosteriorPrediction :: SB.RowTypeTag r
                             -> SMD.StanDist t pts rts
                             -> TE.CodeWriter (TE.IntE -> TE.ExprList rts)
                             -> SB.StanBuilderM md gq (TE.ArrayE t)
-generatePosteriorPrediction rtt nds sDist psFCW = generatePosteriorPrediction' rtt nds sDist psFCW (const id)
+generatePosteriorPrediction rtt nds sDist psFCW = generatePosteriorPrediction' rtt nds rngE psFCW (const id)
+  where rngE f n = SMD.familyRNG sDist (f n)
 
 generatePosteriorPrediction' :: SB.RowTypeTag r
                              -> TE.NamedDeclSpec (TE.EArray1 t)
-                             -> SMD.StanDist t pts rts
+                             -> ((TE.IntE -> TE.ExprList rts) -> TE.IntE -> TE.UExpr t) --SMD.StanDist t pts rts
                              -> TE.CodeWriter (TE.IntE -> TE.ExprList rts)
                              -> (TE.IntE -> TE.UExpr t -> TE.UExpr t)
                              -> SB.StanBuilderM md gq (TE.ArrayE t)
-generatePosteriorPrediction' rtt nds sDist psFCW f = SB.inBlock SB.SBGeneratedQuantities $ do
+generatePosteriorPrediction' rtt nds rngF psFCW f = SB.inBlock SB.SBGeneratedQuantities $ do
   ppE <- SB.stanDeclareN nds
   SB.addScopedFromCodeWriter $ do
     psF <- psFCW
-    let rngE nE = SMD.familyRNG sDist (psF nE)
     TE.addStmt
       $ TE.for "n" (TE.SpecificNumbered (TE.intE 1) (TE.namedE (SB.dataSetSizeName rtt) TE.SInt))
-      $ \nE -> [TE.sliceE TE.s0 nE ppE `TE.assign` f nE (rngE nE)]
+      $ \nE -> [TE.sliceE TE.s0 nE ppE `TE.assign` f nE (rngF psF nE)]
     return ppE
 
-generatePosteriorPredictionV :: TE.NamedDeclSpec TE.ECVec
-                             -> SMD.StanDist TE.ECVec pts rts
+generatePosteriorPredictionV :: (TE.TypeOneOf t [TE.ECVec, TE.ERVec])
+                             => TE.NamedDeclSpec t
+                             -> SMD.StanDist t pts rts
                              -> TE.ExprList rts
-                             -> SB.StanBuilderM md gq TE.VectorE
+                             -> SB.StanBuilderM md gq (TE.UExpr t)
 generatePosteriorPredictionV nds sDist ps =
   SB.inBlock SB.SBGeneratedQuantities
   $ SB.stanDeclareRHSN nds $ SMD.familyRNG sDist ps
@@ -303,6 +304,20 @@ weightedMeanVarianceFunction = do
     TE.addStmt $ meanVar 2 `TE.assign` (sum (ws `eTimes` y `eTimes` y) `TE.divideE` sum ws)
     return mv
 
+unWeightedMeanVarianceFunction :: SB.StanBuilderM md gq (TE.Function TE.ECVec '[TE.ECVec])
+unWeightedMeanVarianceFunction = do
+  let f :: TE.Function TE.ECVec '[TE.ECVec]
+      f = TE.simpleFunction "unweighted_mean_variance"
+  SB.addFunctionOnce f (TE.Arg "xs" :> TNil)
+    $ \(xs :> TNil) -> TE.writerL $ do
+    _ <- TE.declareRHSW "N" (TE.intSpec []) $ TE.functionE TE.size (xs :> TNil)
+    mv <- TE.declareW "meanVar" (TE.vectorSpec (TE.intE 2) [])
+    let meanVar i = TE.sliceE TE.s0 (TE.intE i) mv
+    TE.addStmt $ meanVar 1 `TE.assign` TE.functionE TE.mean (xs :> TNil)
+    TE.addStmt $ meanVar 2 `TE.assign` TE.functionE TE.variance (xs :> TNil)
+    return mv
+
+{-
 unWeightedMeanVarianceFunction :: SB.StanBuilderM md gq (TE.Function TE.ECVec [TE.ECVec, TE.ECVec])
 unWeightedMeanVarianceFunction = do
   let f :: TE.Function TE.ECVec [TE.ECVec, TE.ECVec]
@@ -315,6 +330,7 @@ unWeightedMeanVarianceFunction = do
     TE.addStmt $ meanVar 1 `TE.assign` TE.functionE TE.mean (xs :> TNil)
     TE.addStmt $ meanVar 2 `TE.assign` TE.functionE TE.variance (xs :> TNil)
     return mv
+-}
 
 realIntRatio :: TE.UExpr TE.EInt -> TE.UExpr TE.EInt -> TE.UExpr TE.EReal
 realIntRatio k l = let f x = (TE.realE 1 `TE.timesE` x) in f k `TE.divideE` f l

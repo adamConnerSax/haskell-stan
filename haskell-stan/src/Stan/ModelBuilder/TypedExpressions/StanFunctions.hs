@@ -62,10 +62,13 @@ abs :: VectorizedReal t => Function t '[t]
 abs = simpleFunction "abs"
 {-# INLINEABLE abs #-}
 
-
 mean :: (TypeOneOf t [ECVec, ERVec, EMat, ESqMat], GenSType t) => Function EReal '[t]
 mean = simpleFunction "mean"
 {-# INLINEABLE mean #-}
+
+sd :: (TypeOneOf t [ECVec, ERVec, EMat, ESqMat], GenSType t) => Function EReal '[t]
+sd = simpleFunction "sd"
+{-# INLINEABLE sd #-}
 
 variance :: (TypeOneOf t [ECVec, ERVec, EMat, ESqMat], GenSType t) => Function EReal '[t]
 variance = simpleFunction "variance"
@@ -298,22 +301,57 @@ lognormalS_rng :: (TypeOneOf t [EReal, ECVec, ERVec], GenSType t) => Function t 
 lognormalS_rng = simpleFunction "lognormal_rng"
 {-# INLINEABLE lognormalS_rng #-}
 
-
-cauchy :: (TypeOneOf t [EReal, ECVec], GenSType t) => Density t '[t, t]
+cauchy :: (TypeOneOf t [EReal, ECVec, ERVec], GenSType t) => Density t '[t, t]
 cauchy = simpleDensity "cauchy"
 {-# INLINEABLE cauchy #-}
 
-cauchy_lpdf :: (TypeOneOf t [EReal, ECVec], GenSType t) => Density t '[t, t]
+cauchy_lpdf :: (TypeOneOf t [EReal, ECVec, ERVec], GenSType t) => Density t '[t, t]
 cauchy_lpdf = simpleDensity "cauchy_lpdf"
 {-# INLINEABLE cauchy_lpdf #-}
 
-cauchy_lupdf :: (TypeOneOf t [EReal, ECVec], GenSType t) => Density t '[t, t]
+cauchy_lupdf :: (TypeOneOf t [EReal, ECVec, ERVec], GenSType t) => Density t '[t, t]
 cauchy_lupdf = simpleDensity "cauchy_lupdf"
 {-# INLINEABLE cauchy_lupdf #-}
 
-cauchy_rng :: (TypeOneOf t [EReal, ECVec], GenSType t) => Function t '[t, t]
+cauchy_rng :: (TypeOneOf t [EReal, ECVec, ERVec], GenSType t) => Function t '[t, t]
 cauchy_rng = simpleFunction "cauchy_rng"
 {-# INLINEABLE cauchy_rng #-}
+
+student_t :: (TypeOneOf t [EReal, ECVec, ERVec], GenSType t) => Density t '[t, t, t]
+student_t = simpleDensity "student_t"
+{-# INLINEABLE student_t #-}
+
+student_t_lpdf :: (TypeOneOf t [EReal, ECVec, ERVec], GenSType t) => Density t '[t, t, t]
+student_t_lpdf = simpleDensity "student_t_lpdf"
+{-# INLINEABLE student_t_lpdf #-}
+
+student_t_lupdf :: (TypeOneOf t [EReal, ECVec, ERVec], GenSType t) => Density t '[t, t, t]
+student_t_lupdf = simpleDensity "student_t_lupdf"
+{-# INLINEABLE student_t_lupdf #-}
+
+student_t_rng :: (TypeOneOf t [EReal, ECVec, ERVec], GenSType t) => Function t '[t, t, t]
+student_t_rng = simpleFunction "student_t_rng"
+{-# INLINEABLE student_t_rng #-}
+
+gamma :: (TypeOneOf t [EReal, ECVec, ERVec], GenSType t) => Density t '[t, t]
+gamma = simpleDensity "gamma"
+{-# INLINEABLE gamma #-}
+
+gamma_lpdf :: (TypeOneOf t [EReal, ECVec, ERVec], GenSType t) => Density t '[t, t]
+gamma_lpdf = simpleDensity "gammy_lpdf"
+{-# INLINEABLE gamma_lpdf #-}
+
+gamma_lupdf :: (TypeOneOf t [EReal, ECVec, ERVec], GenSType t) => Density t '[t, t]
+gamma_lupdf = simpleDensity "gamma_lupdf"
+{-# INLINEABLE gamma_lupdf #-}
+
+gamma_rng :: (TypeOneOf t [EReal, ECVec, ERVec], GenSType t) => Function t '[t, t]
+gamma_rng = simpleFunction "gamma_rng"
+{-# INLINEABLE gamma_rng #-}
+
+
+
+
 
 type BinDensityC t t' = (TypeOneOf t [EArray1 EInt, EInt], GenSType t
                         , TypeOneOf t' [EArray1 EReal, ECVec, EReal], ScalarType t' ~ EReal, GenSType t'

@@ -5,6 +5,7 @@
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE OverloadedRecordDot #-}
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TupleSections #-}
@@ -55,6 +56,7 @@ import qualified Say
 import qualified System.Directory as Dir
 import Stan.ModelConfig (InputDataType(..))
 import qualified Stan.ModelConfig as SC
+--import qualified Stan.ModelBuilder as mrfd
 
 {-
 stanCodeToStanModel :: StanCode -> StanModel
@@ -145,7 +147,7 @@ makeIndexMapF :: MakeIndex r k -> Foldl.Fold r (IndexMap r k)
 makeIndexMapF (GivenIndex m h) = pure $ mapToIndexMap h m
 makeIndexMapF (FoldToIndex fld h) = fmap (mapToIndexMap h) fld
 
-makeIndexFromEnum :: forall k r.(Enum k, Bounded k, Ord k) => (r -> k) -> MakeIndex r k
+makeIndexFromEnum :: forall k r . (Enum k, Bounded k, Ord k) => (r -> k) -> MakeIndex r k
 makeIndexFromEnum h = GivenIndex m h where
   allKs = [minBound..maxBound]
   m = Map.fromList $ zip allKs [1..]
@@ -262,7 +264,7 @@ getGroupIndexVar rtt gtt = do
   let vName = groupIndexVarName rtt gtt
       dsNotFoundErr = stanBuildError
                       $ "getGroupIndexVar: data-set=" <> dataSetName rtt <> " (input type=" <> show (inputDataType rtt) <> ") not found."
-      varIfGroup :: forall x d.RowInfo d x -> StanBuilderM md gq (TE.UExpr TE.EIndexArray)
+      varIfGroup :: forall x d . RowInfo d x -> StanBuilderM md gq (TE.UExpr TE.EIndexArray)
       varIfGroup ri =
         let (GroupIndexes gis) = groupIndexes ri
         in case DHash.lookup gtt gis of
@@ -545,7 +547,7 @@ dumpBuilderState bs = -- (BuilderState dvs ibs ris js hf c) =
 
 --getRowInfo :: InputDataType -> RowTypeTag r
 
-withRowInfo :: StanBuilderM md gq y -> (forall x.RowInfo x r -> StanBuilderM md gq y) -> RowTypeTag r -> StanBuilderM md gq y
+withRowInfo :: StanBuilderM md gq y -> (forall x . RowInfo x r -> StanBuilderM md gq y) -> RowTypeTag r -> StanBuilderM md gq y
 withRowInfo missing presentF rtt =
   case inputDataType rtt of
     ModelData -> do
@@ -811,7 +813,7 @@ addGroupIndexForData gtt rtt mkIndex = withRowInfoMakers f idt where
           let newRims = DHash.insert rtt (GroupIndexAndIntMapMakers tf (GroupIndexMakers $ DHash.insert gtt mkIndex gims) gimbs) rowInfoMakers
           return (Just newRims, ())
 
-addGroupIndexForModelCrosswalk :: forall k r md gq.Typeable k
+addGroupIndexForModelCrosswalk :: forall k r md gq . Typeable k
                                => RowTypeTag r
                                -> MakeIndex r k
                                -> StanGroupBuilderM md gq ()
@@ -925,7 +927,7 @@ intMapsFromRowInfos rowInfos d =
       f d' (RowInfo (ToFoldable h) _ _ gims _) = Foldl.foldM (intMapsForDataSetFoldM gims) (h d')
   in DHash.traverse (f d) rowInfos
 
-addModelDataSet :: forall md gq r.Typeable r
+addModelDataSet :: forall md gq r . Typeable r
                 => Text
                 -> ToFoldable md r
                 -> StanBuilderM md gq (RowTypeTag r)
@@ -1034,7 +1036,7 @@ gqRowInfo rtt = do
     Nothing -> stanBuildError $ "gqRowInfo: data-set=" <> dataSetName rtt <> " not found in " <> show (inputDataType rtt) <> " rowBuilders."
     Just ri -> return ri
 
-indexMap :: forall r k md gq.RowTypeTag r -> GroupTypeTag k -> StanBuilderM md gq (IndexMap r k)
+indexMap :: forall r k md gq . RowTypeTag r -> GroupTypeTag k -> StanBuilderM md gq (IndexMap r k)
 indexMap rtt gtt = withRowInfo err f rtt where
   err = stanBuildError $ "ModelBuilder.indexMap: \"" <> dataSetName rtt <> "\" not present in row builders."
   f :: forall x. RowInfo x r -> StanBuilderM md gq (IndexMap r k)
@@ -1108,7 +1110,7 @@ getUseBinding k = do
     Just e -> return e
     Nothing -> stanBuildError $ "getUseBinding: k=" <> show k <> " not found in use-binding map"
 
-addUseBindingToDataSet' :: forall r md gq.RowTypeTag r -> TE.IndexKey -> TE.IndexArrayL -> StanBuilderM md gq ()
+addUseBindingToDataSet' :: forall r md gq . RowTypeTag r -> TE.IndexKey -> TE.IndexArrayL -> StanBuilderM md gq ()
 addUseBindingToDataSet' rtt key e = do
   let dataNotFoundErr = "addUseBindingToDataSet: Data-set \"" <> dataSetName rtt <> "\" not found in StanBuilder.  Maybe you haven't added it yet?"
       bindingChanged newExpr oldExpr = when (not $ TE.eqLExpr newExpr oldExpr)
@@ -1351,24 +1353,23 @@ addColumnMJsonOnce rtt ndsF toMX = do
 -- NB: name has to be unique so it can also be the suffix of the num columns.  Presumably the name carries the data-set suffix if nec.
 data MatrixRowFromData r = MatrixRowFromData { rowName :: Text, colIndexM :: Maybe TE.IndexKey, rowLength :: Int, rowVec :: r -> VU.Vector Double }
 
+mrfdColumnsName :: MatrixRowFromData r -> TE.StanName
+mrfdColumnsName mrfd = "K_" <> fromMaybe mrfd.rowName mrfd.colIndexM
+
+mrfdColumnsE :: MatrixRowFromData r -> TE.IntE
+mrfdColumnsE mrfd = TE.namedE (mrfdColumnsName mrfd) TE.SInt
+
 add2dMatrixJson :: RowTypeTag r
                 -> MatrixRowFromData r
                 -> [TE.VarModifier TE.UExpr TE.EReal]
 --                -> TE.UExpr TE.EInt -- row dimension
                 -> StanBuilderM md gq (TE.UExpr TE.EMat)
-add2dMatrixJson rtt (MatrixRowFromData tName cIndexM cols vecF) cs = do
+add2dMatrixJson rtt mrfd@(MatrixRowFromData tName _ cols vecF) cs = do
   let dsName = dataSetName rtt
       wdName = tName <> underscoredIf dsName
+      colName = mrfdColumnsName mrfd
       ndsF rowsE = TE.NamedDeclSpec wdName $ TE.matrixSpec rowsE (TE.namedE colName TE.SInt) cs
-      colIndex = fromMaybe tName cIndexM
-      colName = "K" <> "_" <> colIndex
---      colDimName = colIndex <> "_Cols"
---      colDimVar = SME.StanVar colIndex SME.StanInt
   _ <- addFixedIntJson' (inputDataType rtt) colName Nothing cols
---  addDeclBinding' colDimName (SME.name colName)
---  addDeclBinding colDimName colName
---  addUseBindingToDataSet rtt colDimName (SME.name colName)
---  addUseBindingToDataSet rtt colDimName colIndex
   addColumnJson rtt ndsF vecF
 
 modifyCode' :: (TE.StanProgram -> TE.StanProgram) -> BuilderState md gq -> BuilderState md gq

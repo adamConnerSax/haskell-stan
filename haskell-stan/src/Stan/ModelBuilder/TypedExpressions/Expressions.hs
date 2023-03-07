@@ -264,6 +264,7 @@ type ArrayE t = UExpr (EArray1 t)
 type IntArrayE = ArrayE EInt
 type RealArrayE = ArrayE EReal
 type VectorE = UExpr ECVec
+type RVectorE = UExpr ERVec
 type MatrixE = UExpr EMat
 
 {-

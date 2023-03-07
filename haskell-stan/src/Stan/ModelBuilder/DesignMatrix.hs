@@ -86,6 +86,11 @@ rowLengthF :: FL.Fold (DesignMatrixRowPart r) Int
 rowLengthF = FL.premap dmrpLength FL.sum
 {-# INLINEABLE rowLengthF #-}
 
+rowLength :: DesignMatrixRow r -> Int
+rowLength = FL.fold rowLengthF . dmParts
+{-# INLINEABLE rowLength #-}
+
+
 rowFuncF :: FL.Fold (DesignMatrixRowPart r) (r -> V.Vector Double)
 rowFuncF = appConcat . sequenceA <$> FL.premap dmrpVecF FL.list
   where appConcat g r = V.concat (g r)
@@ -418,8 +423,8 @@ centerDataMatrix dms m mwgtsV namePrefix = do
   vecMVF <- case mwgtsV of
     Nothing -> do
       mvF <- SBB.unWeightedMeanVarianceFunction
-      let dummyVecE = TE.namedE "dummyVec" TE.SCVec
-      return $ \mc -> TE.functionE mvF (dummyVecE :> mc :> TNil)
+--      let dummyVecE = TE.namedE "dummyVec" TE.SCVec
+      return $ \mc -> TE.functionE mvF (mc :> TNil)
     Just wgtsV -> do
       mvF <- SBB.weightedMeanVarianceFunction
       return $ \mc -> TE.functionE mvF (wgtsV :> mc :> TNil)

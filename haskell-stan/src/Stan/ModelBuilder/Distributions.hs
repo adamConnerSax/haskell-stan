@@ -8,6 +8,7 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE TypeFamilies #-}
+{-# LANGUAGE TypeOperators #-}
 
 module Stan.ModelBuilder.Distributions
   (
@@ -53,6 +54,13 @@ familyLUDF (StanDist _ _ _ ludf _ ) = ludf
 familyRNG :: StanDist t ts rs -> TE.ExprList rs -> TE.UExpr t
 familyRNG (StanDist _ _ _ _ rng ) = rng
 
+applyToDist :: TE.UExpr x -> StanDist t (x ': xs) (x ': ys) -> StanDist t xs ys
+applyToDist x (StanDist dt s ld lu rng) =
+  StanDist dt
+  (\t xs -> s t (x :> xs))
+  (\t xs -> ld t (x :> xs))
+  (\t xs -> lu t (x :> xs))
+  (\rs -> rng (x :> rs))
 
 normalDist :: forall t.(TE.TypeOneOf t [TE.EReal, TE.ECVec, TE.ERVec], TE.GenSType t) => SimpleDist t '[t, t]
 normalDist = StanDist Continuous sample lpdf lupdf rng
@@ -65,7 +73,6 @@ normalDist = StanDist Continuous sample lpdf lupdf rng
       TE.SCVec -> TE.functionE TE.to_vector (TE.functionE TE.normal_rng ps :> TNil) -- why does the stan version return array[] real??
       TE.SRVec -> TE.functionE TE.to_row_vector (TE.functionE TE.normal_rng ps :> TNil) -- why does the stan version return array[] real??
 
-
 scalarNormalDist :: (TE.TypeOneOf t [TE.EReal, TE.ECVec, TE.ERVec], TE.GenSType t) => SimpleDist t '[TE.EReal, TE.EReal]
 scalarNormalDist = StanDist Continuous sample lpdf lupdf rng
   where
@@ -74,6 +81,28 @@ scalarNormalDist = StanDist Continuous sample lpdf lupdf rng
     lupdf = TE.densityE TE.normalS_lupdf
     rng = TE.functionE TE.normalS_rng
 
+cauchyDist :: forall t.(TE.TypeOneOf t [TE.EReal, TE.ECVec, TE.ERVec], TE.GenSType t) => SimpleDist t '[t, t]
+cauchyDist = StanDist Continuous sample lpdf lupdf rng
+  where
+    sample x = TE.sample x TE.cauchy
+    lpdf = TE.densityE TE.cauchy_lpdf
+    lupdf = TE.densityE TE.cauchy_lupdf
+    rng ps = case TE.genSType @t of
+      TE.SReal -> TE.functionE TE.cauchy_rng ps
+      TE.SCVec -> TE.functionE TE.to_vector (TE.functionE TE.cauchy_rng ps :> TNil)
+      TE.SRVec -> TE.functionE TE.to_row_vector (TE.functionE TE.cauchy_rng ps :> TNil)
+
+
+studentTDist :: forall t.(TE.TypeOneOf t [TE.EReal, TE.ECVec, TE.ERVec], TE.GenSType t) => SimpleDist t '[t, t, t]
+studentTDist = StanDist Continuous sample lpdf lupdf rng
+  where
+    sample x = TE.sample x TE.student_t
+    lpdf = TE.densityE TE.student_t_lpdf
+    lupdf = TE.densityE TE.student_t_lupdf
+    rng ps = case TE.genSType @t of
+      TE.SReal -> TE.functionE TE.student_t_rng ps
+      TE.SCVec -> TE.functionE TE.to_vector (TE.functionE TE.student_t_rng ps :> TNil)
+      TE.SRVec -> TE.functionE TE.to_row_vector (TE.functionE TE.student_t_rng ps :> TNil)
 
 binomialDist' :: TE.BinDensityC t t' => Bool -> SimpleDist t '[t, t']
 binomialDist' sampleWithConstants = StanDist Discrete sample lpmf lupmf rng
