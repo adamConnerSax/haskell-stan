@@ -1,6 +1,7 @@
 {-# LANGUAGE ConstraintKinds #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE StrictData #-}
 module Stan.SamplerCSV where
 
 import Prelude hiding (many, some)
@@ -124,7 +125,7 @@ addReplaceGQToSamplerCSV gq s = do
       (newHeader, colChoices) = unzip $ fmap dropIndex $ sortOn index $ Map.toList colChoiceMap
   slices <- traverse (either (samplerSamples s M.<!?) (gqSamples gq M.<!?)) colChoices
   newSamples <- M.computeAs M.U <$> M.stackSlicesM 1 slices
-  return $ s { samplerHeader = newHeader, samplerSamples = newSamples}
+  pure $ s { samplerHeader = newHeader, samplerSamples = newSamples}
 {-# INLINEABLE addReplaceGQToSamplerCSV #-}
 
 appendGQsToSamplerCSV :: FilePath -> FilePath -> FilePath -> IO ()

@@ -1,3 +1,4 @@
+{-# LANGUAGE CPP #-}
 {-# LANGUAGE AllowAmbiguousTypes #-}
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE FlexibleContexts #-}
@@ -22,15 +23,23 @@ import qualified Data.Text as T
 import qualified Frames as F
 import qualified Frames.Streamly.CSV as FStreamly
 import qualified Frames.Streamly.InCore as FStreamly
-import Frames.Streamly.Streaming.Streamly (StreamlyStream(..), SerialT)
+import Frames.Streamly.Streaming.Streamly (StreamlyStream(..))
 import qualified System.Process as Process
+#if MIN_VERSION_streamly(0,9,0)
+import qualified Streamly.Data.Stream as Streamly
+#else
 import qualified Streamly.Prelude as Streamly
+#endif
 import qualified Text.Printf as Printf
 import qualified Knit.Report as K
 
+#if MIN_VERSION_streamly(0,9,0)
+type Stream = Streamly.Stream
+#else
+type Stream = Streamly.SerialT
+#endif
 
-
-type StreamlyS = StreamlyStream SerialT
+type StreamlyS = StreamlyStream Stream
 
 libsForShinyStan :: [Text]
 libsForShinyStan = ["rstan", "shinystan", "rjson"]
@@ -207,7 +216,11 @@ compareModels mr configs nCores = do
                                  $ FStreamly.inCoreAoS @_ @_ @StreamlyS
                                  $ FStreamly.streamTable
                                  $ StreamlyStream
+#if MIN_VERSION_streamly(0,9,0)
+                                 $ fmap (T.split (== ','))
+#else
                                  $ Streamly.map (T.split (== ','))
+#endif
                                  $ Streamly.drop 1 sRText
   -- map results to models
   let resultModelMap :: Map Text Text = M.fromList $ zip ((\n -> "model" <> show (n :: Int)) <$> [1..]) (Foldl.fold (Foldl.premap fst Foldl.list) configs)

@@ -20,6 +20,8 @@ import qualified Data.Vector as V
 import qualified Data.Text as T
 import qualified Text.Read as R
 
+{- NB: These parsing/indexing setups use indexing from 1 to match Stan -}
+
 import GHC.TypeLits as TE
 
 data Dim = D0 | D1 | D2 | D3 | D4
