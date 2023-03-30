@@ -30,7 +30,7 @@ import Prelude hiding (Nat)
 import qualified Data.Vec.Lazy as Vec
 import qualified Data.Type.Nat as DT
 
-import Data.Type.Equality ((:~:)(Refl), TestEquality(testEquality), type (~))
+import Data.Type.Equality ((:~:)(Refl), TestEquality(testEquality))
 
 type IndexKey = Text
 
@@ -109,7 +109,7 @@ instance TR.HTraversable LExprF where
     LUnaryOp suo ata -> LUnaryOp suo <$> nat ata
     LBinaryOp sbo ata atb -> LBinaryOp sbo <$> nat ata <*> nat atb
     LCond c ifTrue ifFalse -> LCond <$> nat c <*> nat ifTrue <*> nat ifFalse
-    LSlice sn a at -> LSlice sn <$> nat a <*> nat at
+    LSlice sn a at' -> LSlice sn <$> nat a <*> nat at'
     LIndex n re e -> LIndex n <$> nat re <*> nat e
 --    LLam f arg -> LLam <$> nat f <*> nat arg
 --    LRangeIndex n le ue e -> LRangeIndex n <$> traverse nat le <*> traverse nat ue <*> nat e
@@ -226,6 +226,10 @@ condE ce te fe = TR.IFix $ UL $ LCond ce te fe
 sliceE :: SNat n -> UExpr EInt -> UExpr t -> UExpr (Sliced n t)
 sliceE sn ie e = TR.IFix $ UL $ LSlice sn ie e
 
+at :: UExpr t -> UExpr EInt -> UExpr (Sliced N0 t)
+at x n = sliceE s0 n x
+{-# INLINEABLE at #-}
+
 indexE :: SNat n -> UExpr EIndexArray -> UExpr t -> UExpr (Indexed n t)
 indexE sn ie e = TR.IFix $ UL $ LIndex sn ie e
 
@@ -266,6 +270,22 @@ type RealArrayE = ArrayE EReal
 type VectorE = UExpr ECVec
 type RVectorE = UExpr ERVec
 type MatrixE = UExpr EMat
+
+mRow :: IntE -> MatrixE -> RVectorE
+mRow = flip at
+{-# INLINEABLE mRow #-}
+
+atRow :: MatrixE -> IntE -> RVectorE
+atRow = at
+{-# INLINEABLE atRow #-}
+
+mCol :: IntE -> MatrixE -> VectorE
+mCol = sliceE s1
+{-# INLINEABLE mCol #-}
+
+atCol :: MatrixE -> IntE -> VectorE
+atCol = flip mCol
+{-# INLINEABLE atCol #-}
 
 {-
 data ContainerOf v a where

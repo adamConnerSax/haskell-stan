@@ -186,7 +186,7 @@ data BuildParameter :: TE.EType -> Type where
                  -> BuildParameter t
   TransformedP :: TE.NamedDeclSpec t
                -> [FunctionToDeclare]
-               -> Parameters qs -- paramters for transformation
+               -> Parameters qs -- parameters for transformation
                -> (TE.ExprList qs -> DeclCode t) -- code for transformed parameters block
                -> Parameters rs -- parameters for prior (if nec)
                -> (TE.ExprList rs -> TE.UExpr t -> TE.CodeWriter ()) -- prior in model block (if nec)
@@ -199,7 +199,7 @@ data BuildParameter :: TE.EType -> Type where
 
 simpleTransformedP :: TE.NamedDeclSpec t
                    -> [FunctionToDeclare]
-                   -> Parameters qs -- paramters for transformation
+                   -> Parameters qs -- parameters for transformation
                    -> (TE.ExprList qs -> DeclCode t) -- code for transformed parameters blockBuildParameter t
                    -> BuildParameter t
 simpleTransformedP nds ftd ps declCodeF = TransformedP nds ftd ps declCodeF TE.TNil (\_ _ -> pure ())
