@@ -287,6 +287,10 @@ atCol :: MatrixE -> IntE -> VectorE
 atCol = flip mCol
 {-# INLINEABLE atCol #-}
 
+mAt :: MatrixE -> IntE -> IntE -> RealE
+mAt m r c = mRow r m `at` c
+{-# INLINEABLE mAt #-}
+
 {-
 data ContainerOf v a where
   InnerSliceable :: Sliced N0 v ~ a => UExpr v -> ContainerOf v a

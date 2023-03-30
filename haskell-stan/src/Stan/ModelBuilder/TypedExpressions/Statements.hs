@@ -167,21 +167,32 @@ sample = SSample
 sampleW :: UExpr t -> DensityWithArgs t  -> UStmt
 sampleW ue (DensityWithArgs d al)= SSample ue d al
 
+type family ForEachSlice (a :: EType) where
+  ForEachSlice EInt = EInt -- required for looping over ranges. But Ick.
+  ForEachSlice ECVec = EInt
+  ForEachSlice ERVec = EInt
+  ForEachSlice EMat = EInt
+  ForEachSlice ESqMat = EInt
+  ForEachSlice (EArray m t) = Sliced N0 (EArray m t)
 
-data ForType t = SpecificNumbered (UExpr EInt) (UExpr EInt)
-               | IndexedLoop IndexKey
-               | SpecificIn (UExpr t)
-               | IndexedIn IndexKey (UExpr t)
+data ForType t where
+  SpecificNumbered :: UExpr EInt -> UExpr EInt -> ForType EInt
+  IndexedLoop :: IndexKey -> ForType EInt
+  SpecificIn :: UExpr t -> ForType t
+  IndexedIn :: IndexKey -> UExpr t -> ForType t
 
-for :: Traversable f => Text -> ForType t -> (UExpr EInt -> f UStmt) -> UStmt
+for :: forall t f . (Traversable f, GenSType (ForEachSlice t)) => Text -> ForType t -> (UExpr (ForEachSlice t) -> f UStmt) -> UStmt
 for loopCounter ft bodyF = case ft of
   SpecificNumbered se' ee' -> SFor loopCounter se' ee' $ bodyF loopCounterE
   IndexedLoop ik -> SFor loopCounter (intE 1) (namedSizeE ik) $ bodyF loopCounterE --bodyWithLoopCounterContext ik
   SpecificIn e -> SForEach loopCounter e $ bodyF loopCounterE
   IndexedIn _ e -> SForEach loopCounter e $ bodyF loopCounterE --bodyWithLoopCounterContext ik
   where
-    loopCounterE = namedE loopCounter SInt
+    loopCounterE = namedE loopCounter $ genSType @(ForEachSlice t)
 --    bodyWithLoopCounterContext ik = SContext (Just $ insertUseBinding ik (lNamedE loopCounter SInt)) body :| []
+
+loopOver :: (Traversable f, GenSType (ForEachSlice t)) => UExpr t -> Text -> (UExpr (ForEachSlice t) -> f UStmt) -> UStmt
+loopOver container loopVarName = for loopVarName (SpecificIn container)
 
 ifThen :: UExpr EBool -> UStmt -> UStmt -> UStmt
 ifThen ce sTrue = SIfElse $ (ce, sTrue) :| []
