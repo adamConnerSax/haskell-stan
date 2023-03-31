@@ -34,6 +34,11 @@ data TypeList :: [EType] -> Type where
 
 infixr 2 ::>
 
+type family MapTypeList (f :: EType -> EType) (tl :: [EType]) :: [EType] where
+  MapTypeList _ '[] = '[]
+  MapTypeList f (et ': ets) = f et ': MapTypeList f ets
+
+
 instance TestEquality TypeList where
   testEquality TypeNil TypeNil = Just Refl
   testEquality (sta ::> as) (stb ::> bs) = do

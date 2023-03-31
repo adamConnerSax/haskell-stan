@@ -230,6 +230,10 @@ at :: UExpr t -> UExpr EInt -> UExpr (Sliced N0 t)
 at x n = sliceE s0 n x
 {-# INLINEABLE at #-}
 
+slice0 :: UExpr EInt -> UExpr t -> UExpr (Sliced N0 t)
+slice0 = sliceE s0
+{-# INLINEABLE slice0 #-}
+
 indexE :: SNat n -> UExpr EIndexArray -> UExpr t -> UExpr (Indexed n t)
 indexE sn ie e = TR.IFix $ UL $ LIndex sn ie e
 

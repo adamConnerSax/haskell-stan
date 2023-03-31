@@ -167,7 +167,7 @@ sample = SSample
 sampleW :: UExpr t -> DensityWithArgs t  -> UStmt
 sampleW ue (DensityWithArgs d al)= SSample ue d al
 
-type family ForEachSlice (a :: EType) where
+type family ForEachSlice (a :: EType) :: EType where
   ForEachSlice EInt = EInt -- required for looping over ranges. But Ick.
   ForEachSlice ECVec = EInt
   ForEachSlice ERVec = EInt
@@ -181,6 +181,9 @@ data ForType t where
   SpecificIn :: UExpr t -> ForType t
   IndexedIn :: IndexKey -> UExpr t -> ForType t
 
+data VarAndForType t where
+  VarAndForType :: GenSType (ForEachSlice t) => Text -> ForType t -> VarAndForType t
+
 for :: forall t f . (Traversable f, GenSType (ForEachSlice t)) => Text -> ForType t -> (UExpr (ForEachSlice t) -> f UStmt) -> UStmt
 for loopCounter ft bodyF = case ft of
   SpecificNumbered se' ee' -> SFor loopCounter se' ee' $ bodyF loopCounterE
@@ -193,6 +196,26 @@ for loopCounter ft bodyF = case ft of
 
 loopOver :: (Traversable f, GenSType (ForEachSlice t)) => UExpr t -> Text -> (UExpr (ForEachSlice t) -> f UStmt) -> UStmt
 loopOver container loopVarName = for loopVarName (SpecificIn container)
+{-# INLINEABLE loopOver #-}
+
+ftSized :: UExpr EInt -> ForType EInt
+ftSized = SpecificNumbered (intE 1)
+
+loopSized :: Traversable f => UExpr EInt -> Text -> (UExpr EInt -> f UStmt) -> UStmt
+loopSized nE loopVarName = for loopVarName $ ftSized nE
+{-# INLINEABLE loopSized #-}
+
+type family ForEachSliceArgs (tl :: [EType]) :: [EType] where
+  ForEachSliceArgs '[] = '[]
+  ForEachSliceArgs (et ': ets) = ForEachSlice et ': ForEachSliceArgs ets
+
+vftSized :: Text -> UExpr EInt -> VarAndForType EInt
+vftSized lvn = VarAndForType lvn . ftSized
+
+nestedLoops :: Traversable f => TypedList VarAndForType ts -> (ExprList (ForEachSliceArgs ts) -> f UStmt) -> UStmt
+nestedLoops TNil f = scoped $ f TNil
+nestedLoops (VarAndForType vln ft :> TNil) f = for vln ft $ \e -> f (e :> TNil)
+nestedLoops (VarAndForType vln ft :> vfts) f = let g e es = f (e :> es) in for vln ft $ \e -> [nestedLoops vfts (g e)]
 
 ifThen :: UExpr EBool -> UStmt -> UStmt -> UStmt
 ifThen ce sTrue = SIfElse $ (ce, sTrue) :| []

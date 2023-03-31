@@ -57,7 +57,7 @@ runModel' :: forall st cd md gq b c r.
           -> K.ActionWithCacheTime r gq
           -> K.Sem r (K.ActionWithCacheTime r c)
 runModel' cacheDirE configE dataWrangler stanProgram resultAction rScripts modelData_C gqData_C =
-  K.wrapPrefix "haskell-stan-test.runModel'" $ do
+  K.wrapPrefix "runModel'" $ do
   K.logLE K.Diagnostic "building config"
   (rin, stanConfig) <- case configE of
     Left mrc -> pure (SC.mrcInputNames mrc, mrc)
