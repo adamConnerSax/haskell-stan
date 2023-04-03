@@ -41,7 +41,6 @@ import qualified Relude.Extra as Relude
 import qualified Stan.ModelBuilder.TypedExpressions.Program as TE
 import qualified Stan.ModelBuilder.TypedExpressions.DAG as DAG
 
-
 -- simplified runner for common cases
 runModel' :: forall st cd md gq b c r.
              (SC.KnitStan st cd r
@@ -49,6 +48,7 @@ runModel' :: forall st cd md gq b c r.
              )
           => Either Text Text
           -> Either SC.ModelRunnerConfig SC.RunnerInputNames
+          -> Maybe SC.StanMCParameters
           -> SC.DataWrangler md gq b ()
           -> TE.StanProgram
           -> SC.ResultAction r md gq b () c
@@ -56,7 +56,7 @@ runModel' :: forall st cd md gq b c r.
           -> K.ActionWithCacheTime r md
           -> K.ActionWithCacheTime r gq
           -> K.Sem r (K.ActionWithCacheTime r c)
-runModel' cacheDirE configE dataWrangler stanProgram resultAction rScripts modelData_C gqData_C =
+runModel' cacheDirE configE mStanParams dataWrangler stanProgram resultAction rScripts modelData_C gqData_C =
   K.wrapPrefix "runModel'" $ do
   K.logLE K.Diagnostic "building config"
   (rin, stanConfig) <- case configE of
@@ -70,7 +70,7 @@ runModel' cacheDirE configE dataWrangler stanProgram resultAction rScripts model
         <$> makeDefaultModelRunnerConfig @st @cd
         rin'
         (Just (SB.All, stanProgram))
-        (SC.StanMCParameters 4 4 Nothing Nothing Nothing Nothing (Just 1))
+        (fromMaybe (SC.StanMCParameters 4 4 Nothing Nothing Nothing Nothing (Just 1)) mStanParams)
         (Just stancConfig)
       pure (rin', stanConfig)
   let outputLabel = SC.rinModel rin  <> "_" <> SC.rinData rin <> maybe "" ("_" <>) (SC.gqDataName <$> SC.rinGQ rin)

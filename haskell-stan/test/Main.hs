@@ -54,6 +54,7 @@ runMatchupsModel clearCaches matchupsId = do
     $ SMR.runModel' @KE.SerializerC @KE.CacheData
     cacheKeyE
     (Right runnerInputNames)
+    Nothing
     dw
     code
     normalParamCIs

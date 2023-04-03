@@ -73,6 +73,37 @@ normalDist = StanDist Continuous sample lpdf lupdf rng
       TE.SCVec -> TE.functionE TE.to_vector (TE.functionE TE.normal_rng ps :> TNil) -- why does the stan version return array[] real??
       TE.SRVec -> TE.functionE TE.to_row_vector (TE.functionE TE.normal_rng ps :> TNil) -- why does the stan version return array[] real??
 
+-- This might be sketchy! It imagines a (vector of) weight(s) coming only from repetition of the same observation
+-- it divides the sigmas by the sqrt of the weights (which has the effect of multiplying the log-prob by the weight)
+-- and multiplying the RNG result by the weight.
+countScaledNormalDist :: forall t.(TE.TypeOneOf t [TE.EReal, TE.ECVec, TE.ERVec], TE.GenSType t) => SimpleDist t '[t, t, t]
+countScaledNormalDist = StanDist Continuous sample lpdf lupdf rng
+  where
+    eltDivide = TE.binaryOpE (TE.SElementWise TE.SDivide)
+    eltTimes = TE.binaryOpE (TE.SElementWise TE.SMultiply)
+    sqrtE x = TE.functionE TE.sqrt (x :> TNil)
+    f :: TE.UExpr t -> TE.UExpr t -> TE.UExpr t
+    f x y = case TE.genSType @t of
+      TE.SReal -> case testEquality (TE.genSType @t) (TE.genSType @TE.EReal)  of
+        Just Refl -> x `TE.divideE` sqrtE y
+        _ -> error "The impossible happened in countScaledNormalDist" -- this case can't occur based on the constraint above
+      TE.SCVec -> case testEquality (TE.genSType @t) (TE.genSType @TE.ECVec)  of
+        Just Refl -> eltDivide x (sqrtE y)
+        _ -> error "The impossible happened in countScaledNormalDist" -- this case can't occur based on the constraint above
+      TE.SRVec -> case testEquality (TE.genSType @t) (TE.genSType @TE.ERVec)  of
+        Just Refl -> eltDivide x (sqrtE y)
+        _ -> error "The impossible happened in countScaledNormalDist" -- this case can't occur based on the constraint above
+
+    sample x (c :> mu :> sigma :> TNil) = TE.sample x TE.normal (mu :> f sigma c :> TNil)
+    lpdf x (c :> mu :> sigma :> TNil) = TE.densityE TE.normal_lpdf x (mu :> f sigma c :> TNil)
+    lupdf x (c :> mu :> sigma :> TNil) = TE.densityE TE.normal_lupdf x (mu :> f sigma c :> TNil)
+    rng (c :> ps) = case TE.genSType @t of
+      TE.SReal -> c `TE.timesE` TE.functionE TE.normal_rng ps
+      TE.SCVec -> c `eltTimes` TE.functionE TE.to_vector (TE.functionE TE.normal_rng ps :> TNil) -- why does the stan version return array[] real??
+      TE.SRVec -> c `eltTimes` TE.functionE TE.to_row_vector (TE.functionE TE.normal_rng ps :> TNil) -- why does the stan version return array[] real??
+
+
+
 scalarNormalDist :: (TE.TypeOneOf t [TE.EReal, TE.ECVec, TE.ERVec], TE.GenSType t) => SimpleDist t '[TE.EReal, TE.EReal]
 scalarNormalDist = StanDist Continuous sample lpdf lupdf rng
   where

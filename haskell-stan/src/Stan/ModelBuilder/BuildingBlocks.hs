@@ -109,6 +109,22 @@ add2dMatrixData rtt matrixRowFromData mLower mUpper = do
   let cs = maybe [] (pure . TE.lowerM . TE.realE) mLower ++ maybe [] (pure . TE.upperM . TE.realE) mUpper
   SB.add2dMatrixJson rtt matrixRowFromData cs -- (SB.NamedDim $ SB.dataSetName rtt)  --stanType bounds f
 
+addArrayOfIntArrays :: SB.RowTypeTag r
+                    -> TE.StanName
+                    -> Maybe TE.StanName
+                    -> Int
+                    -> (r -> [Int])
+                    -> Maybe Int
+                    -> Maybe Int
+                    -> SB.StanBuilderM md gq (TE.ArrayE (TE.EArray1 TE.EInt), TE.IntE)
+addArrayOfIntArrays rtt varName widthNameM width dataFromRowF mLower mUpper = do
+  let cs = maybe [] (pure . TE.lowerM . TE.intE) mLower ++ maybe [] (pure . TE.upperM . TE.intE) mUpper
+      widthName = fromMaybe ("K_" <> varName) widthNameM
+      ndsF rowsE = TE.NamedDeclSpec varName $ TE.array1Spec rowsE (TE.intArraySpec (TE.namedE widthName TE.SInt) cs)
+  widthE <- SB.addFixedIntJson (SB.inputDataType rtt) widthName Nothing width
+  arrE <- SB.addColumnJson rtt ndsF dataFromRowF
+  pure (arrE, widthE)
+
 sampleDistV :: SMD.StanDist t args rargs -> TE.ExprList args -> TE.UExpr t -> SB.StanBuilderM md gq ()
 sampleDistV sDist args yV =  SB.inBlock SB.SBModel $ SB.addStmtToCode $ SMD.familySample sDist yV args
 
