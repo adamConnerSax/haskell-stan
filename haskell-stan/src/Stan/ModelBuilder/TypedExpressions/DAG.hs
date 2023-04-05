@@ -32,7 +32,6 @@ import qualified Data.Dependent.Map as DM
 import qualified Data.Dependent.Sum as DM
 import qualified Data.Graph as Gr
 import qualified Control.Foldl as FL
-import qualified Stan.ModelBuilder as TE
 import Data.Vec.Lazy (Vec(..))
 
 
@@ -79,7 +78,7 @@ declareAndAddCode sb nds dc =
   SB.inBlock sb
   $ case dc of
       DT.DeclRHS e -> do
-        TE.addStmtToCodeTop $ TE.declareAndAssignN nds e
+        SB.addStmtToCodeTop $ TE.declareAndAssignN nds e
         pure $ TE.namedE (TE.declName nds) (TE.sTypeFromStanType $ TE.declType $ TE.decl nds)
       DT.DeclCodeF sF -> do
         let declS = TE.declareN nds
@@ -103,17 +102,39 @@ addParameterToCodeAndMap eMap (PhantomP bp) = do
       let v =  TE.namedE (TE.declName nds) (TE.sTypeFromStanType $ TE.declType $ TE.decl nds)
       SB.inBlock SB.SBModel $ SB.addStmtsToCodeTop $ TE.writerL' $ codeF psE v --TE.sample v d psE
       pure v
-    DT.TransformedP nds ftds pq tpDesF pr codeF -> do
+    DT.TransformedP nds ftds pq tpl tpDesF pr codeF -> do
       traverse_ (\(DT.FunctionToDeclare n fs) -> SB.addFunctionsOnce n $ SB.addStmtToCodeTop fs) $ reverse ftds
       pqEs <- SB.stanBuildEither $ DT.lookupParameterExpressions pq eMap
-      v <- declareAndAddCode SB.SBTransformedParameters nds $ tpDesF pqEs
-      prE <- SB.stanBuildEither $ DT.lookupParameterExpressions pr eMap
-      SB.inBlock SB.SBModel $ SB.addStmtsToCodeTop $ TE.writerL' $ codeF prE v
-      pure v
-    DT.ModelP nds ftds pq tpDesF -> do
+      prEs <- SB.stanBuildEither $ DT.lookupParameterExpressions pr eMap
+      let modelBlockCodeAndVar = TE.writerL $ case tpDesF pqEs of
+            DT.DeclRHS e -> do
+              v' <- TE.declareRHSNW nds e
+              codeF prEs v'
+              pure v'
+            DT.DeclCodeF cF -> do
+              v' <- TE.declareNW nds
+              cF v'
+              codeF prEs v'
+              pure v'
+      case tpl of
+        DT.TransformedParametersBlock -> do
+          v <- declareAndAddCode SB.SBTransformedParameters nds $ tpDesF pqEs
+          SB.inBlock SB.SBModel $ SB.addStmtsToCodeTop $ TE.writerL' $ codeF prEs v
+          pure v
+        DT.ModelBlock -> do
+          let (c, v) = modelBlockCodeAndVar
+          SB.inBlock SB.SBModel $ SB.addStmtsToCodeTop c
+          pure v
+        DT.ModelBlockLocal -> do
+          let (c, v) = modelBlockCodeAndVar
+          SB.inBlock SB.SBModel $ SB.addStmtToCodeTop $ TE.scoped c
+          pure v
+
+{-    DT.ModelP nds ftds pq tpDesF -> do
       traverse_ (\(DT.FunctionToDeclare n fs) -> SB.addFunctionsOnce n $ SB.addStmtToCodeTop fs) $ reverse ftds
       pqEs <- SB.stanBuildEither $ DT.lookupParameterExpressions pq eMap
       declareAndAddCode SB.SBModel nds $ tpDesF pqEs
+-}
   return $ DT.addBuiltExpressionToMap bp v eMap
 
 -- reverse here because we are adding from top, so
@@ -171,28 +192,30 @@ addCenteredHierarchical nds ps d = addBuildParameter
 
 addNonCenteredParameter :: TE.NamedDeclSpec t
                      -> DT.Parameters ts
+                     -> DT.TransformedParameterLocation
                      -> TE.DeclSpec t
                      -> TE.Density t ts
                      -> DT.Parameters qs
                      -> (TE.ExprList qs -> TE.UExpr t -> TE.UExpr t)
                      -> SB.StanBuilderM md gq (DT.ParameterTag t)
-addNonCenteredParameter nds ps rawDS rawD qs eF = do
+addNonCenteredParameter nds ps tpl rawDS rawD qs eF = do
   let rawNDS = TE.NamedDeclSpec (rawName $ TE.declName nds) rawDS
   rawPT <- simpleParameter rawNDS ps rawD
   let tpDES (rV TE.:> qsE) = DeclRHS $ eF qsE rV
-  addBuildParameter $ DT.simpleTransformedP nds [] (DT.BuildP rawPT TE.:> qs) tpDES
+  addBuildParameter $ DT.simpleTransformedP nds [] (DT.BuildP rawPT TE.:> qs) tpl tpDES
 
 -- Only use if density uses constant args. E.g., stdNormal.
 -- If it uses named parameters,
 -- those should be dependencies, so use `nonCenteredParameters'
 simpleNonCentered :: TE.NamedDeclSpec t
+                  -> DT.TransformedParameterLocation
                   -> TE.DeclSpec t
                   -> TE.DensityWithArgs t
                   -> DT.Parameters qs
                   -> (TE.ExprList qs -> TE.UExpr t -> TE.UExpr t)
                   -> SB.StanBuilderM md gq (DT.ParameterTag t)
-simpleNonCentered nds rawDS (TE.DensityWithArgs d tsE) =
-  addNonCenteredParameter nds (exprListToParameters tsE) rawDS d
+simpleNonCentered nds tpl rawDS (TE.DensityWithArgs d tsE) =
+  addNonCenteredParameter nds (exprListToParameters tsE) tpl rawDS d
 
 addIndependentPriorP :: TE.NamedDeclSpec t -> TE.DensityWithArgs t -> SB.StanBuilderM md gq (ParameterTag t)
 addIndependentPriorP nds (TE.DensityWithArgs d dArgs) =
@@ -201,23 +224,25 @@ addIndependentPriorP nds (TE.DensityWithArgs d dArgs) =
   $ \argEs e -> TE.addStmt $ TE.sample e d argEs
 
 addNonCenteredHierarchicalS :: TE.NamedDeclSpec t
+                            -> DT.TransformedParameterLocation
                             -> Parameters ts
                             -> TE.DensityWithArgs t
                             -> (TE.ExprList ts -> TE.UExpr t -> TE.UExpr t)
                             -> SB.StanBuilderM md gq (ParameterTag t)
-addNonCenteredHierarchicalS nds ps (TE.DensityWithArgs d dArgs) =
-  addNonCenteredParameter nds (exprListToParameters dArgs) (TE.decl nds) d ps
+addNonCenteredHierarchicalS nds tpl ps (TE.DensityWithArgs d dArgs) =
+  addNonCenteredParameter nds (exprListToParameters dArgs) tpl (TE.decl nds) d ps
 
 addTransformedHP :: TE.NamedDeclSpec t
+                 -> DT.TransformedParameterLocation
                  -> Maybe [TE.VarModifier TE.UExpr (TE.ScalarType t)]
                  -> TE.DensityWithArgs t
                  -> (TE.UExpr t -> TE.UExpr t)
                  -> SB.StanBuilderM md gq (ParameterTag t)
-addTransformedHP nds rawCsM rawPrior fromRawF = do
+addTransformedHP nds tpl rawCsM rawPrior fromRawF = do
   let TE.DeclSpec st dims _ = TE.decl nds
       rawNDS = TE.NamedDeclSpec (rawName $ TE.declName nds) $ maybe (TE.decl nds) (TE.DeclSpec st dims) rawCsM
   rawPT <- addIndependentPriorP rawNDS rawPrior
-  addBuildParameter $ simpleTransformedP nds [] (BuildP rawPT TE.:> TE.TNil)  (\(e TE.:> TE.TNil) -> DeclRHS $ fromRawF e) -- (ExprList qs -> DeclCode t)
+  addBuildParameter $ simpleTransformedP nds [] (BuildP rawPT TE.:> TE.TNil) tpl (\(e TE.:> TE.TNil) -> DeclRHS $ fromRawF e) -- (ExprList qs -> DeclCode t)
 
 iidMatrixP :: TE.NamedDeclSpec TE.EMat
           -> [FunctionToDeclare]
@@ -230,16 +255,17 @@ iidMatrixP nds ftd ps d = addBuildParameter
 
 -- this puts the prior on the raw parameters
 withIIDRawMatrix :: TE.NamedDeclSpec TE.EMat
+                 -> DT.TransformedParameterLocation
                  -> Maybe [TE.VarModifier TE.UExpr TE.EReal] -- constraints on raw
                  -> TE.DensityWithArgs TE.ECVec -- prior density on raw
                  -> DT.Parameters qs
                  -> (TE.ExprList qs -> TE.MatrixE -> TE.MatrixE)
                  -> SB.StanBuilderM md gq (DT.ParameterTag TE.EMat)
-withIIDRawMatrix nds rawCsM dwa qs f = do
+withIIDRawMatrix nds tpl rawCsM dwa qs f = do
  let TE.DeclSpec _ (rowsE ::: colsE ::: VNil) _ = TE.decl nds
      rawNDS = TE.NamedDeclSpec (rawName $ TE.declName nds) $ TE.matrixSpec rowsE colsE $ fromMaybe [] rawCsM
  rawPT <- TE.withDWA (\d tl -> iidMatrixP rawNDS [] (exprListToParameters tl) d) dwa
- addBuildParameter $ simpleTransformedP nds [] (BuildP rawPT TE.:> qs) (\(rmE TE.:> qsE) -> DeclRHS $ f qsE rmE)
+ addBuildParameter $ simpleTransformedP nds [] (BuildP rawPT TE.:> qs) tpl (\(rmE TE.:> qsE) -> DeclRHS $ f qsE rmE)
 
 {-
 -- this puts the prior on the transformed matrix

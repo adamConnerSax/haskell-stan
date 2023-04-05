@@ -114,6 +114,7 @@ library
                  , Stan.ModelBuilder
                  , Stan.ModelBuilder.BuilderTypes
                  , Stan.ModelBuilder.BuildingBlocks
+                 , Stan.ModelBuilder.BuildingBlocks.CovarianceStructure
                  , Stan.ModelBuilder.DesignMatrix
                  , Stan.ModelBuilder.Distributions
                  , Stan.ModelBuilder.TypedExpressions.DAGTypes

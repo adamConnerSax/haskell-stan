@@ -109,6 +109,7 @@ add2dMatrixData rtt matrixRowFromData mLower mUpper = do
   let cs = maybe [] (pure . TE.lowerM . TE.realE) mLower ++ maybe [] (pure . TE.upperM . TE.realE) mUpper
   SB.add2dMatrixJson rtt matrixRowFromData cs -- (SB.NamedDim $ SB.dataSetName rtt)  --stanType bounds f
 
+-- This is specifically useful for things like categorical/multinomial
 addArrayOfIntArrays :: SB.RowTypeTag r
                     -> TE.StanName
                     -> Maybe TE.StanName

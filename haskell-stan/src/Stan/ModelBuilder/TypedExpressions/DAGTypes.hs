@@ -27,7 +27,9 @@ module Stan.ModelBuilder.TypedExpressions.DAGTypes
   , tagsAsParams
   , parametersAsExprs
   , DeclCode(..)
+  , TransformedParameterLocation(..)
   , BuildParameter(..)
+  , modelP
   , simpleTransformedP
   , BParameterCollection(..)
   , bParameterName
@@ -176,6 +178,7 @@ instance TestEquality TData where
 --tDataNamedDecl :: TData t -> TE.NamedDeclSpec t
 --tDataNamedDecl (TData nds _ _ _) = nds
 
+data TransformedParameterLocation = TransformedParametersBlock | ModelBlock | ModelBlockLocal
 
 data BuildParameter :: TE.EType -> Type where
   TransformedDataP :: TData t -> BuildParameter t
@@ -187,22 +190,32 @@ data BuildParameter :: TE.EType -> Type where
   TransformedP :: TE.NamedDeclSpec t
                -> [FunctionToDeclare]
                -> Parameters qs -- parameters for transformation
+               -> TransformedParameterLocation
                -> (TE.ExprList qs -> DeclCode t) -- code for transformed parameters block
                -> Parameters rs -- parameters for prior (if nec)
                -> (TE.ExprList rs -> TE.UExpr t -> TE.CodeWriter ()) -- prior in model block (if nec)
                -> BuildParameter t
-  ModelP :: TE.NamedDeclSpec t
+{-  ModelP :: TE.NamedDeclSpec t
          -> [FunctionToDeclare]
          -> Parameters qs
          -> (TE.ExprList qs -> DeclCode t)
          -> BuildParameter t
+-}
+
+modelP ::  TE.NamedDeclSpec t
+         -> [FunctionToDeclare]
+         -> Parameters qs
+         -> (TE.ExprList qs -> DeclCode t)
+         -> BuildParameter t
+modelP nds ftds pq tpDesF = TransformedP nds ftds pq ModelBlock tpDesF TE.TNil (\_ _ -> pure ())
 
 simpleTransformedP :: TE.NamedDeclSpec t
                    -> [FunctionToDeclare]
                    -> Parameters qs -- parameters for transformation
+                   -> TransformedParameterLocation
                    -> (TE.ExprList qs -> DeclCode t) -- code for transformed parameters blockBuildParameter t
                    -> BuildParameter t
-simpleTransformedP nds ftd ps declCodeF = TransformedP nds ftd ps declCodeF TE.TNil (\_ _ -> pure ())
+simpleTransformedP nds ftd ps tpl declCodeF = TransformedP nds ftd ps tpl declCodeF TE.TNil (\_ _ -> pure ())
 
 instance TestEquality BuildParameter where
   testEquality bpa bpb = testEquality (f bpa) (f bpb) where
@@ -213,8 +226,8 @@ instance TestEquality BuildParameter where
 withBPDeps :: Monoid r => BuildParameter t -> (forall ts. Parameters ts -> r) -> r
 withBPDeps (TransformedDataP (TData _ _ tds _)) f = f $ hfmap (BuildP . parameterTagFromTData) tds
 withBPDeps (UntransformedP _ _ ps _) f = f ps
-withBPDeps (TransformedP _ _ pq _ pr _) f = f pq <> f pr
-withBPDeps (ModelP _ _ pq _ ) f = f pq
+withBPDeps (TransformedP _ _ pq _ _ pr _) f = f pq <> f pr
+--withBPDeps (ModelP _ _ pq _ ) f = f pq
 
 data BParameterCollection = BParameterCollection { pdm :: DM.DMap ParameterTag BuildParameter, usedNames :: Set TE.StanName }
 
@@ -224,8 +237,8 @@ getNamedDecl :: BuildParameter t -> TE.NamedDeclSpec t --SB.StanBuilderM md gq (
 getNamedDecl = \case
   TransformedDataP (TData nds _ _ _) -> nds
   UntransformedP x _ _ _ -> x
-  TransformedP x _ _ _ _ _ -> x
-  ModelP x _ _ _ -> x
+  TransformedP x _ _ _ _ _ _ -> x
+--  ModelP x _ _ _ -> x
 --  TransformedDiffTypeP x _ _ _ _ _ _ -> x
 
 {-

@@ -161,6 +161,11 @@ vecArrayToMatrix :: (TypeOneOf t [ECVec, ERVec], GenSType t) => Function EMat '[
 vecArrayToMatrix = simpleFunction "to_matrix"
 {-# INLINEABLE vecArrayToMatrix #-}
 
+vecToMatrix :: (TypeOneOf t [ECVec, ERVec], GenSType t) => Function EMat '[t, EInt, EInt]
+vecToMatrix = simpleFunction "to_matrix"
+{-# INLINEABLE vecToMatrix #-}
+
+
 diagPreMultiply :: Function EMat '[ERVec, EMat]
 diagPreMultiply = simpleFunction "diag_pre_multiply"
 {-# INLINEABLE diagPreMultiply #-}
