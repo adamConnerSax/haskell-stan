@@ -178,7 +178,10 @@ instance TestEquality TData where
 --tDataNamedDecl :: TData t -> TE.NamedDeclSpec t
 --tDataNamedDecl (TData nds _ _ _) = nds
 
-data TransformedParameterLocation = TransformedParametersBlock | ModelBlock | ModelBlockLocal
+data TransformedParameterLocation t where
+  TransformedParametersBlock :: TransformedParameterLocation t
+  ModelBlock :: TransformedParameterLocation t
+  ModelBlockLocal :: Parameter t -> TransformedParameterLocation t -- the parameter to return since the one we build is locally scoped
 
 data BuildParameter :: TE.EType -> Type where
   TransformedDataP :: TData t -> BuildParameter t
@@ -190,7 +193,7 @@ data BuildParameter :: TE.EType -> Type where
   TransformedP :: TE.NamedDeclSpec t
                -> [FunctionToDeclare]
                -> Parameters qs -- parameters for transformation
-               -> TransformedParameterLocation
+               -> TransformedParameterLocation t
                -> (TE.ExprList qs -> DeclCode t) -- code for transformed parameters block
                -> Parameters rs -- parameters for prior (if nec)
                -> (TE.ExprList rs -> TE.UExpr t -> TE.CodeWriter ()) -- prior in model block (if nec)
@@ -212,7 +215,7 @@ modelP nds ftds pq tpDesF = TransformedP nds ftds pq ModelBlock tpDesF TE.TNil (
 simpleTransformedP :: TE.NamedDeclSpec t
                    -> [FunctionToDeclare]
                    -> Parameters qs -- parameters for transformation
-                   -> TransformedParameterLocation
+                   -> TransformedParameterLocation t
                    -> (TE.ExprList qs -> DeclCode t) -- code for transformed parameters blockBuildParameter t
                    -> BuildParameter t
 simpleTransformedP nds ftd ps tpl declCodeF = TransformedP nds ftd ps tpl declCodeF TE.TNil (\_ _ -> pure ())
