@@ -274,6 +274,7 @@ type RealArrayE = ArrayE EReal
 type VectorE = UExpr ECVec
 type RVectorE = UExpr ERVec
 type MatrixE = UExpr EMat
+type SqMatrixE = UExpr ESqMat
 
 mRow :: IntE -> MatrixE -> RVectorE
 mRow = flip at
