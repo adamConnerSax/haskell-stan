@@ -23,6 +23,7 @@ where
 import Prelude hiding (Nat)
 import qualified Stan.ModelBuilder.TypedExpressions.Types as TE
 import Stan.ModelBuilder.TypedExpressions.TypedList (TypedList(..))
+import qualified Stan.ModelBuilder.TypedExpressions.TypedList as TL
 import qualified Stan.ModelBuilder.TypedExpressions.Statements as TE
 import qualified Stan.ModelBuilder.TypedExpressions.Indexing as TE
 import qualified Stan.ModelBuilder.TypedExpressions.Operations as TE
@@ -35,7 +36,6 @@ import qualified Stan.ModelBuilder.BuildingBlocks as SBB
 
 import qualified Data.Vec.Lazy as Vec
 import qualified Data.Type.Nat as DT
-import Data.Type.Equality ((:~:)(..))
 
 import Prelude hiding (sum, All)
 import qualified Data.Dependent.HashMap as DHash
@@ -70,32 +70,48 @@ type ArrayMatDims n = (Vec.Vec n TE.IntE, Vec.Vec DT.Nat2 TE.IntE)
 arrayMatDims :: DT.SNatI m => Vec.Vec (m `DT.Plus` DT.Nat2) TE.IntE -> ArrayMatDims m
 arrayMatDims = Vec.split
 
-makeVecArraySpec :: DT.SNatI m => Vec.Vec (m `DT.Plus` DT.Nat2) TE.IntE -> TE.DeclSpec (TE.EArray m TE.ECVec)
-makeVecArraySpec v =
+makeVecArraySpec :: DT.SNatI m => [TE.VarModifier TE.UExpr (TE.ScalarType TE.EReal)]
+                 -> Vec.Vec (m `DT.Plus` DT.Nat2) TE.IntE
+                 -> TE.DeclSpec (TE.EArray m TE.ECVec)
+makeVecArraySpec vms v =
   let (aDims, mDims) = arrayMatDims v
       (rowsE Vec.::: colsE Vec.::: Vec.VNil) = mDims
-  in TE.arraySpec DT.snat aDims $ TE.vectorSpec (rowsE `TE.timesE`colsE) []
+  in TE.arraySpec DT.snat aDims $ TE.vectorSpec (rowsE `TE.timesE`colsE) vms
 
 flatDS :: forall t . ParamC t => TE.DeclSpec t -> TE.DeclSpec (FlatParamT t)
 flatDS ds =
---  let snat1 = DT.reify (DT.S DT.Z) (const DT.snat)
   case ds of
-    TE.DeclSpec TE.StanMatrix (rowsE Vec.::: colsE Vec.::: Vec.VNil) _ ->
-      TE.vectorSpec (rowsE `TE.timesE` colsE) []
-    TE.DeclSpec (TE.StanArray n TE.StanMatrix) dims _ ->
-      DT.withSNat n $ makeVecArraySpec dims
+    TE.DeclSpec TE.StanMatrix (rowsE Vec.::: colsE Vec.::: Vec.VNil) vms ->
+      TE.vectorSpec (rowsE `TE.timesE` colsE) vms
+    TE.DeclSpec (TE.StanArray n TE.StanMatrix) dims vms ->
+      DT.withSNat n $ makeVecArraySpec vms dims
 
 flatNDS :: ParamC t => TE.NamedDeclSpec t -> TE.NamedDeclSpec (FlatParamT t)
 flatNDS nds = TE.NamedDeclSpec (TE.declName nds <> "_flat") $ flatDS $ TE.decl nds
 
-flattenCW :: ParamC t => TE.StanName -> TE.DeclSpec t -> TE.UExpr t -> TE.CodeWriter (TE.UExpr (FlatParamT t))
+{-indexVec :: TL.TypedList TE.UExpr (TL.SameTypeList TE.EInt n) -> Vec.Vec n TE.IntE
+indexVec TNil = Vec.VNil
+indexVec tl = go tl Vec.VNil
+  where
+    go :: TL.TypedList TE.UExpr (TL.SameTypeList TE.EInt n) -> Vec.Vec m TE.IntE -> Vec.Vec (DT.S m) TE.IntE
+    go (ie :> TNil) v = ie Vec.::: v
+    go (ie :> ies) v = go ies (ie Vec.::: v)
+-}
+
+flattenCW :: ParamC t
+  => TE.StanName -> TE.DeclSpec t -> TE.UExpr t -> TE.CodeWriter (TE.UExpr (FlatParamT t))
 flattenCW sn ds e =
   let flatten e =  TE.functionE SF.to_vector (e :> TNil)
   in case ds of
   TE.DeclSpec TE.StanMatrix _ _ -> pure $ flatten e
-  TE.DeclSpec (TE.StanArray DT.SS TE.StanMatrix) (aSizeE Vec.::: _ Vec.::: _ Vec.::: Vec.VNil) _ -> do
+  TE.DeclSpec (TE.StanArray n TE.StanMatrix) dims _ -> do
     fv <- TE.declareNW $ TE.NamedDeclSpec (sn <> "_flat") $ flatDS ds
-    TE.addStmt $ TE.loopSized aSizeE "k" $ \k -> (fv `TE.at` k) `TE.assign` flatten (e `TE.at` k)
+    DT.withSNat n $ do
+      let (aDims, _) = arrayMatDims dims
+      TE.addStmt
+        $ TE.intVecLoops "k" aDims
+
+      aSizeE "k" $ \k -> (fv `TE.at` k) `TE.assign` flatten (e `TE.at` k)
     pure fv
 
 data ParamMat t where

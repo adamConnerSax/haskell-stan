@@ -30,6 +30,7 @@ import Stan.ModelBuilder.TypedExpressions.Functions
 import Stan.ModelBuilder.TypedExpressions.StanFunctions
 
 import qualified Data.Vec.Lazy as Vec
+import qualified Data.Type.Nat as DT
 import Data.Type.Equality (type (~))
 import Control.Monad.Writer.Strict as W
 
@@ -181,10 +182,13 @@ data ForType t where
   SpecificIn :: UExpr t -> ForType t
   IndexedIn :: IndexKey -> UExpr t -> ForType t
 
-data VarAndForType t where
+data VarAndForType (t :: EType) where
   VarAndForType :: GenSType (ForEachSlice t) => Text -> ForType t -> VarAndForType t
 
-for :: forall t f . (Traversable f, GenSType (ForEachSlice t)) => Text -> ForType t -> (UExpr (ForEachSlice t) -> f UStmt) -> UStmt
+--intVecToLoopVFTs :: Text -> Vec.Vec n IntE -> TypeList VarAndForType
+
+for :: forall t f . (Traversable f, GenSType (ForEachSlice t))
+    => Text -> ForType t -> (UExpr (ForEachSlice t) -> f UStmt) -> UStmt
 for loopCounter ft bodyF = case ft of
   SpecificNumbered se' ee' -> SFor loopCounter se' ee' $ bodyF loopCounterE
   IndexedLoop ik -> SFor loopCounter (intE 1) (namedSizeE ik) $ bodyF loopCounterE --bodyWithLoopCounterContext ik
@@ -216,6 +220,21 @@ nestedLoops :: Traversable f => TypedList VarAndForType ts -> (ExprList (ForEach
 nestedLoops TNil f = scoped $ f TNil
 nestedLoops (VarAndForType vln ft :> TNil) f = for vln ft $ \e -> f (e :> TNil)
 nestedLoops (VarAndForType vln ft :> vfts) f = let g e es = f (e :> es) in for vln ft $ \e -> [nestedLoops vfts (g e)]
+
+type IntVecVFT (n :: Nat) = TypedList VarAndForType (SameTypeList EInt n)
+
+vecVFT :: forall m . VecToSameTypedListF VarAndForType EInt m => Text -> Vec.Vec m IntE -> IntVecVFT m
+vecVFT counterPrefix v =
+  let g :: Nat -> IntE -> VarAndForType EInt
+      g nt ie = VarAndForType (counterPrefix <> show nt) (SpecificNumbered (intE 1) ie)
+  in vecToSameTypedListF g v
+
+intVecLoops :: ( VecToSameTypedListF VarAndForType EInt m, Traversable f)
+            => Text
+            -> Vec.Vec m IntE
+            -> (ExprList (ForEachSliceArgs (SameTypeList EInt m)) -> f UStmt)
+            -> UStmt
+intVecLoops counterPrefix v = nestedLoops (vecVFT counterPrefix v)
 
 ifThen :: UExpr EBool -> UStmt -> UStmt -> UStmt
 ifThen ce sTrue = SIfElse $ (ce, sTrue) :| []
