@@ -260,9 +260,22 @@ sliceInnerN e v = Vec.withDict v $ go e v where
   go' SZ e' _ = e'
   go' SS e' (i ::: v') = go' DT.snat (sliceInner e' i) v'
 
-sliceAll :: UExpr t -> Vec (Dimension t) (UExpr EInt) -> UExpr (SliceInnerN (Dimension t) t)
-sliceAll = sliceInnerN
+--zeroDArray :: UExpr (EArray Z t) -> UExpr t
+--zeroDArray = unsafecoerce
+-- we need this special case but that seems bad
+sliceArrayAll :: forall n t . UExpr (EArray (S n) t) -> Vec (S n) (UExpr EInt) -> UExpr t
+sliceArrayAll e (v Vec.::: VNil) = sliceE SZ v e
+sliceArrayAll e (v Vec.::: v' Vec.::: vs) = sliceArrayAll (sliceE SZ v e) (v' Vec.::: vs)
 
+{-
+sliceEntireArray :: UExpr (EArray n t) -> Vec n (UExpr EInt) -> UExpr t
+sliceEntireArray e v = Vec.withDict v $ go e v where
+  go :: DT.SNatI m => UExpr u -> Vec m (UExpr EInt) -> UExpr (SliceInnerN m u)
+  go = go' DT.snat
+  go' :: DT.SNat k -> UExpr a -> Vec k (UExpr EInt) -> UExpr (SliceInnerN k a)
+  go' SZ e' _ = e'
+  go' SS e' (i ::: v') = go' DT.snat (sliceInner e' i) v'
+-}
 
 -- some type aliases for ergonomics
 type IntE = UExpr EInt

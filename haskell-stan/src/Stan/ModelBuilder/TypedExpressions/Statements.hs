@@ -31,7 +31,7 @@ import Stan.ModelBuilder.TypedExpressions.StanFunctions
 
 import qualified Data.Vec.Lazy as Vec
 import qualified Data.Type.Nat as DT
-import Data.Type.Equality (type (~))
+import Data.Type.Equality (type (~), type (:~:)(..), gcastWith)
 import Control.Monad.Writer.Strict as W
 
 import Prelude hiding (Nat)
@@ -43,7 +43,13 @@ import qualified Data.Functor.Foldable as RS
 
 type StanName = Text
 
-data DeclSpec t = DeclSpec (StanType t) (Vec (DeclDimension t) (UExpr EInt)) [VarModifier UExpr (ScalarType t)]
+type VecToTListC n = VecToSameTypedListF UExpr EInt n
+
+--type VecToTListAC n t = VecToSameTypedListF UExpr EInt (n `DT.Plus` DeclDimension t)
+
+data DeclSpec t where
+  DeclSpec :: StanType t -> Vec (DeclDimension t) (UExpr EInt) -> [VarModifier UExpr (ScalarType t)] -> DeclSpec t
+  ArraySpec :: (VecToSameTypedListF UExpr EInt n) => SNat n -> Vec n (UExpr EInt) -> DeclSpec t -> DeclSpec (EArray n t)
 
 data NamedDeclSpec t = NamedDeclSpec StanName (DeclSpec t)
 
@@ -55,9 +61,20 @@ decl (NamedDeclSpec _ ds) = ds
 
 declType :: DeclSpec t -> StanType t
 declType (DeclSpec st _ _) = st
+declType (ArraySpec n _ ds) = StanArray n (declType ds)
 
 declDims :: DeclSpec t -> Vec (DeclDimension t) (UExpr EInt)
 declDims (DeclSpec _ dims _) = dims
+declDims (ArraySpec _ dims ds) = dims Vec.++ declDims ds
+
+declVMS :: DeclSpec t -> [VarModifier UExpr (ScalarType t)]
+declVMS (DeclSpec _ _ vms) = vms
+declVMS (ArraySpec _ _ ids) = declVMS ids
+
+replaceDeclVMs :: [VarModifier UExpr (ScalarType t)] -> DeclSpec t -> DeclSpec t
+replaceDeclVMs vms = \case
+  DeclSpec st vdims _-> DeclSpec st vdims vms
+  ArraySpec n arrDims ds -> ArraySpec n arrDims (replaceDeclVMs vms ds)
 
 intSpec :: [VarModifier UExpr EInt] -> DeclSpec EInt
 intSpec = DeclSpec StanInt VNil
@@ -101,13 +118,13 @@ choleskyFactorCorrSpec rce = DeclSpec StanCholeskyFactorCorr (rce ::: VNil)
 choleskyFactorCovSpec :: UExpr EInt -> [VarModifier UExpr EReal] -> DeclSpec ESqMat
 choleskyFactorCovSpec rce = DeclSpec StanCholeskyFactorCov (rce ::: VNil)
 
-arraySpec :: SNat n -> Vec n (UExpr EInt) -> DeclSpec t -> DeclSpec (EArray n t)
-arraySpec n arrIndices (DeclSpec t tIndices vms) = DeclSpec (StanArray n t) (arrIndices Vec.++ tIndices) vms
+arraySpec :: VecToTListC n => SNat n -> Vec n (UExpr EInt) -> DeclSpec t -> DeclSpec (EArray n t)
+arraySpec = ArraySpec --(DeclSpec t tIndices vms) = DeclSpec (StanArray n t) (arrIndices Vec.++ tIndices) vms
 
-array1Spec :: UExpr EInt -> DeclSpec t -> DeclSpec (EArray N1 t)
+array1Spec :: VecToTListC N1 => UExpr EInt -> DeclSpec t -> DeclSpec (EArray N1 t)
 array1Spec se = arraySpec s1 (se ::: VNil)
 
-array2Spec :: UExpr EInt -> UExpr EInt -> DeclSpec t -> DeclSpec (EArray N2 t)
+array2Spec ::  VecToTListC N2 => UExpr EInt -> UExpr EInt -> DeclSpec t -> DeclSpec (EArray N2 t)
 array2Spec i1 i2 = arraySpec s2 (i1 ::: i2 ::: VNil)
 
 intArraySpec :: UExpr EInt -> [VarModifier UExpr EInt] -> DeclSpec EIndexArray
@@ -123,6 +140,7 @@ declare' vn vt iDecls = SDeclare vn vt (DeclIndexVecF iDecls)
 
 declare :: Text -> DeclSpec t -> UStmt
 declare vn (DeclSpec st indices vms) = declare' vn st indices vms
+declare vn ds@(ArraySpec _ arrDims ids) = declare' vn (declType ds) (arrDims Vec.++ declDims ids) $ declVMS ids
 
 declareN :: NamedDeclSpec t -> UStmt
 declareN (NamedDeclSpec n ds) = declare n ds
@@ -132,9 +150,10 @@ declareAndAssign' vn vt iDecls vms = SDeclAssign vn vt (DeclIndexVecF iDecls) vm
 
 declareAndAssign :: Text -> DeclSpec t -> UExpr t -> UStmt
 declareAndAssign vn (DeclSpec vt indices vms) = declareAndAssign' vn vt indices vms
+declareAndAssign vn ads@(ArraySpec _ arrDims ids) = declareAndAssign' vn (declType ads) (arrDims Vec.++ declDims ids) $ declVMS ids
 
 declareAndAssignN :: NamedDeclSpec t -> UExpr t -> UStmt
-declareAndAssignN (NamedDeclSpec vn (DeclSpec vt indices vms)) = declareAndAssign' vn vt indices vms
+declareAndAssignN (NamedDeclSpec vn ds) = declareAndAssign vn ds
 
 addToTarget :: UExpr EReal -> UStmt
 addToTarget = STarget
@@ -170,17 +189,17 @@ sampleW ue (DensityWithArgs d al)= SSample ue d al
 
 type family ForEachSlice (a :: EType) :: EType where
   ForEachSlice EInt = EInt -- required for looping over ranges. But Ick.
-  ForEachSlice ECVec = EInt
-  ForEachSlice ERVec = EInt
-  ForEachSlice EMat = EInt
-  ForEachSlice ESqMat = EInt
+  ForEachSlice ECVec = EReal
+  ForEachSlice ERVec = EReal
+  ForEachSlice EMat = EReal
+  ForEachSlice ESqMat = EReal
   ForEachSlice (EArray m t) = Sliced N0 (EArray m t)
 
 data ForType t where
   SpecificNumbered :: UExpr EInt -> UExpr EInt -> ForType EInt
   IndexedLoop :: IndexKey -> ForType EInt
   SpecificIn :: UExpr t -> ForType t
-  IndexedIn :: IndexKey -> UExpr t -> ForType t
+--  IndexedIn :: IndexKey -> UExpr t -> ForType t
 
 data VarAndForType (t :: EType) where
   VarAndForType :: GenSType (ForEachSlice t) => Text -> ForType t -> VarAndForType t
@@ -190,15 +209,15 @@ data VarAndForType (t :: EType) where
 for :: forall t f . (Traversable f, GenSType (ForEachSlice t))
     => Text -> ForType t -> (UExpr (ForEachSlice t) -> f UStmt) -> UStmt
 for loopCounter ft bodyF = case ft of
-  SpecificNumbered se' ee' -> SFor loopCounter se' ee' $ bodyF loopCounterE
-  IndexedLoop ik -> SFor loopCounter (intE 1) (namedSizeE ik) $ bodyF loopCounterE --bodyWithLoopCounterContext ik
+  SpecificNumbered se' ee' -> SFor loopCounter se' ee' $ bodyF (namedE loopCounter SInt)
+  IndexedLoop ik -> SFor loopCounter (intE 1) (namedSizeE ik) $ bodyF (namedE loopCounter SInt)
   SpecificIn e -> SForEach loopCounter e $ bodyF loopCounterE
-  IndexedIn _ e -> SForEach loopCounter e $ bodyF loopCounterE --bodyWithLoopCounterContext ik
+--  IndexedIn _ e -> SForEach loopCounter e $ bodyF loopCounterE
   where
     loopCounterE = namedE loopCounter $ genSType @(ForEachSlice t)
---    bodyWithLoopCounterContext ik = SContext (Just $ insertUseBinding ik (lNamedE loopCounter SInt)) body :| []
 
-loopOver :: (Traversable f, GenSType (ForEachSlice t)) => UExpr t -> Text -> (UExpr (ForEachSlice t) -> f UStmt) -> UStmt
+loopOver :: (Traversable f, GenSType (ForEachSlice t))
+         => UExpr t -> Text -> (UExpr (ForEachSlice t) -> f UStmt) -> UStmt
 loopOver container loopVarName = for loopVarName (SpecificIn container)
 {-# INLINEABLE loopOver #-}
 
@@ -213,13 +232,29 @@ type family ForEachSliceArgs (tl :: [EType]) :: [EType] where
   ForEachSliceArgs '[] = '[]
   ForEachSliceArgs (et ': ets) = ForEachSlice et ': ForEachSliceArgs ets
 
+fesaProof0 :: ForEachSliceArgs (SameTypeList t DT.Z) :~: SameTypeList (ForEachSlice t) DT.Z
+fesaProof0 = Refl
+
+newtype FESAProof t n
+  = FESAProof
+    { getFESAProof :: ForEachSliceArgs (SameTypeList t (DT.S n)) :~: SameTypeList (ForEachSlice t) (DT.S n)}
+
+fesaProofI :: DT.SNat n -> FESAProof t n
+fesaProofI n = DT.withSNat n
+               $ DT.induction (FESAProof Refl)
+               (\fpn -> FESAProof $ gcastWith (getFESAProof fpn) Refl)
+--fesaProofI DT.SS = gcastWith (fesaProofI $ DT.snatToNat ) Refl
+
 vftSized :: Text -> UExpr EInt -> VarAndForType EInt
 vftSized lvn = VarAndForType lvn . ftSized
 
-nestedLoops :: Traversable f => TypedList VarAndForType ts -> (ExprList (ForEachSliceArgs ts) -> f UStmt) -> UStmt
+nestedLoops :: Traversable f
+  => TypedList VarAndForType ts -> (ExprList (ForEachSliceArgs ts) -> f UStmt) -> UStmt
 nestedLoops TNil f = scoped $ f TNil
 nestedLoops (VarAndForType vln ft :> TNil) f = for vln ft $ \e -> f (e :> TNil)
-nestedLoops (VarAndForType vln ft :> vfts) f = let g e es = f (e :> es) in for vln ft $ \e -> [nestedLoops vfts (g e)]
+nestedLoops (VarAndForType vln ft :> vfts) f =
+  let g e es = f (e :> es) in for vln ft
+                              $ \e -> [nestedLoops vfts (g e)]
 
 type IntVecVFT (n :: Nat) = TypedList VarAndForType (SameTypeList EInt n)
 
@@ -229,12 +264,28 @@ vecVFT counterPrefix v =
       g nt ie = VarAndForType (counterPrefix <> show nt) (SpecificNumbered (intE 1) ie)
   in vecToSameTypedListF g v
 
-intVecLoops :: ( VecToSameTypedListF VarAndForType EInt m, Traversable f)
+{-
+intExprListHelper :: ExprList (ForEachSliceArgs (SameTypeList EInt n)
+                  -> ExprList (SameTypeList EInt n)
+intExprListHelper = go
+intExprListHelper (t :> ts) = t :> intExprListHelper ts
+-}
+
+intVecLoops :: forall m f . (VecToSameTypedListF VarAndForType EInt m, Traversable f)
             => Text
             -> Vec.Vec m IntE
             -> (ExprList (ForEachSliceArgs (SameTypeList EInt m)) -> f UStmt)
             -> UStmt
-intVecLoops counterPrefix v = nestedLoops (vecVFT counterPrefix v)
+intVecLoops counterPrefix v stmtF = nestedLoops (vecVFT counterPrefix v) stmtF
+{-
+  go (vecVFT counterPrefix v) stmtF where
+  go :: IntVecVFT m -> (ExprList (SameTypeList EInt m) -> f UStmt) -> UStmt
+  go TNil f = scoped $ f TNil
+  go (VarAndForType vln ft :> TNil) f = for vln ft $ \e -> f (e :> TNil)
+  go  (VarAndForType vln ft :> vfts) f = let g e es = f (e :> es) in for vln ft $ \e -> [intVecLoops vfts (g e)]
+--intVecLoops counterPrefix (v Vec.::: Vec.VNil) stmtF = for
+-}
+--
 
 ifThen :: UExpr EBool -> UStmt -> UStmt -> UStmt
 ifThen ce sTrue = SIfElse $ (ce, sTrue) :| []

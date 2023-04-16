@@ -234,6 +234,10 @@ instance (SameTypedListToVecF f e n) => SameTypedListToVecF f e (DT.S n) where
 
 sameTypedListToVec :: SameTypedListToVecF f e n => TypedList f (SameTypeList e n) -> Vec.Vec n (f e)
 sameTypedListToVec = sameTypedListToVecF id
+
+
+
+
 {-
 sameTypedListToVec :: TypedList f (SameTypeList e n) -> Vec.Vec n (f e)
 sameTypedListToVec stl = go stl Vec.VNil

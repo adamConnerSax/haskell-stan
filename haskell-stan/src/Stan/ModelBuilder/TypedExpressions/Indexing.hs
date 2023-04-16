@@ -102,10 +102,12 @@ type family Dimension (e :: EType) :: Nat where
 type family ApplyDiffToEType (n :: DiffHolder) (e :: EType) :: EType where
   ApplyDiffToEType _ (EArray Z t) = TE.TypeError (TE.Text "Attempt to slice a zero-dimensional array.  Which means you had a zero dimensional array?")
   ApplyDiffToEType (PosDiff _) (EArray (S Z) t) = TE.TypeError (TE.Text "ApplyDiffToEType: Impossible case of PosDiff but array of dimension 1.")
+--  ApplyDiffToEType (PosDiff _) (EArray (S Z) t) = t -- slice is in the array
   ApplyDiffToEType (PosDiff _) (EArray (S n) t) = EArray n t -- slice is in the array
   ApplyDiffToEType Same (EArray (S Z) t) = t -- Slice a 1-d array case.
-  ApplyDiffToEType Same (EArray (S n) t) = EArray n t -- Slice a 1-d array case.
-  ApplyDiffToEType (NegDiff (S n)) (EArray o t) = EArray o (Sliced n t) -- array doesn not have enough dimensions.  Slice the rest from the contained type.
+  ApplyDiffToEType Same (EArray (S n) t) = EArray n t
+--  ApplyDiffToEType (NegDiff (S n)) (EArray o t) = EArray o (Sliced n t) -- array doesn not have enough dimensions.  Slice the rest from the contained type.
+  ApplyDiffToEType (NegDiff (S n)) (EArray o t) = Sliced n t -- array doesn not have enough dimensions.  Slice the rest from the contained type.
   ApplyDiffToEType _ x = TE.TypeError (TE.Text "ApplyDiffToEtype to type other than EArray.")
 
 type family Sliced (n :: Nat) (a :: EType) :: EType where
@@ -124,11 +126,23 @@ type family Sliced (n :: Nat) (a :: EType) :: EType where
   Sliced Z ESqMat = ERVec
   Sliced (S Z) ESqMat = ECVec
   Sliced _ ESqMat = TE.TypeError (TE.Text "Cannot slice (index) a matrix at a position other than 0 or 1.")
+  Sliced n (EArray n t) = t
   Sliced n (EArray m t) = ApplyDiffToEType (Diff m (S n)) (EArray m t)
 
 type family SliceInnerN (n :: Nat) (a :: EType) :: EType where
+--  SliceInnerN Z (EArray Z a) = a
   SliceInnerN Z a = a
   SliceInnerN (S n) a = SliceInnerN n (Sliced Z a)
+
+{-
+fullArraySliceProof1 :: SliceInnerN (S Z) (EArray (S Z) t) :~: t
+fullArraySliceProof1 = Refl
+
+fullArraySliceProofI :: forall n t .
+                        (SliceInnerN n (EArray n t) :~: t) -> (SliceInnerN (S n) (EArray (S n) t) :~: t)
+fullArraySliceProofI pn = case pn of
+  Refl ->
+-}
 
 type family IfLessOrEq (n :: Nat) (m :: Nat) (a :: EType) (b :: EType) :: EType where
   IfLessOrEq Z Z a _ = a

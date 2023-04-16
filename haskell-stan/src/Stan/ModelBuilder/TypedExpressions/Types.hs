@@ -51,6 +51,11 @@ data EType where
 --  (::->) :: EType -> EType -> EType
   deriving stock (Eq, Ord, Show)
 
+type family ZeroDArray (e :: EType) :: EType where
+  ZeroDArray (EArray (S n) _) =  TE.TypeError (TE.Text "ZeroDArray: " :<>: TE.ShowType n :<>: TE.Text " is not a zero dimensional array")
+  ZeroDArray (EArray Z t) = t
+  ZeroDArray t = t
+
 class GenEType (e :: EType) where
   genEType :: EType
 

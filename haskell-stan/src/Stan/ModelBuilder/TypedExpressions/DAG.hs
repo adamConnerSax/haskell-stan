@@ -235,10 +235,15 @@ addTransformedHP :: TE.NamedDeclSpec t
                  -> (TE.UExpr t -> TE.UExpr t)
                  -> SB.StanBuilderM md gq (ParameterTag t)
 addTransformedHP nds tpl rawCsM rawPrior fromRawF = do
-  let TE.DeclSpec st dims _ = TE.decl nds
-      rawNDS = TE.NamedDeclSpec (rawName $ TE.declName nds) $ maybe (TE.decl nds) (TE.DeclSpec st dims) rawCsM
-  rawPT <- addIndependentPriorP rawNDS rawPrior
-  addBuildParameter $ simpleTransformedP nds [] (BuildP rawPT TE.:> TE.TNil) tpl (\(e TE.:> TE.TNil) -> DeclRHS $ fromRawF e) -- (ExprList qs -> DeclCode t)
+  case TE.decl nds of
+    TE.DeclSpec st dims _ -> do
+      let rawNDS = TE.NamedDeclSpec (rawName $ TE.declName nds) $ maybe (TE.decl nds) (TE.DeclSpec st dims) rawCsM
+      rawPT <- addIndependentPriorP rawNDS rawPrior
+      addBuildParameter $ simpleTransformedP nds [] (BuildP rawPT TE.:> TE.TNil) tpl (\(e TE.:> TE.TNil) -> DeclRHS $ fromRawF e) -- (ExprList qs -> DeclCode t)
+    TE.ArraySpec n arrDims ds -> do
+      let rawNDS = TE.NamedDeclSpec (rawName $ TE.declName nds) $ maybe (TE.decl nds) (\vms -> TE.replaceDeclVMs vms (TE.ArraySpec n arrDims ds)) rawCsM
+      rawPT <- addIndependentPriorP rawNDS rawPrior
+      addBuildParameter $ simpleTransformedP nds [] (BuildP rawPT TE.:> TE.TNil) tpl (\(e TE.:> TE.TNil) -> DeclRHS $ fromRawF e) -- (ExprList qs -> DeclCode t)
 
 iidMatrixP :: TE.NamedDeclSpec TE.EMat
           -> [FunctionToDeclare]
