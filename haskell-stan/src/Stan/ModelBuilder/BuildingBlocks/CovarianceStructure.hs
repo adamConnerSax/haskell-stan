@@ -71,7 +71,10 @@ type ArrayMatDims n = (Vec.Vec n TE.IntE, Vec.Vec DT.Nat2 TE.IntE)
 arrayMatDims :: DT.SNatI m => Vec.Vec (m `DT.Plus` DT.Nat2) TE.IntE -> ArrayMatDims m
 arrayMatDims = Vec.split
 
-makeVecArraySpec :: (DT.SNatI (DT.S m), TL.VecToSameTypedListF TE.UExpr TE.EInt (DT.S m))
+makeVecArraySpec :: (DT.SNatI (DT.S m)
+                    , forall f. TE.VecToTListC f m
+                    , forall f. TE.TListToVecC f m
+                    )
                  => [TE.VarModifier TE.UExpr (TE.ScalarType TE.EReal)]
                  -> Vec.Vec (DT.S m) TE.IntE
                  -> TE.IntE
@@ -103,34 +106,36 @@ indexVec tl = go tl Vec.VNil
     go (ie :> ies) v = go ies (ie Vec.::: v)
 -}
 
-flattenCW :: (ParamC t, TL.SameTypedListToVecF TE.UExpr 'TE.EInt n)
-  => TE.StanName -> TE.DeclSpec t -> TE.UExpr t -> TE.CodeWriter (TE.UExpr (FlatParamT t))
+flattenCW :: (ParamC t)
+          => TE.StanName -> TE.DeclSpec t -> TE.UExpr t -> TE.CodeWriter (TE.UExpr (FlatParamT t))
 flattenCW sn ds e =
   let flatten x =  TE.functionE SF.to_vector (x :> TNil)
       flattenLoop :: forall n .
-                     (TL.VecToSameTypedListF TE.VarAndForType TE.EInt (DT.S n)
-                     , TL.SameTypedListToVecF TE.UExpr TE.EInt (DT.S n))
+                     (TL.SameTypedListToVecF TE.UExpr TE.EInt n
+                     , TL.VecToSameTypedListF TE.VarAndForType TE.EInt n
+                     , DT.SNatI n
+                     )
                   => Text
-                  -> DT.SNat (DT.S n)
+--                  -> DT.SNat (DT.S n)
                   -> Vec.Vec (DT.S n) TE.IntE
                   -> TE.UExpr (TE.EArray (DT.S n) TE.ECVec)
                   -> TE.UExpr (TE.EArray (DT.S n) TE.EMat)
                   -> TE.CodeWriter ()
-      flattenLoop counterPrefix nP1 arrDims fv uv = DT.withSNat nP1 $ do
+      flattenLoop counterPrefix {-nP1-} arrDims fv uv = do
         TE.addStmt
-          $ TE.intVecLoops @(DT.S n) counterPrefix arrDims
+          $ TE.intVecLoops @_ @[] counterPrefix arrDims
           $ \dimEs
-            -> case TE.getFESAProof (TE.fesaProofI nP1) of
-                 Refl -> let vecIndexes = TL.sameTypedListToVec @_ @_ @(DT.S n) dimEs
+            -> case TE.getFESAProof (TE.fesaProofI @TE.EInt (DT.snat @n)) of
+                 Refl -> let vecIndexes = TL.sameTypedListToVec dimEs
                          in [TE.sliceArrayAll @n fv vecIndexes
                              `TE.assign` flatten (TE.sliceArrayAll @n uv vecIndexes)]
   in case ds of
     TE.DeclSpec TE.StanMatrix _ _ -> pure $ flatten e
-    TE.ArraySpec n@DT.SS arrDims mds -> do
+    TE.ArraySpec DT.SS arrDims mds -> do
       case mds of
-        TE.DeclSpec TE.StanMatrix (rowsE Vec.::: colsE Vec.::: Vec.VNil) vms -> do
-          fv <- TE.declareNW $ TE.NamedDeclSpec (sn <> "_flat") $ flatDS ds
-          _ <- flattenLoop "k" n arrDims fv e
+        TE.DeclSpec TE.StanMatrix _ _ -> do
+          fv <- TE.declareNW $ TE.NamedDeclSpec (sn <> "_flat") $ flatDS ds  -- this is wrong? (EArray (S 'n1) ECVec ~ EArray n ECVec) rather than (EArray (S n) ECVec)
+          flattenLoop "k" arrDims fv e
           pure fv
 
 data ParamMat t where

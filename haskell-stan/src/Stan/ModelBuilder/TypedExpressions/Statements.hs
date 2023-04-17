@@ -5,6 +5,7 @@
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE PolyKinds #-}
+{-# LANGUAGE QuantifiedConstraints #-}
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TypeFamilies #-}
@@ -43,13 +44,14 @@ import qualified Data.Functor.Foldable as RS
 
 type StanName = Text
 
-type VecToTListC n = VecToSameTypedListF UExpr EInt n
+type VecToTListC f n = VecToSameTypedListF f EInt n
+type TListToVecC f n = SameTypedListToVecF f EInt n
 
 --type VecToTListAC n t = VecToSameTypedListF UExpr EInt (n `DT.Plus` DeclDimension t)
 
 data DeclSpec t where
   DeclSpec :: StanType t -> Vec (DeclDimension t) (UExpr EInt) -> [VarModifier UExpr (ScalarType t)] -> DeclSpec t
-  ArraySpec :: (VecToSameTypedListF UExpr EInt n) => SNat n -> Vec n (UExpr EInt) -> DeclSpec t -> DeclSpec (EArray n t)
+  ArraySpec :: (forall f. VecToTListC f n, forall f.TListToVecC f n) => SNat (DT.S n) -> Vec (DT.S n) (UExpr EInt) -> DeclSpec t -> DeclSpec (EArray (DT.S n) t)
 
 data NamedDeclSpec t = NamedDeclSpec StanName (DeclSpec t)
 
@@ -118,13 +120,13 @@ choleskyFactorCorrSpec rce = DeclSpec StanCholeskyFactorCorr (rce ::: VNil)
 choleskyFactorCovSpec :: UExpr EInt -> [VarModifier UExpr EReal] -> DeclSpec ESqMat
 choleskyFactorCovSpec rce = DeclSpec StanCholeskyFactorCov (rce ::: VNil)
 
-arraySpec :: VecToTListC n => SNat n -> Vec n (UExpr EInt) -> DeclSpec t -> DeclSpec (EArray n t)
+arraySpec :: (forall f.VecToTListC f n, forall f.TListToVecC f n) => SNat (DT.S n) -> Vec (DT.S n) (UExpr EInt) -> DeclSpec t -> DeclSpec (EArray (DT.S n) t)
 arraySpec = ArraySpec --(DeclSpec t tIndices vms) = DeclSpec (StanArray n t) (arrIndices Vec.++ tIndices) vms
 
-array1Spec :: VecToTListC N1 => UExpr EInt -> DeclSpec t -> DeclSpec (EArray N1 t)
+array1Spec :: VecToTListC f N1 => UExpr EInt -> DeclSpec t -> DeclSpec (EArray N1 t)
 array1Spec se = arraySpec s1 (se ::: VNil)
 
-array2Spec ::  VecToTListC N2 => UExpr EInt -> UExpr EInt -> DeclSpec t -> DeclSpec (EArray N2 t)
+array2Spec ::  VecToTListC f N2 => UExpr EInt -> UExpr EInt -> DeclSpec t -> DeclSpec (EArray N2 t)
 array2Spec i1 i2 = arraySpec s2 (i1 ::: i2 ::: VNil)
 
 intArraySpec :: UExpr EInt -> [VarModifier UExpr EInt] -> DeclSpec EIndexArray
@@ -237,9 +239,9 @@ fesaProof0 = Refl
 
 newtype FESAProof t n
   = FESAProof
-    { getFESAProof :: ForEachSliceArgs (SameTypeList t (DT.S n)) :~: SameTypeList (ForEachSlice t) (DT.S n)}
+    { getFESAProof :: ForEachSliceArgs (SameTypeList t n) :~: SameTypeList (ForEachSlice t) n}
 
-fesaProofI :: DT.SNat n -> FESAProof t n
+fesaProofI :: forall t n . DT.SNat n -> FESAProof t n
 fesaProofI n = DT.withSNat n
                $ DT.induction (FESAProof Refl)
                (\fpn -> FESAProof $ gcastWith (getFESAProof fpn) Refl)
