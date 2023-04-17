@@ -266,28 +266,12 @@ vecVFT counterPrefix v =
       g nt ie = VarAndForType (counterPrefix <> show nt) (SpecificNumbered (intE 1) ie)
   in vecToSameTypedListF g v
 
-{-
-intExprListHelper :: ExprList (ForEachSliceArgs (SameTypeList EInt n)
-                  -> ExprList (SameTypeList EInt n)
-intExprListHelper = go
-intExprListHelper (t :> ts) = t :> intExprListHelper ts
--}
-
 intVecLoops :: forall m f . (VecToSameTypedListF VarAndForType EInt m, Traversable f)
             => Text
             -> Vec.Vec m IntE
             -> (ExprList (ForEachSliceArgs (SameTypeList EInt m)) -> f UStmt)
             -> UStmt
 intVecLoops counterPrefix v stmtF = nestedLoops (vecVFT counterPrefix v) stmtF
-{-
-  go (vecVFT counterPrefix v) stmtF where
-  go :: IntVecVFT m -> (ExprList (SameTypeList EInt m) -> f UStmt) -> UStmt
-  go TNil f = scoped $ f TNil
-  go (VarAndForType vln ft :> TNil) f = for vln ft $ \e -> f (e :> TNil)
-  go  (VarAndForType vln ft :> vfts) f = let g e es = f (e :> es) in for vln ft $ \e -> [intVecLoops vfts (g e)]
---intVecLoops counterPrefix (v Vec.::: Vec.VNil) stmtF = for
--}
---
 
 ifThen :: UExpr EBool -> UStmt -> UStmt -> UStmt
 ifThen ce sTrue = SIfElse $ (ce, sTrue) :| []

@@ -175,6 +175,11 @@ diagPostMultiply :: DiagMultiplyC t => Function t '[t, ECVec]
 diagPostMultiply = simpleFunction "diag_post_multiply"
 {-# INLINEABLE diagPostMultiply #-}
 
+quadFormDiag :: (DiagMultiplyC t, TypeOneOf t' [ECVec, ERVec], GenSType t') => Function t '[t, t']
+quadFormDiag = simpleFunction "quad_form_diag"
+{-# INLINEABLE quadFormDiag #-}
+
+
 segment :: (IsContainer t, GenSType t) => Function t [t, EInt, EInt]
 segment = simpleFunction "segment"
 {-# INLINEABLE segment #-}
@@ -214,6 +219,12 @@ rows = simpleFunction "rows"
 cols :: (TypeOneOf t [EMat, ESqMat], GenSType t) => Function EInt '[t]
 cols = simpleFunction "cols"
 {-# INLINEABLE cols #-}
+
+-- NB: Stan docs warn against using this because there's usually a more efficient option
+-- But I'm not sure what to do with multiple draws from uncorrelated normals
+diag :: (TypeOneOf t [ERVec, ECVec], GenSType t) => Function ESqMat '[t]
+diag = simpleFunction "diag"
+{-# INLINEABLE diag #-}
 
 diag_pre_multiply :: (TypeOneOf t [ECVec, ERVec], GenSType t, TypeOneOf t' [EMat, ESqMat], GenSType t')
                   => Function t' [t, t']
@@ -274,6 +285,58 @@ std_normal_lupdf = simpleDensity "std_normal_lupdf"
 std_normal_rng :: (TypeOneOf t [EReal, ECVec, ERVec], GenSType t) => Function t '[]
 std_normal_rng = simpleFunction "std_normal_rng"
 {-# INLINEABLE std_normal_rng #-}
+
+lkj_corr_cholesky :: Density ESqMat '[EReal]
+lkj_corr_cholesky = simpleDensity "lkj_corr_cholesky"
+{-# INLINEABLE lkj_corr_cholesky #-}
+
+type MultiNormalDensityC t = (TypeOneOf t [ECVec, ERVec, EMat, EArray1 ECVec, EArray1 ERVec], GenSType t)
+
+-- the rng functions look like they return column vectors regardless of the input structure
+type family MultiNormalRngReturnT t where
+  MultiNormalRngReturnT ECVec = ECVec
+  MultiNormalRngReturnT ERVec = ECVec
+  MultiNormalRngReturnT EMat = EMat
+  MultiNormalRngReturnT (EArray1 ECVec) = EArray1 ECVec
+  MultiNormalRngReturnT (EArray1 ERVec) = EArray1 ECVec
+
+
+multi_normal_cholesky :: MultiNormalDensityC t => Density t '[t, ESqMat]
+multi_normal_cholesky = simpleDensity "multi_normal_cholesky"
+{-# INLINEABLE multi_normal_cholesky #-}
+
+multi_normal_cholesky_lpdf :: MultiNormalDensityC t => Density t '[t, ESqMat]
+multi_normal_cholesky_lpdf = simpleDensity "multi_normal_cholesky_lpdf"
+{-# INLINEABLE multi_normal_cholesky_lpdf #-}
+
+multi_normal_cholesky_lupdf :: MultiNormalDensityC t => Density t '[t, ESqMat]
+multi_normal_cholesky_lupdf = simpleDensity "multi_normal_cholesky_lupdf"
+{-# INLINEABLE multi_normal_cholesky_lupdf #-}
+
+multi_normal_cholesky_rng :: (MultiNormalDensityC t, GenSType (MultiNormalRngReturnT t))
+                          => Function (MultiNormalRngReturnT t) '[t, ESqMat]
+multi_normal_cholesky_rng = simpleFunction "multi_normal_cholesky_rng"
+{-# INLINEABLE multi_normal_cholesky_rng #-}
+
+multi_normal :: MultiNormalDensityC t => Density t '[t, ESqMat]
+multi_normal = simpleDensity "multi_normal"
+{-# INLINEABLE multi_normal #-}
+
+multi_normal_lpdf :: MultiNormalDensityC t => Density t '[t, ESqMat]
+multi_normal_lpdf = simpleDensity "multi_normal_lpdf"
+{-# INLINEABLE multi_normal_lpdf #-}
+
+multi_normal_lupdf :: MultiNormalDensityC t => Density t '[t, ESqMat]
+multi_normal_lupdf = simpleDensity "multi_normal_lupdf"
+{-# INLINEABLE multi_normal_lupdf #-}
+
+multi_normal_rng :: (MultiNormalDensityC t, GenSType (MultiNormalRngReturnT t))
+                          => Function (MultiNormalRngReturnT t) '[t, ESqMat]
+multi_normal_rng = simpleFunction "multi_normal_rng"
+{-# INLINEABLE multi_normal_rng #-}
+
+
+
 
 lognormal :: (TypeOneOf t [EReal, ECVec, ERVec], GenSType t) => Density t '[t, t]
 lognormal = simpleDensity "lognormal"
@@ -443,55 +506,6 @@ beta_binomial_lupmf = simpleDensity "beta_binomial_lupmf"
 beta_binomial_rng :: BinDensityC t t' => Function t '[t, t', t']
 beta_binomial_rng = simpleFunction "beta_binomial_rng"
 {-# INLINEABLE beta_binomial_rng #-}
-
-lkj_corr_cholesky :: Density ESqMat '[EReal]
-lkj_corr_cholesky = simpleDensity "lkj_corr_cholesky"
-{-# INLINEABLE lkj_corr_cholesky #-}
-
-type MultiNormalDensityC t = (TypeOneOf t [ECVec, ERVec, EMat, EArray1 ECVec, EArray1 ERVec], GenSType t)
-
--- the rng functions look like they return column vectors regardless of the input structure
-type family MultiNormalRngReturnT t where
-  MultiNormalRngReturnT ECVec = ECVec
-  MultiNormalRngReturnT ERVec = ECVec
-  MultiNormalRngReturnT EMat = EMat
-  MultiNormalRngReturnT (EArray1 ECVec) = EArray1 ECVec
-  MultiNormalRngReturnT (EArray1 ERVec) = EArray1 ECVec
-
-
-multi_normal_cholesky :: MultiNormalDensityC t => Density t '[t, ESqMat]
-multi_normal_cholesky = simpleDensity "multi_normal_cholesky"
-{-# INLINEABLE multi_normal_cholesky #-}
-
-multi_normal_cholesky_lpdf :: MultiNormalDensityC t => Density t '[t, ESqMat]
-multi_normal_cholesky_lpdf = simpleDensity "multi_normal_cholesky_lpdf"
-{-# INLINEABLE multi_normal_cholesky_lpdf #-}
-
-multi_normal_cholesky_lupdf :: MultiNormalDensityC t => Density t '[t, ESqMat]
-multi_normal_cholesky_lupdf = simpleDensity "multi_normal_cholesky_lupdf"
-{-# INLINEABLE multi_normal_cholesky_lupdf #-}
-
-multi_normal_cholesky_rng :: (MultiNormalDensityC t, GenSType (MultiNormalRngReturnT t))
-                          => Function (MultiNormalRngReturnT t) '[t, ESqMat]
-multi_normal_cholesky_rng = simpleFunction "multi_normal_cholesky_rng"
-{-# INLINEABLE multi_normal_cholesky_rng #-}
-
-multi_normal :: MultiNormalDensityC t => Density t '[t, ESqMat]
-multi_normal = simpleDensity "multi_normal"
-{-# INLINEABLE multi_normal #-}
-
-multi_normal_lpdf :: MultiNormalDensityC t => Density t '[t, ESqMat]
-multi_normal_lpdf = simpleDensity "multi_normal_lpdf"
-{-# INLINEABLE multi_normal_lpdf #-}
-
-multi_normal_lupdf :: MultiNormalDensityC t => Density t '[t, ESqMat]
-multi_normal_lupdf = simpleDensity "multi_normal_lupdf"
-{-# INLINEABLE multi_normal_lupdf #-}
-
-multi_normal_rng :: (MultiNormalDensityC t, GenSType (MultiNormalRngReturnT t))
-                          => Function (MultiNormalRngReturnT t) '[t, ESqMat]
-multi_normal_rng = simpleFunction "multi_normal_rng"
-{-# INLINEABLE multi_normal_rng #-}
 
 -- Categorical
 type CategoricalTypes t t' = (TypeOneOf t [EInt, EIntArray], GenSType t
