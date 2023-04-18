@@ -51,7 +51,8 @@ type TListToVecC f n = SameTypedListToVecF f EInt n
 
 data DeclSpec t where
   DeclSpec :: StanType t -> Vec (DeclDimension t) (UExpr EInt) -> [VarModifier UExpr (ScalarType t)] -> DeclSpec t
-  ArraySpec :: (forall f. VecToTListC f n, forall f.TListToVecC f n) => SNat (DT.S n) -> Vec (DT.S n) (UExpr EInt) -> DeclSpec t -> DeclSpec (EArray (DT.S n) t)
+  ArraySpec :: (forall f. VecToTListC f n, forall f.TListToVecC f n, GenTypeList (SameTypeList EInt n))
+    => SNat (DT.S n) -> Vec (DT.S n) (UExpr EInt) -> DeclSpec t -> DeclSpec (EArray (DT.S n) t)
 
 data NamedDeclSpec t = NamedDeclSpec StanName (DeclSpec t)
 
@@ -120,7 +121,8 @@ choleskyFactorCorrSpec rce = DeclSpec StanCholeskyFactorCorr (rce ::: VNil)
 choleskyFactorCovSpec :: UExpr EInt -> [VarModifier UExpr EReal] -> DeclSpec ESqMat
 choleskyFactorCovSpec rce = DeclSpec StanCholeskyFactorCov (rce ::: VNil)
 
-arraySpec :: (forall f.VecToTListC f n, forall f.TListToVecC f n) => SNat (DT.S n) -> Vec (DT.S n) (UExpr EInt) -> DeclSpec t -> DeclSpec (EArray (DT.S n) t)
+arraySpec :: (forall f.VecToTListC f n, forall f.TListToVecC f n, GenTypeList (SameTypeList EInt n))
+          => SNat (DT.S n) -> Vec (DT.S n) (UExpr EInt) -> DeclSpec t -> DeclSpec (EArray (DT.S n) t)
 arraySpec = ArraySpec --(DeclSpec t tIndices vms) = DeclSpec (StanArray n t) (arrIndices Vec.++ tIndices) vms
 
 array1Spec :: VecToTListC f N1 => UExpr EInt -> DeclSpec t -> DeclSpec (EArray N1 t)

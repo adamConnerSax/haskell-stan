@@ -113,12 +113,19 @@ rep_row_vector :: Function ERVec '[EReal, EInt]
 rep_row_vector = simpleFunction "rep_row_vector"
 {-# INLINEABLE rep_row_vector #-}
 
+{-
 type family NInts (n :: Nat) :: [EType] where
   NInts Z = '[]
   NInts (S n) = EInt ': NInts n
 
--- this pleases me
 rep_array :: (GenSType t, GenTypeList (NInts n), SNatI n) => Function (EArray n t) (t ': NInts n)
+rep_array = simpleFunction "rep_array"
+{-# INLINEABLE rep_array #-}
+
+
+-}
+-- this pleases me
+rep_array :: (GenSType t, GenTypeList (SameTypeList EInt n), SNatI n) => Function (EArray n t) (t ': SameTypeList EInt n)
 rep_array = simpleFunction "rep_array"
 {-# INLINEABLE rep_array #-}
 
@@ -290,13 +297,12 @@ lkj_corr_cholesky :: Density ESqMat '[EReal]
 lkj_corr_cholesky = simpleDensity "lkj_corr_cholesky"
 {-# INLINEABLE lkj_corr_cholesky #-}
 
-type MultiNormalDensityC t = (TypeOneOf t [ECVec, ERVec, EMat, EArray1 ECVec, EArray1 ERVec], GenSType t)
+type MultiNormalDensityC t = (TypeOneOf t [ECVec, ERVec, EArray1 ECVec, EArray1 ERVec], GenSType t)
 
 -- the rng functions look like they return column vectors regardless of the input structure
 type family MultiNormalRngReturnT t where
   MultiNormalRngReturnT ECVec = ECVec
   MultiNormalRngReturnT ERVec = ECVec
-  MultiNormalRngReturnT EMat = EMat
   MultiNormalRngReturnT (EArray1 ECVec) = EArray1 ECVec
   MultiNormalRngReturnT (EArray1 ERVec) = EArray1 ECVec
 
