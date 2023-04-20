@@ -32,7 +32,7 @@ import Stan.ModelBuilder.TypedExpressions.StanFunctions
 
 import qualified Data.Vec.Lazy as Vec
 import qualified Data.Type.Nat as DT
-import Data.Type.Equality (type (~), type (:~:)(..), gcastWith)
+import Data.Type.Equality (type (:~:)(..), gcastWith)
 import Control.Monad.Writer.Strict as W
 
 import Prelude hiding (Nat)
@@ -125,10 +125,10 @@ arraySpec :: (forall f.VecToTListC f n, forall f.TListToVecC f n, GenTypeList (S
           => SNat (DT.S n) -> Vec (DT.S n) (UExpr EInt) -> DeclSpec t -> DeclSpec (EArray (DT.S n) t)
 arraySpec = ArraySpec --(DeclSpec t tIndices vms) = DeclSpec (StanArray n t) (arrIndices Vec.++ tIndices) vms
 
-array1Spec :: VecToTListC f N1 => UExpr EInt -> DeclSpec t -> DeclSpec (EArray N1 t)
+array1Spec :: UExpr EInt -> DeclSpec t -> DeclSpec (EArray N1 t)
 array1Spec se = arraySpec s1 (se ::: VNil)
 
-array2Spec ::  VecToTListC f N2 => UExpr EInt -> UExpr EInt -> DeclSpec t -> DeclSpec (EArray N2 t)
+array2Spec ::  UExpr EInt -> UExpr EInt -> DeclSpec t -> DeclSpec (EArray N2 t)
 array2Spec i1 i2 = arraySpec s2 (i1 ::: i2 ::: VNil)
 
 intArraySpec :: UExpr EInt -> [VarModifier UExpr EInt] -> DeclSpec EIndexArray
@@ -634,7 +634,7 @@ instance TR.HTraversable StmtF where
     STargetF re -> STargetF <$> natM re
     SSampleF ste dist al -> SSampleF <$> natM ste <*> pure dist <*> TR.htraverse natM al
     SForF txt se ee body -> SForF txt <$> natM se <*> natM ee <*> pure body
-    SForEachF txt at body -> SForEachF txt <$> natM at <*> pure body
+    SForEachF txt at' body -> SForEachF txt <$> natM at' <*> pure body
     SIfElseF x0 sf -> SIfElseF <$> traverse (\(c, s) -> (,) <$> natM c <*> pure s) x0 <*> pure sf
     SWhileF cond body -> SWhileF <$> natM cond <*> pure body
     SBreakF -> pure SBreakF

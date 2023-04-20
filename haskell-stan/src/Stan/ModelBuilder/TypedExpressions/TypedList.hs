@@ -201,11 +201,9 @@ instance GenTypedList '[] where
 instance (GenSType t, GenTypedList ts) => GenTypedList (t ': ts)  where
   genTypedList = genSType @t :> genTypedList @ts
 
-
 type family SameTypeList (e :: EType) (n :: DT.Nat) :: [EType] where
   SameTypeList _ DT.Z = '[]
   SameTypeList e (DT.S n) = e ': SameTypeList e n
-
 
 class VecToSameTypedListF f (e :: EType) (n :: Nat) where
   vecToSameTypedListF :: (Nat -> a -> f e) -> Vec.Vec n a -> TypedList f (SameTypeList e n)
