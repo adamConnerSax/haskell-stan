@@ -229,11 +229,11 @@ matrixMultiNormalParameter :: forall t md gq .
                               )
                            => MatrixCovarianceStructure
                            -> Centering
-                           -> DAG.Parameter t
-                           -> DAG.Parameter TE.EMat
+                           -> TE.UExpr t
+                           -> TE.MatrixE
                            -> TE.NamedDeclSpec t
                            -> SB.StanBuilderM md gq (DAG.Parameter t)
-matrixMultiNormalParameter cs cent muP sigmaP nds = do
+matrixMultiNormalParameter cs cent muE sigmaE nds = do
   let flatten m = TE.functionE SF.to_vector (m :> TNil) -- column major
       multiNormalC x muFlat lSigma = TE.sample x SF.multi_normal_cholesky (muFlat :> lSigma :> TNil)
       multiNormalD x muFlat dSigma = TE.sample x SF.multi_normal (muFlat :> dSigma :> TNil)
@@ -264,7 +264,7 @@ matrixMultiNormalParameter cs cent muP sigmaP nds = do
           NonCentered -> do
             nonCenteredUnFlat (TE.decl nds) pE flatMu sigmaE rawE
             TE.addStmt $ stdNormalRaw cs fDS zeroE rawE
-  _ <- DAG.addBuildParameter $ DAG.TransformedP rawNDS [] TNil DAG.ModelBlockLocal justDeclare (DAG.build pTag :> muP :> sigmaP :> TNil) modelCodeF
+  _ <- DAG.addBuildParameter $ DAG.TransformedP rawNDS [] TNil DAG.ModelBlockLocal justDeclare (DAG.build pTag :> DAG.given muE :> DAG.given sigmaE :> TNil) modelCodeF
   pure $ DAG.build pTag
 
 nonCentered :: TE.DeclSpec t

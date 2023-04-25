@@ -85,6 +85,13 @@ type EIndexArray = EArray1 EInt
 type EIntArray :: EType
 type EIntArray = EArray (S Z) EInt
 
+type ERealArray :: EType
+type ERealArray = EArray (S Z) EReal
+
+type EComplexArray :: EType
+type EComplexArray = EArray (S Z) EComplex
+
+
 -- A mechanism to limit the types we can use in functions via a constraint
 type TypeOneOf et ets = TypeOneOf' et ets (TypeOneOfB et ets)
 

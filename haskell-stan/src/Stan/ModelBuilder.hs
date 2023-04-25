@@ -11,6 +11,7 @@
 {-# LANGUAGE TupleSections #-}
 {-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE TypeFamilies #-}
+{-# LANGUAGE TypeOperators #-}
 
 module Stan.ModelBuilder
 (
@@ -886,6 +887,19 @@ addFunctionOnce f@(TE.Function fn _ _ _) argNames fBF = do
     modify $ modifyFunctionNames (Set.insert fn)
   pure f
 addFunctionOnce f@(TE.IdentityFunction _) _ _ = pure f
+
+addDensityOnce :: Traversable g
+                => TE.Density gt ats
+               -> TE.TypedArgNames (gt ': ats)
+               -> (TE.ExprList (gt ': ats) -> (g TE.UStmt, TE.UExpr TE.EReal))
+               -> StanBuilderM md gq (TE.Density gt ats)
+addDensityOnce f@(TE.Density fn _ _ _) argNames fBF = do
+  fsNames <- gets hasFunctions
+  when (not $  fn `Set.member` fsNames) $ do
+    inBlock SBFunctions $ addStmtToCode $ TE.density f argNames fBF
+    modify $ modifyFunctionNames (Set.insert fn)
+  pure f
+
 
 -- TODO: We should error if added twice but that doesn't quite work with post-stratifation code now.  Fix.
 addIntMapBuilder :: forall r k md gq.

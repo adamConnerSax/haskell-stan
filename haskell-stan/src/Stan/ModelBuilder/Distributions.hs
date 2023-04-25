@@ -287,7 +287,7 @@ multinomialDist = StanDist Discrete sample lpmf lupmf rng
     rng  = TE.functionE TE.multinomial_rng
 
 
-multinomialLogitDist :: StanDist TE.EIntArray '[TE.ECVec] [TE.ECVec, TE.EInt]
+multinomialLogitDist :: StanDist TE.EIntArray '[TE.ECVec] '[TE.ECVec, TE.EInt]
 multinomialLogitDist = StanDist Discrete sample lpmf lupmf rng
   where
     sample y = TE.sample y TE.multinomial_logit

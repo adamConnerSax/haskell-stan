@@ -54,6 +54,10 @@ inv_sqrt :: VectorizedReal t => Function t '[t]
 inv_sqrt = simpleFunction "inv_sqrt"
 {-# INLINEABLE inv_sqrt #-}
 
+lgamma :: VectorizedReal t => Function t '[t]
+lgamma = simpleFunction "lgamma"
+{-# INLINEABLE lgamma #-}
+
 inv :: VectorizedReal t => Function t '[t]
 inv = simpleFunction "inv"
 {-# INLINEABLE inv #-}
@@ -96,7 +100,7 @@ size :: (IsContainer t, GenSType t) => Function EInt '[t]
 size = simpleFunction "size"
 {-# INLINEABLE size #-}
 
-sum :: (TypeOneOf t '[ECVec, ERVec, EMat, ESqMat], GenSType t) => Function EReal '[t]
+sum :: (TypeOneOf t '[ECVec, ERVec, EMat, ESqMat, ERealArray], GenSType t) => Function EReal '[t]
 sum = simpleFunction "sum"
 {-# INLINEABLE sum #-}
 
@@ -513,6 +517,15 @@ beta_binomial_rng :: BinDensityC t t' => Function t '[t, t', t']
 beta_binomial_rng = simpleFunction "beta_binomial_rng"
 {-# INLINEABLE beta_binomial_rng #-}
 
+-- softmax
+softmax :: (TypeOneOf t [ECVec, ERVec], GenSType t) => Function t '[t]
+softmax = simpleFunction "softmax"
+{-# INLINEABLE softmax #-}
+
+log_softmax :: (TypeOneOf t [ECVec, ERVec], GenSType t) => Function t '[t]
+log_softmax = simpleFunction "log_softmax"
+{-# INLINEABLE log_softmax #-}
+
 -- Categorical
 type CategoricalTypes t t' = (TypeOneOf t [EInt, EIntArray], GenSType t
                              , TypeOneOf t' [ESimplex, ECVec], GenSType t')
@@ -581,3 +594,25 @@ multinomial_logit_lupmf = simpleDensity "multinomial_logit_lupmf"
 multinomial_logit_rng :: Function EIntArray '[ECVec, EInt]
 multinomial_logit_rng = simpleFunction "multinomial_logit_rng"
 {-# INLINEABLE multinomial_logit_rng #-}
+
+-- dirichlet
+type DirichletTypes t t' = (TypeOneOf t [ECVec, ERVec, ESimplex, EArray1 ECVec, EArray1 ERVec, EArray1 ESimplex]
+                           , TypeOneOf t' [ECVec, ERVec, EArray1 ECVec, EArray1 ERVec]
+                           , Dimension t ~ Dimension t'
+                           , GenSType t, GenSType t')
+
+dirichlet :: DirichletTypes t t' => Density t '[t']
+dirichlet = simpleDensity "dirichlet"
+{-# INLINEABLE dirichlet #-}
+
+dirichlet_lupdf :: DirichletTypes t t' => Density t '[t']
+dirichlet_lupdf = simpleDensity "dirichlet_lupdf"
+{-# INLINEABLE dirichlet_lupdf #-}
+
+dirichlet_lpdf :: DirichletTypes t t' => Density t '[t']
+dirichlet_lpdf = simpleDensity "dirichlet_lpdf"
+{-# INLINEABLE dirichlet_lpdf #-}
+
+dirichlet_rng :: (TypeOneOf t [ECVec, ERVec], GenSType t) => Function t '[t]
+dirichlet_rng = simpleFunction "dirichlet_rng"
+{-# INLINEABLE dirichlet_rng #-}

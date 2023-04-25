@@ -116,6 +116,7 @@ library
                  , Stan.ModelBuilder.BuildingBlocks
                  , Stan.ModelBuilder.BuildingBlocks.ArrayHelpers
                  , Stan.ModelBuilder.BuildingBlocks.CovarianceStructure
+                 , Stan.ModelBuilder.BuildingBlocks.DirichletMultinomial
                  , Stan.ModelBuilder.DesignMatrix
                  , Stan.ModelBuilder.Distributions
                  , Stan.ModelBuilder.TypedExpressions.DAGTypes
