@@ -880,7 +880,7 @@ addFunctionsOnce functionsName fCode = do
 
 addFunctionOnce :: Traversable g
                 => TE.Function rt ats -> TE.TypedArgNames ats -> (TE.ExprList ats -> (g TE.UStmt, TE.UExpr rt)) -> StanBuilderM md gq (TE.Function rt ats)
-addFunctionOnce f@(TE.Function fn _ _ _) argNames fBF = do
+addFunctionOnce f@(TE.Function fn _ _) argNames fBF = do
   fsNames <- gets hasFunctions
   when (not $  fn `Set.member` fsNames) $ do
     inBlock SBFunctions $ addStmtToCode $ TE.function f argNames fBF
@@ -893,10 +893,10 @@ addDensityOnce :: Traversable g
                -> TE.TypedArgNames (gt ': ats)
                -> (TE.ExprList (gt ': ats) -> (g TE.UStmt, TE.UExpr TE.EReal))
                -> StanBuilderM md gq (TE.Density gt ats)
-addDensityOnce f@(TE.Density fn _ _ _) argNames fBF = do
+addDensityOnce f@(TE.Density fn _ _) argNames fBF = do
   fsNames <- gets hasFunctions
   when (not $  fn `Set.member` fsNames) $ do
-    inBlock SBFunctions $ addStmtToCode $ TE.density f argNames fBF
+    inBlock SBFunctions $ addStmtToCode $ TE.function (TE.densityAsFunction f) argNames fBF
     modify $ modifyFunctionNames (Set.insert fn)
   pure f
 

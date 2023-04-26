@@ -78,21 +78,24 @@ stmtToCodeAlg = \case
   SAssignF lhs rhs -> Right $ lineLayout $ preferOpBreak (unK lhs) PP.equals (unK rhs <> PP.semi)
   SOpAssignF op lhs rhs -> Right $ lineLayout $ preferOpBreak (unK lhs) (opDoc op <> PP.equals) (unK rhs <> PP.semi)
   STargetF rhs -> Right $ lineLayout $ preferOpBreak "target" "+=" $ unK rhs <> PP.semi
-  SSampleF lhs (Density dn _ _ rF) al -> Right $ lineLayout
+  SSampleF lhs (Density dn _ _) al -> Right $ lineLayout
                                          $ preferOpBreak
                                          (unK lhs)
                                          "~"
-                                         (PP.pretty dn <> PP.parens (csArgList $ rF al) <> PP.semi)
+                                         (PP.pretty dn <> PP.parens (csArgList al) <> PP.semi)
   SForF txt fe te body -> (\b -> "for" <+> PP.parens (PP.pretty txt <+> "in" <+> unK fe <> PP.colon <> unK te) <+> bracketBlock b) <$> sequenceA body
   SForEachF txt e body -> (\b -> "foreach" <+> PP.parens (PP.pretty txt <+> "in" <+> unK e) <+> bracketBlock b) <$> sequence body
   SIfElseF condAndIfTrueL allFalse -> ifElseCode condAndIfTrueL allFalse
   SWhileF if' body -> (\b -> "while" <+> PP.parens (unK if') <+> bracketBlock b) <$> sequence body
   SBreakF -> Right $ "break" <> PP.semi
   SContinueF -> Right $ "continue" <> PP.semi
-  SFunctionF (Function fname rt ats rF) al body re ->
-    (\b -> PP.pretty (sTypeName rt) <+> PP.pretty fname <> functionArgs (applyTypedListFunctionToTypeList rF ats) (rF al)
+  SFunctionF (Function fname rt ats) al body re ->
+    (\b -> PP.pretty (sTypeName rt) <+> PP.pretty fname <> functionArgs ats al
            <+> bracketBlock (b `appendAsList` ["return" <+> unK re <> PP.semi])) <$> sequence body
   SFunctionF (IdentityFunction _) _ _ _ -> Left "Attempt to *declare* Identity function!"
+{-  SDensityF (Density dname gt ats) al body re ->
+    (\b -> PP.pretty (sTypeName SReal) <+> PP.pretty dname <> functionArgs (gt ::> ats) al
+           <+> bracketBlock (b `appendAsList` ["return" <+> unK re <> PP.semi])) <$> sequence body -}
   SCommentF cs -> case toList cs of
     [] -> Right mempty
     [c] -> Right $ "//" <+> PP.pretty c
@@ -305,9 +308,9 @@ exprToDocAlg = K . \case
   LMatrix ms -> Bare $ unNestedToCode PP.brackets [length ms] $ PP.pretty <$> concatMap DT.toList ms--PP.brackets $ PP.pretty $ T.intercalate "," $ fmap (T.intercalate "," . fmap show . DT.toList) ms
   LArray nv -> Bare $ nestedVecToCode nv
   LIntRange leM ueM -> Oped RangeOp $ maybe mempty (unK . f) leM <> PP.colon <> maybe mempty (unK . f) ueM
-  LFunction (Function fn _ _ rF) al -> Bare $ PP.pretty fn <> PP.parens (csArgList $ hfmap f $ rF al)
+  LFunction (Function fn _ _) al -> Bare $ PP.pretty fn <> PP.parens (csArgList $ hfmap f al)
   LFunction (IdentityFunction _) (arg :> TNil) -> Bare $ unK $ f arg
-  LDensity (Density dn _ _ rF) k al -> Bare $ PP.pretty dn <> PP.parens (formatDensityArgs (unK (f k) : typedKToList (hfmap f $ rF al)))
+  LDensity (Density dn _ _) k al -> Bare $ PP.pretty dn <> PP.parens (formatDensityArgs (unK (f k) : typedKToList (hfmap f al)))
   LBinaryOp sbo le re -> binaryOp sbo le re --Oped (binaryOpFromSBinaryOp sbo) $ unK (f $ parenthesizeOped le) <> PP.softline <> opDoc sbo <+> unK (f $ parenthesizeOped re)
   LUnaryOp op e -> Bare $ unaryOpDoc (unK (f $ parenthesizeOped e)) op
   LCond ce te fe -> Bare $ PP.group $ PP.nest 1 $ unK (f ce) <> PP.softline <> "?" <+> unK (f te) <> PP.softline <> PP.colon <+> unK (f fe)

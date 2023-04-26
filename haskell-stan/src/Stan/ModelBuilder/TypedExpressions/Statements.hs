@@ -297,6 +297,15 @@ function fd argNames bodyF = SFunction fd argNames bodyS ret
     argExprs = zipTypedListsWith (namedE . funcArgName) argNames argTypes
     (bodyS, ret) = bodyF argExprs
 
+{-
+densityFunction :: Traversable f => Density gt args -> TypedList (FuncArg Text) (gt ': args) -> (TypedList UExpr (gt ': args) -> (f UStmt, UExpr EReal)) -> UStmt
+densityFunction fd argNames bodyF = SDensity fd argNames bodyS ret
+  where
+    argTypes = typeListToTypedListOfTypes $ densityFunctionArgTypes fd
+    argExprs = zipTypedListsWith (namedE . funcArgName) argNames argTypes
+    (bodyS, ret) = bodyF argExprs
+-}
+
 simpleFunctionBody :: Function rt pts
                    -> StanName
                    -> (ExprList pts -> DeclSpec rt)
@@ -439,6 +448,7 @@ data Stmt :: (EType -> Type) -> Type where
   SBreak :: Stmt r
   SContinue :: Stmt r
   SFunction :: Traversable f => Function rt args -> TypedList (FuncArg Text) args -> f (Stmt r) -> r rt -> Stmt r
+--  SDensity :: Traversable f => Density gt args -> TypedList (FuncArg Text) (gt ': args) -> f (Stmt r) -> r EReal -> Stmt r
   SComment :: Traversable f => f Text -> Stmt r
   SProfile :: Traversable f => Text -> f (Stmt r) -> Stmt r
   SPrint :: TypedList r args -> Stmt r
@@ -461,6 +471,7 @@ data StmtF :: (EType -> Type) -> Type -> Type where
   SBreakF :: StmtF r a
   SContinueF :: StmtF r a
   SFunctionF :: Traversable f => Function rt args -> TypedList (FuncArg Text) args -> f a -> r rt -> StmtF r a
+--  SDensityF :: Traversable f => Density gt args -> TypedList (FuncArg Text) (gt ': args) -> f a -> r EReal -> StmtF r a
   SCommentF :: Traversable f => f Text -> StmtF r a
   SProfileF :: Traversable f => Text -> f a -> StmtF r a
   SPrintF :: TypedList r args -> StmtF r a
@@ -502,6 +513,7 @@ instance Functor (StmtF f) where
     SBreakF -> SBreakF
     SContinueF -> SContinueF
     SFunctionF func al sfs re -> SFunctionF func al (f <$> sfs) re
+--    SDensityF dens al sfs re -> SDensityF dens al (f <$> sfs) re
     SCommentF t -> SCommentF t
     SProfileF t stmts -> SProfileF t (f <$> stmts)
     SPrintF args -> SPrintF args
@@ -525,6 +537,7 @@ instance Foldable (StmtF f) where
     SBreakF -> mempty
     SContinueF -> mempty
     SFunctionF _ _ body _ -> foldMap f body
+--    SDensityF _ _ body _ -> foldMap f body
     SCommentF _ -> mempty
     SProfileF _ body -> foldMap f body
     SPrintF {} -> mempty
@@ -548,6 +561,7 @@ instance Traversable (StmtF f) where
     SBreakF -> pure SBreakF
     SContinueF -> pure SContinueF
     SFunctionF func al sfs re -> SFunctionF func al <$> traverse g sfs <*> pure re
+--    SDensityF dens al sfs re -> SDensityF dens al <$> traverse g sfs <*> pure re
     SCommentF t -> pure $ SCommentF t
     SProfileF t stmts -> SProfileF t <$> traverse g stmts
     SPrintF args -> pure $ SPrintF args
@@ -571,6 +585,7 @@ instance Functor (RS.Base (Stmt f)) => RS.Recursive (Stmt f) where
     SBreak -> SBreakF
     SContinue -> SContinueF
     SFunction func al sts re -> SFunctionF func al sts re
+--    SDensity dens al sts re -> SDensityF dens al sts re
     SComment t -> SCommentF t
     SProfile t body -> SProfileF t body
     SPrint args -> SPrintF args
@@ -594,6 +609,7 @@ instance Functor (RS.Base (Stmt f)) => RS.Corecursive (Stmt f) where
     SBreakF -> SBreak
     SContinueF -> SContinue
     SFunctionF func al sts re -> SFunction func al sts re
+--    SDensityF dens al sts re -> SDensity dens al sts re
     SCommentF t -> SComment t
     SProfileF t body -> SProfile t body
     SPrintF args -> SPrint args
@@ -617,6 +633,7 @@ instance TR.HFunctor StmtF where
     SBreakF -> SBreakF
     SContinueF -> SContinueF
     SFunctionF func al body re -> SFunctionF func al body (nat re)
+--    SDensityF dens al body re -> SDensityF dens al body (nat re)
     SCommentF x -> SCommentF x
     SProfileF x body -> SProfileF x body
     SPrintF args -> SPrintF (TR.hfmap nat args)
@@ -640,6 +657,7 @@ instance TR.HTraversable StmtF where
     SBreakF -> pure SBreakF
     SContinueF -> pure SContinueF
     SFunctionF func al body re -> SFunctionF func al body <$> natM re
+--    SDensityF dens al body re -> SDensityF dens al body <$> natM re
     SCommentF x -> pure $ SCommentF x
     SProfileF x body -> pure $ SProfileF x body
     SPrintF args -> SPrintF <$> TR.htraverse natM args

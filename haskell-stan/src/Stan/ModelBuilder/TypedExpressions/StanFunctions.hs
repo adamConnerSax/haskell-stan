@@ -142,15 +142,15 @@ type family RepArgs (t :: EType) :: [EType] where
   RepArgs ECVec = [EReal, EInt]
   RepArgs ERVec = [EReal, EInt]
   RepArgs EMat = [EReal, EInt, EInt]
-  RepArgs ESqMat = [EReal, EInt]
+--  RepArgs ESqMat = [EReal, EInt]
   RepArgs t = TE.TypeError (TE.Text "Cannot fill " :<>: TE.ShowType t :<>: TE.Text " like a container (e.g., vector, matrix)")
 
 -- this might not be so useful because GHC/Haskell cannot neccessarily see through the constraints
-rep_container :: (TypeOneOf t '[ECVec, EMat, ESqMat]) => SType t -> Function t (RepArgs t)
+rep_container :: (TypeOneOf t '[ECVec, EMat]) => SType t -> Function t (RepArgs t)
 rep_container st = case st of
   SCVec -> rep_vector
   SMat -> rep_matrix
-  SSqMat -> rep_sq_matrix
+--  SSqMat -> rep_sq_matrix
 {-# INLINEABLE rep_container #-}
 
 rep_matrix :: Function EMat '[EReal, EInt, EInt]
@@ -161,12 +161,14 @@ repV_matrix :: (TypeOneOf t '[ECVec, ERVec], GenSType t) => Function EMat '[t, E
 repV_matrix = simpleFunction "rep_matrix"
 {-# INLINEABLE repV_matrix #-}
 
+{-
 rep_sq_matrix :: Function ESqMat '[EReal, EInt]
 rep_sq_matrix = Function "rep_matrix" SSqMat (SReal ::> SInt ::> TypeNil) f
   where
     f :: TypedList u '[EReal, EInt] -> TypedList u '[EReal, EInt, EInt]
     f (a :> b :> TNil) = a :> b :> b :> TNil
 {-# INLINEABLE rep_sq_matrix #-}
+-}
 
 vecArrayToMatrix :: (TypeOneOf t [ECVec, ERVec], GenSType t) => Function EMat '[EArray1 t]
 vecArrayToMatrix = simpleFunction "to_matrix"

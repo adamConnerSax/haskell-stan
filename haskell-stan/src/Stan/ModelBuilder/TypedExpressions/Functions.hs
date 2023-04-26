@@ -33,7 +33,6 @@ data Function :: EType -> [EType] -> Type  where
   Function :: Text
            -> SType t
            -> TypeList args
-           -> (forall u.TypedList u args -> TypedList u args') -- allows remapping of args at function application
            -> Function t args
   IdentityFunction :: SType t -> Function t '[t]
 
@@ -42,37 +41,42 @@ data Function :: EType -> [EType] -> Type  where
 
 -- Can't pattern match on the arg-mapping function in "where" or "let" since then args' would escape its scope.
 -- But we can do this
-withFunction :: (forall args'. Text -> SType t -> TypeList args -> (forall u.TypedList u args -> TypedList u args') -> r)
+withFunction :: (forall args'. Text -> SType t -> TypeList args -> r)
                 -> Function t args
                 -> r
-withFunction f (Function t st tl g) = f t st tl g
-withFunction f (IdentityFunction st) = f "" st (st ::> TypeNil) id
+withFunction f (Function t st tl) = f t st tl
+withFunction f (IdentityFunction st) = f "" st (st ::> TypeNil)
 
 --simpleFunction :: (GenSType t, AllGenTypes args) => Text -> SType t -> TypeList args -> Function t args
 --simpleFunction fn st args = Function fn st args id
 
 simpleFunction :: (GenSType t, GenTypeList args) => Text -> Function t args
-simpleFunction fn  = Function fn genSType genTypeList id
+simpleFunction fn  = Function fn genSType genTypeList
 
 
 functionArgTypes :: Function rt args -> TypeList args
-functionArgTypes (Function _ _ al _) = al
+functionArgTypes (Function _ _ al) = al
 functionArgTypes (IdentityFunction t) = t ::> TypeNil
 
 data Density :: EType -> [EType] -> Type where
   Density :: Text -- name
           -> SType t -- givens type
           -> TypeList args -- argument types
-          -> (forall u.TypedList u args -> TypedList u args') -- allows remapping of args at function applicatio
           -> Density t args
 
-withDensity :: (forall args' . Text -> SType t -> TypeList args -> (forall u.TypedList u args -> TypedList u args') -> r)
+densityAsFunction :: Density gt ats -> Function EReal (gt ': ats)
+densityAsFunction (Density n gt ats) = Function n SReal (gt ::> ats)
+
+densityFunctionArgTypes :: Density gt args -> TypeList (gt ': args)
+densityFunctionArgTypes (Density _ gt al) = gt ::> al
+
+withDensity :: (forall args' . Text -> SType t -> TypeList args -> r)
             -> Density t args
             -> r
-withDensity f (Density dn st tl g) = f dn st tl g
+withDensity f (Density dn st tl) = f dn st tl
 
 simpleDensity :: (GenSType t, GenTypeList ts) => Text -> Density t ts
-simpleDensity t  = Density t genSType genTypeList id
+simpleDensity t  = Density t genSType genTypeList
 
 -- const functor for holding arguments to functions
 data FuncArg :: Type -> k -> Type where
