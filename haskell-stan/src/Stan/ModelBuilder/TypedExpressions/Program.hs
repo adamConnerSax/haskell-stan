@@ -32,6 +32,11 @@ import qualified Prettyprinter as PP
 -- only generated quantitied or the generation of log-likelihoods
 newtype StanProgram = StanProgram {unStanProgram :: Array.Array SBT.StanBlock [TE.UStmt]}
 
+-- combine two programs, one above the other *in each block*
+instance Semigroup StanProgram where
+  (StanProgram a1) <> (StanProgram a2)
+    = StanProgram $ Array.listArray (minBound, maxBound) $ zipWith (<>) (Array.elems a1) (Array.elems a2)
+
 emptyStanProgram :: StanProgram
 emptyStanProgram = StanProgram $ Array.listArray (minBound, maxBound) $ repeat []
 

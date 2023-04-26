@@ -72,18 +72,23 @@ depOrderedPParameters pc =  (\(pp, _, _) -> pp) . vToBuildInfo <$> Gr.topSort pG
   (pGraph, vToBuildInfo, _) = Gr.graphFromEdges . fmap dSumToGBuildInfo . DM.toList $ DT.pdm pc
 --  orderedVList = Gr.topSort pGraph
 
+addDAGStmt :: TE.UStmt -> SB.StanBuilderM md gq ()
+addDAGStmt = SB.addStmtToCode
+
+addDAGStmts :: Traversable f => f TE.UStmt -> SB.StanBuilderM md gq ()
+addDAGStmts = SB.addStmtsToCode
 
 declareAndAddCode :: SB.StanBlock -> TE.NamedDeclSpec t -> DT.DeclCode t -> SB.StanBuilderM md gq (TE.UExpr t)
 declareAndAddCode sb nds dc =
   SB.inBlock sb
   $ case dc of
       DT.DeclRHS e -> do
-        SB.addStmtToCodeTop $ TE.declareAndAssignN nds e
+        addDAGStmt $ TE.declareAndAssignN nds e
         pure $ TE.namedE (TE.declName nds) (TE.sTypeFromStanType $ TE.declType $ TE.decl nds)
       DT.DeclCodeF sF -> do
         let declS = TE.declareN nds
             v = TE.namedE (TE.declName nds) (TE.sTypeFromStanType $ TE.declType $ TE.decl nds)
-        SB.addStmtsToCodeTop $ declS : TE.writerL' (sF v)
+        addDAGStmts $ declS : TE.writerL' (sF v)
         pure v
 
 addParameterToCodeAndMap :: DM.DMap DT.ParameterTag TE.UExpr
@@ -92,18 +97,18 @@ addParameterToCodeAndMap :: DM.DMap DT.ParameterTag TE.UExpr
 addParameterToCodeAndMap eMap (PhantomP bp) = do
   vM <- case bp of
     DT.TransformedDataP (DT.TData nds ftds tds desF) -> do
-      traverse_ (\(DT.FunctionToDeclare n fs) -> SB.addFunctionsOnce n $ SB.addStmtToCodeTop fs) $ reverse ftds
+      traverse_ (\(DT.FunctionToDeclare n fs) -> SB.addFunctionsOnce n $ addDAGStmt fs) $ reverse ftds
       tdEs <- SB.stanBuildEither $ DT.lookupTDataExpressions tds eMap
       fmap Just $ (declareAndAddCode SB.SBTransformedData nds $ desF tdEs)
     DT.UntransformedP nds ftds ps codeF -> do
-      traverse_ (\(DT.FunctionToDeclare n fs) -> SB.addFunctionsOnce n $ SB.addStmtToCodeTop fs) $ reverse ftds
+      traverse_ (\(DT.FunctionToDeclare n fs) -> SB.addFunctionsOnce n $ addDAGStmt fs) $ reverse ftds
       psE <- SB.stanBuildEither $ DT.lookupParameterExpressions ps eMap
-      SB.inBlock SB.SBParameters $ SB.addStmtToCodeTop $ TE.declareN nds --SB.stanDeclareN nds
+      SB.inBlock SB.SBParameters $ addDAGStmt $ TE.declareN nds --SB.stanDeclareN nds
       let v =  TE.namedE (TE.declName nds) (TE.sTypeFromStanType $ TE.declType $ TE.decl nds)
-      SB.inBlock SB.SBModel $ SB.addStmtsToCodeTop $ TE.writerL' $ codeF psE v --TE.sample v d psE
+      SB.inBlock SB.SBModel $ addDAGStmts $ TE.writerL' $ codeF psE v --TE.sample v d psE
       pure $ Just v
     DT.TransformedP nds ftds pq tpl tpDesF pr codeF -> do
-      traverse_ (\(DT.FunctionToDeclare n fs) -> SB.addFunctionsOnce n $ SB.addStmtToCodeTop fs) $ reverse ftds
+      traverse_ (\(DT.FunctionToDeclare n fs) -> SB.addFunctionsOnce n $ addDAGStmt fs) $ reverse ftds
       pqEs <- SB.stanBuildEither $ DT.lookupParameterExpressions pq eMap
       prEs <- SB.stanBuildEither $ DT.lookupParameterExpressions pr eMap
       let modelBlockCodeAndVar = TE.writerL $ case tpDesF pqEs of
@@ -119,15 +124,15 @@ addParameterToCodeAndMap eMap (PhantomP bp) = do
       case tpl of
         DT.TransformedParametersBlock -> do
           v <- declareAndAddCode SB.SBTransformedParameters nds $ tpDesF pqEs
-          SB.inBlock SB.SBModel $ SB.addStmtsToCodeTop $ TE.writerL' $ codeF prEs v
+          SB.inBlock SB.SBModel $ addDAGStmts $ TE.writerL' $ codeF prEs v
           pure $ Just v
         DT.ModelBlock -> do
           let (c, v) = modelBlockCodeAndVar
-          SB.inBlock SB.SBModel $ SB.addStmtsToCodeTop c
+          SB.inBlock SB.SBModel $ addDAGStmts c
           pure $ Just v
         DT.ModelBlockLocal -> do
-          let (c, v) = modelBlockCodeAndVar
-          SB.inBlock SB.SBModel $ SB.addStmtToCodeTop $ TE.scoped c
+          let (c, _) = modelBlockCodeAndVar
+          SB.inBlock SB.SBModel $ addDAGStmt $ TE.scoped c
           pure Nothing -- we add nothing to the map since the expression we built here is local and can't be used elsewhere
 
   let newMapF = maybe id (DT.addBuiltExpressionToMap bp) vM
@@ -154,8 +159,11 @@ runStanBuilderDAG md gq sgb sb =
   let sb' :: SB.StanBuilderM md gq a
       sb' = do
         a <- sb
-        bpc <- gets SB.parameterCollection
-        addAllParametersInCollection bpc
+        -- we need the parameter code to come before anything written assuming it exists
+        -- so, shenanigans
+        SB.addCodeAbove $ do
+          bpc <- gets SB.parameterCollection
+          addAllParametersInCollection bpc
         return a
       builderState = SB.runStanGroupBuilder sgb md gq
       (resE, bs) = usingState builderState . runExceptT $ SB.unStanBuilderM sb'

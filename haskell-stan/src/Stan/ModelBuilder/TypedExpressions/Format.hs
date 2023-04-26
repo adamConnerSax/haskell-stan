@@ -90,7 +90,7 @@ stmtToCodeAlg = \case
   SBreakF -> Right $ "break" <> PP.semi
   SContinueF -> Right $ "continue" <> PP.semi
   SFunctionF (Function fname rt ats) al body re ->
-    (\b -> PP.pretty (sTypeName rt) <+> PP.pretty fname <> functionArgs ats al
+    (\b -> functionArg rt <+> PP.pretty fname <> functionArgs ats al
            <+> bracketBlock (b `appendAsList` ["return" <+> unK re <> PP.semi])) <$> sequence body
   SFunctionF (IdentityFunction _) _ _ _ -> Left "Attempt to *declare* Identity function!"
 {-  SDensityF (Density dname gt ats) al body re ->
@@ -179,26 +179,25 @@ blockCode' cs = case toList cs of
 appendAsList :: Traversable f => f a -> [a] -> [a]
 appendAsList fa as = toList fa ++ as
 
+functionArg :: SType t -> CodePP
+functionArg st =  handleType st where
+  arrayIndices :: SNat n -> CodePP
+  arrayIndices sn = if n == 0 then mempty else PP.brackets (mconcat $ List.replicate (n-1) PP.comma)
+    where n = fromIntegral $ DT.snatToNatural sn
+
+  handleType :: SType t -> CodePP
+  handleType st' = case st' of
+    SArray sn arrayType -> "array" <> arrayIndices sn <+> handleType arrayType
+    _ -> PP.pretty $ sTypeName st'
+
 functionArgs:: TypeList args -> TypedList (FuncArg Text) args -> CodePP
 functionArgs argTypes argNames = PP.parens $ formatFunctionArgs argCodeList
   where
-    handleFA :: CodePP -> FuncArg Text t -> CodePP
     handleFA c = \case
       Arg a -> c <+> PP.pretty a
       DataArg a -> "data" <+> c <+> PP.pretty a
 
-    arrayIndices :: SNat n -> CodePP
-    arrayIndices sn = if n == 0 then mempty else PP.brackets (mconcat $ List.replicate (n-1) PP.comma)
-      where n = fromIntegral $ DT.snatToNatural sn
-
-    handleType :: SType t -> CodePP
-    handleType st = case st of
-      SArray sn arrayType -> "array" <> arrayIndices sn <+> handleType arrayType
-      _ -> PP.pretty $ sTypeName st
-
-    f :: SType t -> FuncArg Text t -> K CodePP t
-    f st fa = K $ handleFA (handleType st) fa
-
+    f st fa = K $ handleFA (functionArg st) fa
     argCodeList = typedKToList $ zipTypedListsWith f (typeListToSTypeList argTypes) argNames
 
 -- This might be wrong after switch from NE to

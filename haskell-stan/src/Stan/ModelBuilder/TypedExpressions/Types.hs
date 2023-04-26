@@ -14,6 +14,8 @@
 {-# LANGUAGE TypeSynonymInstances #-}
 {-# OPTIONS_GHC -fwarn-incomplete-patterns #-}
 {-# LANGUAGE StandaloneKindSignatures #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE FlexibleInstances #-}
 
 module Stan.ModelBuilder.TypedExpressions.Types
   (
@@ -27,6 +29,7 @@ import Prelude hiding (Nat)
 
 import Data.Type.Equality ((:~:)(Refl), TestEquality(testEquality))
 import Data.Type.Nat (Nat(..), SNat(..))
+import Data.Type.Bool
 import qualified Data.Type.Nat as DT
 
 import qualified GHC.TypeLits as TE
@@ -91,18 +94,34 @@ type ERealArray = EArray (S Z) EReal
 type EComplexArray :: EType
 type EComplexArray = EArray (S Z) EComplex
 
+data Dict c where
+  Dict :: c => Dict c
+
 
 -- A mechanism to limit the types we can use in functions via a constraint
-type TypeOneOf et ets = TypeOneOf' et ets (TypeOneOfB et ets)
+type TypeOneOf et ets = TypeOneOf' et ets (TypeMember et ets)
 
+{-
 type family TypeOneOfB (et :: EType) (ets :: [EType]) :: Bool where
   TypeOneOfB _ '[] = False
   TypeOneOfB et (et ': t) = True
   TypeOneOfB et (h ': t) = TypeOneOfB et t
+-}
 
 type family TypeOneOf' (et :: EType) (ets :: [EType]) (mem :: Bool) :: Constraint where
   TypeOneOf' et ets 'True = ()
   TypeOneOf' et ets 'False = TE.TypeError (TE.ShowType et :<>: TE.Text " is not a member of " :<>: TE.ShowType ets)
+
+type family TypeMember (et :: EType) (ets :: [EType]) :: Bool where
+  TypeMember t '[] = False
+  TypeMember t (t ': ts) = True
+  TypeMember t (t' ': ts) = TypeMember t ts
+
+type family TypeSubset (ets1 :: [EType]) (ets2 :: [EType]) :: Bool where
+  TypeSubset '[] _ = True
+  TypeSubset (t ': ts) ts' = TypeMember t ts' && TypeSubset ts ts'
+
+
 
 {-
 type family OrArrayOfB (et :: EType) (t :: EType) :: Bool where
@@ -272,7 +291,7 @@ sTypeName = \case
   SRVec -> "row_vector"
   SMat -> "matrix"
   SSqMat -> "matrix"
-  SArray _ _ -> "array"
+  SArray _ _ -> "array" --FIXME
 --  (:->) _ _ -> "funcApply"
 
 data StanType :: EType -> Type where

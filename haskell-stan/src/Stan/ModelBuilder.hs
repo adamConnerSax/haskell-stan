@@ -532,7 +532,7 @@ data BuilderState md gq = BuilderState { declaredVars :: !ScopedDeclarations
                                        , constGQJSON :: JSONSeriesFold ()
                                        , hasFunctions :: !(Set.Set Text)
                                        , parameterCollection :: DT.BParameterCollection
-                                       , parameterCode :: TE.StanProgram
+--                                       , parameterCode :: !TE.StanProgram
                                        , code :: !StanCode
                                        }
 
@@ -545,6 +545,23 @@ dumpBuilderState bs = -- (BuilderState dvs ibs ris js hf c) =
   <> "\n functions: " <> show (hasFunctions bs)
   <> "\n parameterCollection (keys)" <> show (DM.keys $ DT.pdm $ parameterCollection bs)
 
+getAndEmptyProgram :: StanBuilderM md gq TE.StanProgram
+getAndEmptyProgram = do
+  (StanCode cb p) <- gets code
+  modify (\bs -> bs { code = StanCode cb TE.emptyStanProgram})
+  pure p
+
+addProgramBelow :: TE.StanProgram -> StanBuilderM md gq ()
+addProgramBelow pBelow = do
+  (StanCode cb pTop) <- gets code
+  modify (\bs -> bs { code = StanCode cb $ pTop <> pBelow})
+
+addCodeAbove :: StanBuilderM md gq a -> StanBuilderM md gq a
+addCodeAbove ma = do
+  pBelow <- getAndEmptyProgram
+  a <- ma
+  addProgramBelow pBelow
+  pure a
 
 --getRowInfo :: InputDataType -> RowTypeTag r
 
@@ -721,7 +738,7 @@ initialBuilderState modelRowInfos gqRowInfos =
   mempty
   Set.empty
   (DT.BParameterCollection mempty mempty)
-  TE.emptyStanProgram
+--  TE.emptyStanProgram
   (StanCode SBData TE.emptyStanProgram)
 
 type RowInfoMakers d = DHash.DHashMap RowTypeTag (GroupIndexAndIntMapMakers d)

@@ -100,6 +100,18 @@ flattenCW sn ds e =
           pure fv
     _ -> error "flattenCW: Given type of something other than matrix or array of matrices!"
 
+flattenACW :: (ParamC t)
+          => TE.DeclSpec t -> TE.UExpr t -> TE.UExpr (FlatParamT t) ->  TE.CodeWriter ()
+flattenACW ds e eFlat =
+  let flatten x =  TE.functionE SF.to_vector (x :> TNil)
+  in case ds of
+    TE.DeclSpec TE.StanMatrix _ _ -> TE.addStmt $ eFlat `TE.assign` flatten e
+    TE.ArraySpec DT.SS arrDims mds -> do
+      case mds of
+        TE.DeclSpec TE.StanMatrix _ _ -> flattenLoop "k" arrDims eFlat e
+    _ -> error "flattenCW: Given type of something other than matrix or array of matrices!"
+
+
 makeMatArraySpec :: (DT.SNatI (DT.S m)
                     , forall f. TE.VecToTListC f m
                     , forall f. TE.TListToVecC f m
@@ -134,17 +146,17 @@ unFlattenACW ds fe e = do
     TE.DeclSpec TE.StanMatrix (rowsE Vec.::: colsE Vec.::: Vec.VNil) _ -> TE.addStmt (e `TE.assign` unFlatten fe rowsE colsE)
     TE.ArraySpec DT.SS arrDims mds -> case mds of
       TE.DeclSpec TE.StanMatrix (rowsE Vec.::: colsE Vec.::: Vec.VNil) _ -> unFlattenLoop "k" rowsE colsE arrDims e fe
-      _ -> error "unflattenCW: Given array type of something other than matrices!"
-    _ -> error "unflattenCW: Given type of something other than matrix or array of matrices!"
+      _ -> error "unflattenACW: Given array type of something other than matrices!"
+    _ -> error "unflattenACW: Given type of something other than matrix or array of matrices!"
 
 {-
-nonCenteredFlat :: TE.StanName
-                -> TE.DeclSpec t
-                -> TE.UExpr (FlatParamT t)
-                -> TE.MatrixE
-                -> TE.UExpr (FlatParamT t)
-                -> TE.CodeWriter (TE.UExpr (FlatParamT t))
-nonCenteredFlat givenName ds flatMu sigmaE rawFlatE = do
+nonCenteredFlat' :: TE.DeclSpec t
+                 -> TE.UExpr (FlatParamT t)
+                 -> TE.MatrixE
+                 -> TE.UExpr (FlatParamT t)
+                 -> TE.UExpr t
+                 -> TE.CodeWriter ()
+nonCenteredFlat' givenName ds flatMu sigmaE rawFlatE e = do
   let --qfd m v = TE.functionE SF.quadFormDiag (m :> v :> TNil)
       flatten m = TE.functionE SF.to_vector (m :> TNil) -- column major
       flatSigma = flatten sigmaE
@@ -152,7 +164,7 @@ nonCenteredFlat givenName ds flatMu sigmaE rawFlatE = do
       ncfF :: TE.ExprList '[TE.ECVec, TE.ECVec] -> TE.VectorE
       ncfF (muFlat :> rawFlat :> TNil) = muFlat `TE.plusE` (rawFlat `eltMultiply` flatSigma)
   case ds of
-    TE.DeclSpec TE.StanMatrix _ _ -> pure $ ncfF (flatMu :> rawFlatE :> TNil)
+    TE.DeclSpec TE.StanMatrix _ _ -> TE.addStmt $ pure $ ncfF (flatMu :> rawFlatE :> TNil)
     TE.ArraySpec DT.SS arrDims mds -> case mds of
       TE.DeclSpec TE.StanMatrix _ _ -> do
         ncfE <- TE.declareNW $ TE.NamedDeclSpec (givenName <> "_ncf") $ flatDS ds
@@ -208,7 +220,7 @@ zeroVecE name ds =
 
 stdNormalSigmaE :: TE.DeclSpec t -> TE.UExpr TE.ESqMat
 stdNormalSigmaE ds =
-  let sigmaE l = TE.functionE SF.diag (TE.functionE SF.rep_vector (TE.realE 1 :> l :> TNil) :> TNil)
+  let sigmaE l = TE.functionE SF.diag_matrix (TE.functionE SF.rep_vector (TE.realE 1 :> l :> TNil) :> TNil)
   in   case ds of
     TE.DeclSpec TE.StanVector (lE Vec.::: Vec.VNil) _ -> sigmaE lE
     TE.ArraySpec DT.SS _ vds -> case vds of
@@ -229,11 +241,11 @@ matrixMultiNormalParameter :: forall t md gq .
                               )
                            => MatrixCovarianceStructure
                            -> Centering
-                           -> TE.UExpr t
-                           -> TE.MatrixE
+                           -> DAG.Parameter t
+                           -> DAG.Parameter TE.EMat --TE.MatrixE
                            -> TE.NamedDeclSpec t
                            -> SB.StanBuilderM md gq (DAG.Parameter t)
-matrixMultiNormalParameter cs cent muE sigmaE nds = do
+matrixMultiNormalParameter cs cent muP sigmaP nds = do
   let flatten m = TE.functionE SF.to_vector (m :> TNil) -- column major
       multiNormalC x muFlat lSigma = TE.sample x SF.multi_normal_cholesky (muFlat :> lSigma :> TNil)
       multiNormalD x muFlat dSigma = TE.sample x SF.multi_normal (muFlat :> dSigma :> TNil)
@@ -242,30 +254,48 @@ matrixMultiNormalParameter cs cent muE sigmaE nds = do
       givenName = TE.declName nds
       justDeclare _ = DAG.DeclCodeF $ const $ pure ()
       noPriorCode _ _ = pure ()
-
+      flatSigmaP = DAG.mapped flatten sigmaP
   zeroE <- case cent of
     NonCentered -> SB.inBlock SB.SBTransformedData $ SB.addFromCodeWriter $ zeroVecE givenName fDS
     Centered -> pure $ TE.namedE "ERROR" $ TE.genSType @(FlatParamT t)
-  pTag <- DAG.addBuildParameter $ DAG.TransformedP nds [] TNil DAG.ModelBlock justDeclare TNil noPriorCode
+--  pTag <- DAG.addBuildParameter $ DAG.TransformedP nds [] TNil DAG.ModelBlock justDeclare TNil noPriorCode
+  pTag <- DAG.addBuildParameter $ DAG.UntransformedP nds [] TNil noPriorCode
   let rawNDS = TE.NamedDeclSpec (TE.declName nds <> "_raw") fDS
       sampleF e fm s = case cs of
         Diagonal ->
-          let sm = TE.functionE SF.diag (flatten s :> TNil)
+          let sm = TE.functionE SF.diag_matrix (s :> TNil)
           in multiNormalD e fm sm --TE.sample pFlat SF.normal (flatMu :> flatten sigma :> TNil) --multiNormalD lpFlat (flatten mu) (flatten sigma)
         Cholesky cfP ->
-          let cM = TE.functionE SF.diagPostMultiply (DAG.parameterExpr cfP :> flatten s :> TNil)
+          let cM = TE.functionE SF.diagPostMultiply (DAG.parameterExpr cfP :> s :> TNil)
           in multiNormalC e fm cM
-      modelCodeF (pE :> muE :> sigmaE :> TNil) rawE = do
-        flatMu <- flattenCW (TE.declName nds <> "_mu") (TE.decl nds) muE
-        case cent of
-          Centered -> do
-            unFlattenACW (TE.decl nds) rawE pE
-            TE.addStmt $ sampleF rawE flatMu sigmaE
-          NonCentered -> do
-            nonCenteredUnFlat (TE.decl nds) pE flatMu sigmaE rawE
+  case cent of
+    Centered -> do
+      let modelCodeF (pE :> muE' :> sigmaE' :> TNil) rawE = do
+            flatMu <- flattenCW (TE.declName nds <> "_flatMu") (TE.decl nds) muE'
+            flattenACW (TE.decl nds) pE rawE
+            TE.addStmt $ sampleF rawE flatMu sigmaE'
+      _ <- DAG.addBuildParameter $ DAG.TransformedP rawNDS [] TNil DAG.ModelBlockLocal justDeclare (DAG.build pTag :> muP :> flatSigmaP :> TNil) modelCodeF
+      pure $ DAG.build pTag
+    NonCentered -> do
+      flatMuP <- DAG.build
+                 $ DAG.addBuildParameter
+                 $ DAG.TransformedP
+                 (TE.NamedDeclSpec (TE.declName nds <> "_flatMu") fDS) []
+                 (muP :> TNil) DAG.TransformedParametersBlock
+                 (\(muE :> TNil) -> DAG.DeclCode $ \flatMuE -> flattenACW ds muE flatMuE)
+                 TNil noPriorCode
+      mnVecP <- vectorMultiNormalParameter cs cent flatMuP flatSigmaP fDS
+      fmap DAG.build
+        $ DAG.addBuildParameter
+        $ DAG.TransformedP nds []
+        (mnVecP :> TNil) DAG.TransformedParametersBlock
+
+      let modelCodeF (pE :> muE' :> sigmaE' :> TNil) rawE = do
+            flatMu <- flattenCW (TE.declName nds <> "_flatMu") (TE.decl nds) muE'
             TE.addStmt $ stdNormalRaw cs fDS zeroE rawE
-  _ <- DAG.addBuildParameter $ DAG.TransformedP rawNDS [] TNil DAG.ModelBlockLocal justDeclare (DAG.build pTag :> DAG.given muE :> DAG.given sigmaE :> TNil) modelCodeF
-  pure $ DAG.build pTag
+
+            nonCenteredUnFlat (TE.decl nds) pE flatMu sigmaE' rawE
+      _ <- DAG.addBuildParameter $ DAG.TransformedP rawNDS [] TNil DAG.ModelBlockLocal justDeclare (DAG.build pTag :> muP :> sigmaP :> TNil) modelCodeF
 
 nonCentered :: TE.DeclSpec t
               -> TE.UExpr t
@@ -309,7 +339,7 @@ vectorMultiNormalParameter cs cent muP sigmaP nds = do
       justDeclare _ = DAG.DeclCodeF $ const $ pure ()
   let sampleF e m s = case cs of
         Diagonal ->
-          let sm = TE.functionE SF.diag (s :> TNil)
+          let sm = TE.functionE SF.diag_matrix (s :> TNil)
           in multiNormalD e m sm
         Cholesky cf ->
           let cM = TE.functionE SF.diagPostMultiply (DAG.parameterExpr cf :> s :> TNil)
@@ -331,6 +361,41 @@ vectorMultiNormalParameter cs cent muP sigmaP nds = do
       _ <- DAG.addBuildParameter $ DAG.TransformedP rawNDS [] TNil DAG.ModelBlockLocal justDeclare cPList cCode
       pure $ DAG.build ncPTag
 
+{-
+matrixMultiNormalParameter' ::  forall t md gq .
+                              (ParamC t
+                              ,SF.MultiNormalDensityC (FlatParamT t)
+                              )
+                            => MatrixCovarianceStructure
+                            -> Centering
+                            -> DAG.Parameter t
+                            -> DAG.Parameter TE.ECVec
+                            -> TE.NamedDeclSpec t
+                            -> SB.StanBuilderM md gq (DAG.Parameter t)
+matrixMultiNormalParameter' cs cent muP sigmaP nds = do
+  let n =  TE.declName nds
+  flatMuP <- fmap DAG.build
+             $ DAG.addBuildParameter
+             $ DAG.TransformedP
+             (TE.NamedDeclSpec (n <> "_flatMu") $ TE.)
+
+             (TE.)flattenCW (TE.declName nds <> "_flatMu") (TE.decl nds) (DAG.parameterExpr muP)
+  let flatten m = TE.functionE SF.to_vector (m :> TNil)
+      flatSigma = flatten $ DAG.parameterExpr sigmaP
+      vName =  TE.declName nds <> "V"
+  let ndsV = case TE.decl nds of
+        TE.DeclSpec TE.StanMatrix (rowsE Vec.::: colsE Vec.::: Vec.VNil) _ ->
+          TE.NamedDeclSpec vName $ TE.vectorSpec (rowsE `TE.timesE` colsE) []
+        TE.ArraySpec DT.SS arrDims mds ->
+          case mds of
+            TE.DeclSpec TE.StanMatrix (rowsE Vec.::: colsE Vec.::: Vec.VNil) _ ->
+              TE.NamedDeclSpec vName $ TE.arraySpec arrDims $ TE.vectorSpec (rowsE `TE.timesE` colsE) []
+  vecP <- vectorMultiNormalParameter cs cent flatMu flatSigma ndsV
+
+  fmap DAG.build
+    $ DAG.addBuildParameter
+    $ DAG.TransformedP nds []
+-}
 {-
 unFlatDS :: forall t . TE.DeclSpec t -> TE.DeclSpec t
 unFlatDS ds =

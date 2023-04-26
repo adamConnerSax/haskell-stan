@@ -278,7 +278,7 @@ categoricalLogitDist = StanDist Discrete sample lpmf lupmf rng
       _ -> error "categorical_logit_rng is not vectorized. For a vector of results, call from a loop."
 
 
-multinomialDist ::  (TE.TypeOneOf t [TE.ESimplex, TE.ECVec], TE.GenSType t) => StanDist TE.EIntArray '[t] [t, TE.EInt]
+multinomialDist ::  (TE.TypeOneOf t [TE.ESimplex, TE.ECVec, TE.ERVec], TE.GenSType t) => StanDist TE.EIntArray '[t] [t, TE.EInt]
 multinomialDist = StanDist Discrete sample lpmf lupmf rng
   where
     sample y = TE.sample y TE.multinomial

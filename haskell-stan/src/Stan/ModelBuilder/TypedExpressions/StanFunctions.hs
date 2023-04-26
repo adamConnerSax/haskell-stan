@@ -235,9 +235,9 @@ cols = simpleFunction "cols"
 
 -- NB: Stan docs warn against using this because there's usually a more efficient option
 -- But I'm not sure what to do with multiple draws from uncorrelated normals
-diag :: (TypeOneOf t [ERVec, ECVec], GenSType t) => Function ESqMat '[t]
-diag = simpleFunction "diag"
-{-# INLINEABLE diag #-}
+diag_matrix :: (TypeOneOf t [ERVec, ECVec], GenSType t) => Function ESqMat '[t]
+diag_matrix = simpleFunction "diag_matrix"
+{-# INLINEABLE diag_matrix #-}
 
 diag_pre_multiply :: (TypeOneOf t [ECVec, ERVec], GenSType t, TypeOneOf t' [EMat, ESqMat], GenSType t')
                   => Function t' [t, t']
@@ -565,31 +565,31 @@ categorical_logit_rng = simpleFunction "categorical_logit_lupmf"
 
 
 -- Multinomial
-multinomial :: (TypeOneOf t [ESimplex, ECVec], GenSType t) => Density EIntArray '[t]
+multinomial :: (TypeOneOf t [ESimplex, ECVec, ERVec], GenSType t) => Density EIntArray '[t]
 multinomial = simpleDensity "multinomial"
 {-# INLINEABLE multinomial #-}
 
-multinomial_lpmf :: (TypeOneOf t [ESimplex, ECVec], GenSType t) => Density EIntArray '[t]
+multinomial_lpmf :: (TypeOneOf t [ESimplex, ECVec, ERVec], GenSType t) => Density EIntArray '[t]
 multinomial_lpmf = simpleDensity "multinomial_lpmf"
 {-# INLINEABLE multinomial_lpmf #-}
 
-multinomial_lupmf :: (TypeOneOf t [ESimplex, ECVec], GenSType t) => Density EIntArray '[t]
+multinomial_lupmf :: (TypeOneOf t [ESimplex, ECVec, ERVec], GenSType t) => Density EIntArray '[t]
 multinomial_lupmf = simpleDensity "multinomial_lupmf"
 {-# INLINEABLE multinomial_lupmf #-}
 
-multinomial_rng :: (TypeOneOf t [ESimplex, ECVec], GenSType t) => Function EIntArray '[t, EInt]
-multinomial_rng = simpleFunction "multinomial_lupmf"
+multinomial_rng :: (TypeOneOf t [ESimplex, ECVec, ERVec], GenSType t) => Function EIntArray '[t, EInt]
+multinomial_rng = simpleFunction "multinomial_rng"
 {-# INLINEABLE multinomial_rng #-}
 
-multinomial_logit :: Density EIntArray '[ECVec]
+multinomial_logit :: (TypeOneOf t [ECVec, ERVec], GenSType t) =>  Density EIntArray '[t]
 multinomial_logit = simpleDensity "multinomial_logit"
 {-# INLINEABLE multinomial_logit #-}
 
-multinomial_logit_lpmf :: Density EIntArray '[ECVec]
+multinomial_logit_lpmf ::  (TypeOneOf t [ECVec, ERVec], GenSType t) => Density EIntArray '[t]
 multinomial_logit_lpmf = simpleDensity "multinomial_logit_lpmf"
 {-# INLINEABLE multinomial_logit_lpmf #-}
 
-multinomial_logit_lupmf :: Density EIntArray '[ECVec]
+multinomial_logit_lupmf ::  (TypeOneOf t [ECVec, ERVec], GenSType t) => Density EIntArray '[t]
 multinomial_logit_lupmf = simpleDensity "multinomial_logit_lupmf"
 {-# INLINEABLE multinomial_logit_lupmf #-}
 
