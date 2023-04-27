@@ -109,6 +109,9 @@ unitVectorSpec ie = DeclSpec StanUnitVector (ie ::: VNil)
 matrixSpec :: UExpr EInt -> UExpr EInt -> [VarModifier UExpr EReal] -> DeclSpec EMat
 matrixSpec re ce = DeclSpec StanMatrix (re ::: ce ::: VNil)
 
+sqMatrixSpec :: UExpr EInt -> [VarModifier UExpr EReal] -> DeclSpec ESqMat
+sqMatrixSpec ne = DeclSpec StanSqMatrix (ne ::: VNil)
+
 corrMatrixSpec :: UExpr EInt -> [VarModifier UExpr EReal] -> DeclSpec ESqMat
 corrMatrixSpec rce = DeclSpec StanCorrMatrix (rce ::: VNil)
 

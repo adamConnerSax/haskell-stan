@@ -309,6 +309,7 @@ data StanType :: EType -> Type where
   StanUnitVector :: StanType ECVec
   StanRowVector :: StanType ERVec
   StanMatrix :: StanType EMat
+  StanSqMatrix :: StanType ESqMat
   StanCorrMatrix :: StanType ESqMat
   StanCholeskyFactorCorr :: StanType ESqMat
   StanCovMatrix :: StanType ESqMat
@@ -332,6 +333,7 @@ stanTypeName = \case
   StanSimplex -> "simplex"
   StanUnitVector -> "unit_vector"
   StanRowVector -> "row_vector"
+  StanSqMatrix -> "matrix"
   StanMatrix -> "matrix"
   StanCorrMatrix -> "corr_matrix"
   StanCholeskyFactorCorr -> "cholesky_factor_corr"
@@ -351,6 +353,7 @@ eTypeFromStanType = \case
   StanUnitVector -> ECVec
   StanRowVector -> ERVec
   StanMatrix -> EMat
+  StanSqMatrix -> ESqMat
   StanCorrMatrix -> ESqMat
   StanCholeskyFactorCorr -> ESqMat
   StanCovMatrix -> ESqMat
@@ -369,6 +372,7 @@ sTypeFromStanType = \case
   StanUnitVector -> SCVec
   StanRowVector -> SRVec
   StanMatrix -> SMat
+  StanSqMatrix -> SSqMat
   StanCorrMatrix -> SSqMat
   StanCholeskyFactorCorr -> SSqMat
   StanCovMatrix -> SSqMat
