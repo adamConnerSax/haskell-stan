@@ -177,12 +177,12 @@ generateLogLikelihood :: SB.RowTypeTag r
                       -> TE.CodeWriter (TE.IntE -> TE.UExpr t)
                       -> SB.StanBuilderM md gq ()
 generateLogLikelihood rtt sDist slicedArgsFCW slicedYFCW =
-  generateLogLikelihood' $ addToLLSet rtt (LLDetails sDist slicedArgsFCW slicedYFCW) emptyLLSet
+  generateLogLikelihood' $ addToLLSet rtt (LLDetails (SMD.familyLDF sDist) slicedArgsFCW slicedYFCW) emptyLLSet
 
 -- 2nd arg returns something which might need slicing at the loop index for paramters that depend on the index
 -- 3rd arg also
-data LLDetails r = forall t pts rts.LLDetails
-                   (SMD.StanDist t pts rts)
+data LLDetails r = forall t pts . LLDetails
+                   (TE.UExpr t -> TE.ExprList pts -> TE.UExpr TE.EReal) --(SMD.StanDist t pts rts)
                    (TE.CodeWriter (TE.UExpr TE.EInt -> TE.ExprList pts))
                    (TE.CodeWriter (TE.UExpr TE.EInt -> TE.UExpr t))
 --  LLDetails :: forall args.SMD.StanDist args -> SB.StanBuilderM md gq args -> SME.StanVar -> LLDetails md gq r
@@ -214,14 +214,14 @@ generateLogLikelihood' llSet =  SB.inBlock SB.SBLogLikelihood $ do
       llSizeE = TE.multiOpE TE.SAdd $ fmap namedIntE llSizeListNE
   logLikE <- SB.stanDeclareN $ TE.NamedDeclSpec "log_lik" $ TE.vectorSpec llSizeE []
   let doOne :: SB.RowTypeTag a -> LLDetails a -> StateT [TE.UExpr TE.EInt] (SB.StanBuilderM md gq) (SB.RowTypeTag a)
-      doOne rtt (LLDetails d pFCW yFCW) = do
+      doOne rtt (LLDetails df pFCW yFCW) = do
         prevSizes <- get
         let --sizeE =  TE.multiOpE TE.SAdd $ namedIntE "n" :| prevSizes
         lift $ SB.addScopedFromCodeWriter $ do
           pF <- pFCW
           yF <- yFCW
           TE.addStmt $ TE.for "n" (TE.SpecificNumbered (TE.intE 1) (namedIntE $ dataSetSizeName rtt))
-            $ \nE -> [TE.sliceE TE.s0 nE logLikE `TE.assign` SMD.familyLDF d (yF nE) (pF nE)]
+            $ \nE -> [TE.sliceE TE.s0 nE logLikE `TE.assign` df (yF nE) (pF nE)]
         put $ TE.namedE (SB.dataSetSizeName rtt) TE.SInt: prevSizes
         pure rtt
       doList ::  SB.RowTypeTag a -> LLDetailsList a -> StateT [TE.UExpr TE.EInt] (SB.StanBuilderM md gq) (SB.RowTypeTag a)
