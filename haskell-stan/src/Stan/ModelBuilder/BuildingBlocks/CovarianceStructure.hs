@@ -232,8 +232,8 @@ stdNormalSigmaE n ds =
 --stdNormalSigmaE ::
 
 stdNormalRaw ::  SF.MultiNormalDensityC t
-             => MatrixCovarianceStructure -> TE.DeclSpec t -> TE.UExpr t -> TE.SqMatrixE -> TE.UExpr t -> TE.UStmt
-stdNormalRaw cs ds zeroE diag1E rawFlatE = do
+             => MatrixCovarianceStructure -> TE.UExpr t -> TE.SqMatrixE -> TE.UExpr t -> TE.UStmt
+stdNormalRaw cs zeroE diag1E rawFlatE = do
   case cs of
     Diagonal -> TE.sample rawFlatE SF.multi_normal (zeroE :> diag1E :> TNil)
     Cholesky cf -> TE.sample rawFlatE SF.multi_normal_cholesky (zeroE :> DAG.parameterExpr cf :> TNil)
@@ -366,7 +366,7 @@ vectorMultiNormalParameter cs cent muP sigmaP nds = do
       rawP <- fmap DAG.build
               $ DAG.addBuildParameter $ DAG.UntransformedP rawNDS []
               TNil
-              (\_ rawE -> TE.addStmt $ stdNormalRaw cs ds zeroE diag1E rawE)
+              (\_ rawE -> TE.addStmt $ stdNormalRaw cs zeroE diag1E rawE)
       let  cDeclCode (rawE :> muE :> sigmaE :> TNil) =
             DAG.DeclCodeF $ \ncE -> nonCentered ds ncE muE sigmaE rawE
       fmap DAG.build

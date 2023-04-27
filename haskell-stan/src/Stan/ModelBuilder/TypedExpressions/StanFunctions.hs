@@ -235,7 +235,9 @@ cols = simpleFunction "cols"
 
 -- NB: Stan docs warn against using this because there's usually a more efficient option
 -- But I'm not sure what to do with multiple draws from uncorrelated normals
-diag_matrix :: (TypeOneOf t [ERVec, ECVec], GenSType t) => Function ESqMat '[t]
+diag_matrix :: (TypeOneOf t [ERVec, ECVec], GenSType t
+--               ,TypeOneOf rt [EMat, ESqMat], GenSType rt
+               ) => Function ESqMat '[t]
 diag_matrix = simpleFunction "diag_matrix"
 {-# INLINEABLE diag_matrix #-}
 

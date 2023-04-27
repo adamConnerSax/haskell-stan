@@ -133,7 +133,7 @@ snatSum sn1 x = case sn1 of
 stanDeclHead :: forall t . StanType t -> [CodePP] -> [VarModifier (K CodePP) (ScalarType t)] -> CodePP
 stanDeclHead st il vms = case st of
   StanArray sn arrayType -> arrayDeclHead (fromIntegral $ DT.snatToNatural sn) arrayType
---  _ -> PP.pretty (stanTypeName st)  <> indexCodeL il <> varModifiersToCode vms
+  StanSqMatrix -> PP.pretty (stanTypeName st) <> varModifiersToCode vms <> indexCodeL (il <> il) -- otherwise we only get one index
   _ -> PP.pretty (stanTypeName st) <> varModifiersToCode vms <> indexCodeL il
   where
     vmToCode = \case
