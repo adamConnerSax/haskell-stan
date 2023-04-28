@@ -100,13 +100,14 @@ addParameterToCodeAndMap eMap (PhantomP bp) = do
       traverse_ (\(DT.FunctionToDeclare n fs) -> SB.addFunctionsOnce n $ addDAGStmt fs) $ reverse ftds
       tdEs <- SB.stanBuildEither $ DT.lookupTDataExpressions tds eMap
       fmap Just $ (declareAndAddCode SB.SBTransformedData nds $ desF tdEs)
-    DT.UntransformedP nds ftds ps codeF -> do
+{-    DT.UntransformedP nds ftds ps codeF -> do
       traverse_ (\(DT.FunctionToDeclare n fs) -> SB.addFunctionsOnce n $ addDAGStmt fs) $ reverse ftds
       psE <- SB.stanBuildEither $ DT.lookupParameterExpressions ps eMap
       SB.inBlock SB.SBParameters $ addDAGStmt $ TE.declareN nds --SB.stanDeclareN nds
       let v =  TE.namedE (TE.declName nds) (TE.sTypeFromStanType $ TE.declType $ TE.decl nds)
       SB.inBlock SB.SBModel $ addDAGStmts $ TE.writerL' $ codeF psE v --TE.sample v d psE
       pure $ Just v
+-}
     DT.TransformedP nds ftds pq tpl tpDesF pr codeF -> do
       traverse_ (\(DT.FunctionToDeclare n fs) -> SB.addFunctionsOnce n $ addDAGStmt fs) $ reverse ftds
       pqEs <- SB.stanBuildEither $ DT.lookupParameterExpressions pq eMap
@@ -182,7 +183,7 @@ simpleParameterWA nds = TE.withDWA (\d as -> simpleParameter nds (exprListToPara
 
 
 simpleParameter :: TE.NamedDeclSpec t -> DT.Parameters ts -> TE.Density t ts -> SB.StanBuilderM md gq (ParameterTag t)
-simpleParameter nds ps d = addBuildParameter $ DT.UntransformedP nds [] ps (\qs t -> TE.addStmt $ TE.sample t d qs)
+simpleParameter nds ps d = addBuildParameter $ DT.unTransformedP nds [] ps (\qs t -> TE.addStmt $ TE.sample t d qs)
 
 
 addCenteredHierarchical :: TE.NamedDeclSpec t
@@ -190,7 +191,7 @@ addCenteredHierarchical :: TE.NamedDeclSpec t
                         -> TE.Density t args
                         -> SB.StanBuilderM md gq (ParameterTag t)
 addCenteredHierarchical nds ps d = addBuildParameter
-                                  $ UntransformedP nds [] ps
+                                  $ unTransformedP nds [] ps
                                   $ \argEs e -> TE.addStmt $ TE.sample e d argEs
 
 
@@ -224,7 +225,7 @@ simpleNonCentered nds tpl rawDS (TE.DensityWithArgs d tsE) =
 addIndependentPriorP :: TE.NamedDeclSpec t -> TE.DensityWithArgs t -> SB.StanBuilderM md gq (ParameterTag t)
 addIndependentPriorP nds (TE.DensityWithArgs d dArgs) =
   addBuildParameter
-  $ UntransformedP nds [] (exprListToParameters dArgs)
+  $ unTransformedP nds [] (exprListToParameters dArgs)
   $ \argEs e -> TE.addStmt $ TE.sample e d argEs
 
 addNonCenteredHierarchicalS :: TE.NamedDeclSpec t
@@ -259,7 +260,7 @@ iidMatrixP :: TE.NamedDeclSpec TE.EMat
           -> TE.Density TE.ECVec qs
           -> SB.StanBuilderM md gq (DT.ParameterTag TE.EMat)
 iidMatrixP nds ftd ps d = addBuildParameter
-                          $ UntransformedP nds ftd ps
+                          $ unTransformedP nds ftd ps
                           $ \qs m -> TE.addStmt $ TE.sample (TE.functionE TE.to_vector (m TE.:> TE.TNil)) d qs
 
 -- this puts the prior on the raw parameters
