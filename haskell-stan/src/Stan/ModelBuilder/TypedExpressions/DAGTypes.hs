@@ -29,8 +29,6 @@ module Stan.ModelBuilder.TypedExpressions.DAGTypes
   , DeclCode(..)
   , TransformedParameterLocation(..)
   , BuildParameter(..)
-  , modelP
-  , simpleTransformedP
   , BParameterCollection(..)
   , bParameterName
   , bParameterSType
@@ -60,7 +58,7 @@ import qualified Data.Set as Set
 import Stan.ModelBuilder.TypedExpressions.Expressions (UExpr)
 import Stan.ModelBuilder.TypedExpressions.Types (sTypeToEType)
 
--- ultimately, we should not expose this constructor.  So to get one of these you have to add a Builder to the DMap.
+  -- ultimately, we should not expose this constructor.  So to get one of these you have to add a Builder to the DMap.
 data ParameterTag :: TE.EType -> Type where
   ParameterTag :: TE.SType t -> TE.StanName -> ParameterTag t
 
@@ -198,21 +196,6 @@ data BuildParameter :: TE.EType -> Type where
                -> Parameters rs -- parameters for prior (if nec)
                -> (TE.ExprList rs -> TE.UExpr t -> TE.CodeWriter ()) -- prior in model block (if nec)
                -> BuildParameter t
-
-modelP ::  TE.NamedDeclSpec t
-         -> [FunctionToDeclare]
-         -> Parameters qs
-         -> (TE.ExprList qs -> DeclCode t)
-         -> BuildParameter t
-modelP nds ftds pq tpDesF = TransformedP nds ftds pq ModelBlock tpDesF TE.TNil (\_ _ -> pure ())
-
-simpleTransformedP :: TE.NamedDeclSpec t
-                   -> [FunctionToDeclare]
-                   -> Parameters qs -- parameters for transformation
-                   -> TransformedParameterLocation
-                   -> (TE.ExprList qs -> DeclCode t) -- code for transformed parameters blockBuildParameter t
-                   -> BuildParameter t
-simpleTransformedP nds ftd ps tpl declCodeF = TransformedP nds ftd ps tpl declCodeF TE.TNil (\_ _ -> pure ())
 
 instance TestEquality BuildParameter where
   testEquality bpa bpb = testEquality (f bpa) (f bpb) where
