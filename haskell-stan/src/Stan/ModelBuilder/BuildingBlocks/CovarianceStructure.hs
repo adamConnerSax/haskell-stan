@@ -262,7 +262,7 @@ matrixMultiNormalParameter cs cent muP sigmaP nds = do
     NonCentered -> SB.inBlock SB.SBTransformedData $ SB.addFromCodeWriter $ zeroVecE givenName fDS
     Centered -> pure $ TE.namedE "ERROR" $ TE.genSType @(FlatParamT t)
 --  pTag <- DAG.addBuildParameter $ DAG.TransformedP nds [] TNil DAG.ModelBlock justDeclare TNil noPriorCode
-  pTag <- DAG.addBuildParameter $ DAG.unTransformedP nds [] TNil noPriorCode
+  pTag <- DAG.addBuildParameter $ DAG.UntransformedP nds [] TNil noPriorCode
   let rawNDS = TE.NamedDeclSpec (TE.declName nds <> "_raw") fDS
       sampleF e fm s = case cs of
         Diagonal ->
@@ -353,7 +353,7 @@ vectorMultiNormalParameter cs cent muP sigmaP nds = do
       let sampleCW (m :> s :> TNil) e = TE.addStmt $ sampleF e m s
       fmap DAG.build
         $ DAG.addBuildParameter
-        $ DAG.unTransformedP nds [] (muP :> sigmaP :> TNil) sampleCW
+        $ DAG.UntransformedP nds [] (muP :> sigmaP :> TNil) sampleCW
     NonCentered -> do
       let rawNDS = TE.NamedDeclSpec (TE.declName nds <> "_raw") ds
       (zeroE, diag1E) <- SB.inBlock SB.SBTransformedData
@@ -364,7 +364,7 @@ vectorMultiNormalParameter cs cent muP sigmaP nds = do
                                pure (zv, d1)
                            )
       rawP <- fmap DAG.build
-              $ DAG.addBuildParameter $ DAG.unTransformedP rawNDS []
+              $ DAG.addBuildParameter $ DAG.UntransformedP rawNDS []
               TNil
               (\_ rawE -> TE.addStmt $ stdNormalRaw cs zeroE diag1E rawE)
       let  cDeclCode (rawE :> muE :> sigmaE :> TNil) =

@@ -29,7 +29,6 @@ module Stan.ModelBuilder.TypedExpressions.DAGTypes
   , DeclCode(..)
   , TransformedParameterLocation(..)
   , BuildParameter(..)
-  , unTransformedP
   , modelP
   , simpleTransformedP
   , BParameterCollection(..)
@@ -97,6 +96,24 @@ parameterTagFromBP p = ParameterTag (bParameterSType p) (bParameterName p)
 parameterTagExpr :: ParameterTag t -> TE.UExpr t
 parameterTagExpr (ParameterTag st n) = TE.namedE n st
 
+--data UseParameter :: TE.EType -> Type where
+--  AsIs :: ParameterTag t -> UseParameter t
+--  Mapped :: (TE.UExpr t -> TE.UExpr t') -> UseParameter t -> UseParameter t'
+
+
+
+--useParameterExpr :: UseParameter t -> UExpr t
+--useParameterExpr (AsIs pt) = parameterTagExpr pt
+--useParameterExpr (Mapped g pt) = g $ useParameterExpr pt
+
+--mapParameter :: (TE.UExpr t -> TE.UExpr t') -> UseParameter t -> UseParameter t'
+--mapParameter = Mapped
+
+-- Transformed Data declarations can only depend on other transformed data, so we need
+-- a wrapper type to enforce that.
+
+--type Givens ts = TE.TypedList TE.UExpr ts
+
 -- parameterized by the type of the parameter
 -- Each can include statements to be added to
 -- transformed data block
@@ -147,13 +164,8 @@ data TData :: TE.EType -> Type where
         -> (TE.ExprList ts -> DeclCode t) -- code for the transformed data block
         -> TData t
 
-tDataNDS :: TData t -> TE.NamedDeclSpec t
-tDataNDS (TData nds _ _ _) = nds
-
 parameterTagFromTData :: TData t -> ParameterTag t
-parameterTagFromTData td =
-  let nds = tDataNDS td
-  in ParameterTag (TE.sTypeFromStanType $ TE.declType $ TE.decl nds) (TE.declName nds)
+parameterTagFromTData (TData (TE.NamedDeclSpec n (TE.DeclSpec st _ _)) _ _ _) = ParameterTag (TE.sTypeFromStanType st) n
 
 instance TestEquality TData where
   testEquality tda tdb = testEquality (f tda) (f tdb) where
@@ -173,13 +185,11 @@ data TransformedParameterLocation  where
 
 data BuildParameter :: TE.EType -> Type where
   TransformedDataP :: TData t -> BuildParameter t
-
-{-  UntransformedP :: TE.NamedDeclSpec t
+  UntransformedP :: TE.NamedDeclSpec t
                  -> [FunctionToDeclare]
                  -> Parameters qs
                  -> (TE.ExprList qs -> TE.UExpr t -> TE.CodeWriter ()) -- prior in model block
                  -> BuildParameter t
--}
   TransformedP :: TE.NamedDeclSpec t
                -> [FunctionToDeclare]
                -> Parameters qs -- parameters for transformation
@@ -188,21 +198,6 @@ data BuildParameter :: TE.EType -> Type where
                -> Parameters rs -- parameters for prior (if nec)
                -> (TE.ExprList rs -> TE.UExpr t -> TE.CodeWriter ()) -- prior in model block (if nec)
                -> BuildParameter t
-{-  ModelP :: TE.NamedDeclSpec t
-         -> [FunctionToDeclare]
-         -> Parameters qs
-         -> (TE.ExprList qs -> DeclCode t)
-         -> BuildParameter t
--}
-
-unTransformedP :: TE.NamedDeclSpec t
-               -> [FunctionToDeclare]
-               -> Parameters qs
-               -> (TE.ExprList qs -> TE.UExpr t -> TE.CodeWriter ()) -- prior in model block
-               -> BuildParameter t
-unTransformedP nds ftds qs mbCode = TransformedP nds ftds TE.TNil ModelBlock (const $ DeclCodeF $ const $ pure ()) qs mbCode
-
-
 
 modelP ::  TE.NamedDeclSpec t
          -> [FunctionToDeclare]
@@ -227,7 +222,7 @@ instance TestEquality BuildParameter where
 -- so to do anything which uses them, we need to use CPS
 withBPDeps :: Monoid r => BuildParameter t -> (forall ts. Parameters ts -> r) -> r
 withBPDeps (TransformedDataP (TData _ _ tds _)) f = f $ hfmap (BuildP . parameterTagFromTData) tds
---withBPDeps (UntransformedP _ _ ps _) f = f ps
+withBPDeps (UntransformedP _ _ ps _) f = f ps
 withBPDeps (TransformedP _ _ pq _ _ pr _) f = f pq <> f pr
 --withBPDeps (ModelP _ _ pq _ ) f = f pq
 
@@ -238,7 +233,7 @@ data BParameterCollection = BParameterCollection { pdm :: DM.DMap ParameterTag B
 getNamedDecl :: BuildParameter t -> TE.NamedDeclSpec t --SB.StanBuilderM md gq (TE.NamedDeclSpec t)
 getNamedDecl = \case
   TransformedDataP (TData nds _ _ _) -> nds
---  UntransformedP x _ _ _ -> x
+  UntransformedP x _ _ _ -> x
   TransformedP x _ _ _ _ _ _ -> x
 --  ModelP x _ _ _ -> x
 --  TransformedDiffTypeP x _ _ _ _ _ _ -> x
