@@ -100,14 +100,6 @@ addParameterToCodeAndMap eMap (PhantomP bp) = do
       traverse_ (\(DT.FunctionToDeclare n fs) -> SB.addFunctionsOnce n $ addDAGStmt fs) $ reverse ftds
       tdEs <- SB.stanBuildEither $ DT.lookupTDataExpressions tds eMap
       fmap Just $ (declareAndAddCode SB.SBTransformedData nds $ desF tdEs)
-{-    DT.UntransformedP nds ftds ps codeF -> do
-      traverse_ (\(DT.FunctionToDeclare n fs) -> SB.addFunctionsOnce n $ addDAGStmt fs) $ reverse ftds
-      psE <- SB.stanBuildEither $ DT.lookupParameterExpressions ps eMap
-      SB.inBlock SB.SBParameters $ addDAGStmt $ TE.declareN nds --SB.stanDeclareN nds
-      let v =  TE.namedE (TE.declName nds) (TE.sTypeFromStanType $ TE.declType $ TE.decl nds)
-      SB.inBlock SB.SBModel $ addDAGStmts $ TE.writerL' $ codeF psE v --TE.sample v d psE
-      pure $ Just v
--}
     DT.TransformedP nds ftds pq tpl tpDesF pr codeF -> do
       traverse_ (\(DT.FunctionToDeclare n fs) -> SB.addFunctionsOnce n $ addDAGStmt fs) $ reverse ftds
       pqEs <- SB.stanBuildEither $ DT.lookupParameterExpressions pq eMap
