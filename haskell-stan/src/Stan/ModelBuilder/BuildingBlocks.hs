@@ -415,10 +415,10 @@ postStratifiedParameterF :: Bool
                          -> SB.GroupTypeTag k -- group by
                          -> TE.UExpr TE.EIndexArray -- PS Index for group
                          -> TE.UExpr TE.ECVec -- PS weight
-                         -> TE.UExpr TE.ECVec --  expression of parameters to post-stratify
+                         -> TE.CodeWriter TE.VectorE --  code for expression of parameters to post-stratify
                          -> Maybe (SB.RowTypeTag r', TE.UExpr TE.EIndexArray) -- re-index?
                          -> SB.StanBuilderM md gq (TE.UExpr TE.ECVec)
-postStratifiedParameterF prof block varNameM rtt gtt grpIndex wgtsV pV reIndexRttM = do
+postStratifiedParameterF prof block varNameM rtt gtt grpIndex wgtsV pCW reIndexRttM = do
   _ <- psByGroupFunction
   let dsName = SB.dataSetName rtt
       gName = SB.taggedGroupName gtt
@@ -436,12 +436,14 @@ postStratifiedParameterF prof block varNameM rtt gtt grpIndex wgtsV pV reIndexRt
   SB.inBlock block $ case reIndexRttM of
     Nothing -> do
       probV <- SB.stanDeclare varName grpVecDS
-      SB.addStmtToCode $ scopeF
-        [probV `TE.assign` TE.functionE ps_by_group (dsSizeE :>  grpSizeE :> grpIndex :> wgtsV :> pV :> TNil)]
+      SB.addStmtToCode $ scopeF $ TE.writerL' $ do
+        pV <- pCW
+        TE.addStmt $ probV `TE.assign` TE.functionE ps_by_group (dsSizeE :>  grpSizeE :> grpIndex :> wgtsV :> pV :> TNil)
       pure probV
     Just (reIndexRtt, reIndex') -> do
       riProb <-  SB.stanDeclare varName $ TE.vectorSpec (TE.namedE (SB.dataSetSizeName reIndexRtt) TE.SInt) [] --(SB.StanVector $ SB.NamedDim reIndexKey) ""
       SB.addStmtToCode $ scopeF $ TE.writerL' $ do
+        pV <- pCW
         gProb <- TE.declareRHSW psDataByGroupName grpVecDS $ TE.functionE ps_by_group (dsSizeE :>  grpSizeE :> grpIndex :> wgtsV :> pV :> TNil)
         TE.addStmt $ riProb `TE.assign` TE.indexE TE.s0 reIndex' gProb
       pure riProb

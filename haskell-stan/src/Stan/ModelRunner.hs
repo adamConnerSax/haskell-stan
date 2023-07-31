@@ -41,6 +41,8 @@ import qualified Relude.Extra as Relude
 import qualified Stan.ModelBuilder.TypedExpressions.Program as TE
 import qualified Stan.ModelBuilder.TypedExpressions.DAG as DAG
 
+import qualified Data.IORef as IORef
+
 -- simplified runner for common cases
 runModel' :: forall st cd md gq b c r.
              (SC.KnitStan st cd r

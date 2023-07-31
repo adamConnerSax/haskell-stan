@@ -96,6 +96,10 @@ rowFuncF = appConcat . sequenceA <$> FL.premap dmrpVecF FL.list
   where appConcat g r = V.concat (g r)
 {-# INLINEABLE rowFuncF #-}
 
+designMatrixRowF :: DesignMatrixRow r -> (r -> V.Vector Double)
+designMatrixRowF (DesignMatrixRow _ rowParts) = FL.fold rowFuncF rowParts
+{-# INLINEABLE designMatrixRowF #-}
+
 matrixFromRowData :: DesignMatrixRow r -> Maybe TE.IndexKey -> SB.MatrixRowFromData r
 matrixFromRowData (DesignMatrixRow name rowParts) indexKeyM = SB.MatrixRowFromData name indexKeyM length' f
   where (length', f) = FL.fold ((,) <$> rowLengthF <*> rowFuncF) rowParts
