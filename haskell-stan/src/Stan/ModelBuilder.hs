@@ -140,7 +140,7 @@ toIntMap = IntMap.fromList . fmap (\(a, b) -> (b, a)) . Map.toList
 
 mapToIndexMap :: Ord k => (r -> k) -> Map k Int -> IndexMap r k
 mapToIndexMap h m = indxMap where
-  lookupK = mapLookupE (const "key not found when building given index") m
+  lookupK k = mapLookupE (const $ "key not found when building given index") m k
   intIndex = IntIndex (Map.size m) (lookupK . h)
   indxMap = IndexMap intIndex lookupK (toIntMap m) h
 

@@ -383,12 +383,12 @@ psByGroupFunction = do
         plusEq = TE.opAssign TE.SAdd
         elDivEq = TE.opAssign (TE.SElementWise TE.SDivide)
     sumByGroup <- TE.declareRHSW "SumByGroup" vds $ zeroVectorE nGrp
-    sumWgts <- TE.declareRHSW "SumByGroup" vds $ zeroVectorE nGrp
+    sumWgts <- TE.declareRHSW "SumWgts" vds $ zeroVectorE nGrp
     TE.addStmt $ TE.for "k" (TE.SpecificNumbered (TE.intE 1) nPS)
       $ \k ->
           let atk = TE.sliceE TE.s0 k
               indexByPS = TE.indexE TE.s0 grpPSIndex
-          in [atk (indexByPS sumByGroup) `plusEq` (atk wgts `TE.timesE` atk (indexByPS probs))
+          in [atk (indexByPS sumByGroup) `plusEq` (atk wgts `TE.timesE` atk probs)
              , atk (indexByPS sumWgts) `plusEq` atk wgts
              ]
     TE.addStmt $ sumByGroup `elDivEq` sumWgts
@@ -415,7 +415,7 @@ postStratifiedParameterF :: Bool
                          -> SB.GroupTypeTag k -- group by
                          -> TE.UExpr TE.EIndexArray -- PS Index for group
                          -> TE.UExpr TE.ECVec -- PS weight
-                         -> TE.CodeWriter TE.VectorE --  code for expression of parameters to post-stratify
+                         -> TE.CodeWriter TE.VectorE --  code for expression of parameters to post-stratify. Should be indexed by PS data
                          -> Maybe (SB.RowTypeTag r', TE.UExpr TE.EIndexArray) -- re-index?
                          -> SB.StanBuilderM md gq (TE.UExpr TE.ECVec)
 postStratifiedParameterF prof block varNameM rtt gtt grpIndex wgtsV pCW reIndexRttM = do

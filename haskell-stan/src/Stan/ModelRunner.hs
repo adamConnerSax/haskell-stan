@@ -375,7 +375,7 @@ runModel :: forall st cd md gq b p c r.
   -> K.ActionWithCacheTime r md
   -> K.ActionWithCacheTime r gq
   -> K.Sem r c
-runModel config rScriptsToWrite dataWrangler cb makeResult toPredict md_C gq_C = K.wrapPrefix "Stan.ModelRunner.runModel" $ do
+runModel config rScriptsToWrite dataWrangler cb akeResult toPredict md_C gq_C = K.wrapPrefix "Stan.ModelRunner.runModel" $ do
   K.logLE K.Info "running Model (if necessary)"
   let runnerInputNames = SC.mrcInputNames config
       stanMCParameters = SC.mrcStanMCParameters config
