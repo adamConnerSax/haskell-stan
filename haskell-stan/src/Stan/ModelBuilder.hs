@@ -249,8 +249,10 @@ getGroupIndex rtt gtt grpIndexes =
                <> displayDataSetGroupIntMaps grpIndexes <> "."
                <> " If this error is complaining about a data-set key that appears to be present, double check the *types* used when constructing the row-type-tags"
 
-    Just (GroupIntMaps gim) -> case DHash.lookup gtt gim of
-      Nothing -> Left $ "getGroupIndex: \"" <> taggedGroupName gtt <> "\" not found in Group int maps for data-set \"" <> dataSetName rtt <> "\""
+    Just gims@(GroupIntMaps gim) -> case DHash.lookup gtt gim of
+      Nothing -> Left $ "getGroupIndex: \"" <> taggedGroupName gtt
+                 <> "\" not found in Group int maps ("
+                 <> displayGroupIntMaps gims <> ") for data-set \"" <> dataSetName rtt <> "\""
       Just im -> Right im
 
 groupIndexVarName :: RowTypeTag r -> GroupTypeTag k -> StanName

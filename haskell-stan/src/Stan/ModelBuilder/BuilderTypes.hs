@@ -160,7 +160,11 @@ displayDataSetGroupIntMaps :: DataSetGroupIntMaps -> Text
 displayDataSetGroupIntMaps = DHash.foldrWithKey g ""
   where
     h = DHash.foldrWithKey (\gtt _ t -> t <> ", " <> taggedGroupName gtt) ""
-    g rtt (GroupIntMaps gim) t = t <> "rtt=" <> dataSetName rtt <> " (idt=" <> show (inputDataType rtt) <> "): " <> h gim <> "\n"
+    g rtt gims {-(GroupIntMaps gim)-} t = t <> "rtt=" <> dataSetName rtt <> " (idt=" <> show (inputDataType rtt) <> "): " <> displayGroupIntMaps gims <> "\n"
+
+displayGroupIntMaps :: GroupIntMaps k -> Text
+displayGroupIntMaps (GroupIntMaps gim) = h gim where
+  h = DHash.foldrWithKey (\gtt _ t -> t <> ", " <> taggedGroupName gtt) ""
 
 data GroupIndexAndIntMapMakers d r = GroupIndexAndIntMapMakers (ToFoldable d r) (GroupIndexMakers r) (GroupIntMapBuilders r)
 
