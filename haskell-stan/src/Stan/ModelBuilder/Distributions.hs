@@ -178,6 +178,14 @@ betaDist = StanDist Continuous sample lpdf lupdf rng
     lupdf = TE.densityE TE.beta_lupdf
     rng = TE.functionE TE.beta_rng
 
+betaDistV :: forall t . (TE.TypeOneOf t [TE.ECVec, TE.ERVec], TE.ScalarType t ~ TE.EReal, TE.GenSType t) => SimpleDist t '[t, t]
+betaDistV = StanDist Continuous sample lpdf lupdf rng
+  where
+    sample x = TE.sample x TE.beta
+    lpdf = TE.densityE TE.beta_lpdf
+    lupdf = TE.densityE TE.beta_lupdf
+    rng = TE.functionE TE.beta_rng
+
 betaMu :: TE.UExpr TE.EReal -> TE.UExpr TE.EReal -> TE.UExpr TE.EReal
 betaMu aE bE = aE `TE.divideE` (aE `TE.plusE` bE)
 

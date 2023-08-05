@@ -119,6 +119,7 @@ library
                  , Stan.ModelBuilder.BuildingBlocks.DirichletMultinomial
                  , Stan.ModelBuilder.DesignMatrix
                  , Stan.ModelBuilder.Distributions
+                 , Stan.ModelBuilder.Distributions.RealBinomial
                  , Stan.ModelBuilder.TypedExpressions.DAGTypes
                  , Stan.ModelBuilder.TypedExpressions.DAG
                  , Stan.ModelBuilder.TypedExpressions.Evaluate

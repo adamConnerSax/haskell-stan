@@ -177,6 +177,7 @@ type family BinaryResultT (bo :: BinaryOp) (a :: EType) (b :: EType) :: EType wh
   BinaryResultT BAdd a ESqMat = IfRealNumber a ESqMat (TE.TypeError (TE.ShowType a :<>: TE.Text " and " :<>: TE.ShowType ECVec :<>: TE.Text " cannot be added." ))
   BinaryResultT BAdd ESqMat a = IfRealNumber a ESqMat (TE.TypeError (TE.ShowType ECVec :<>: TE.Text " and " :<>: TE.ShowType a :<>: TE.Text " cannot be added." ))
   BinaryResultT BAdd a b = IfNumbers a b (Promoted a b) (TE.TypeError (TE.ShowType a :<>: TE.Text " and " :<>: TE.ShowType b :<>: TE.Text " cannot be added." ))
+  BinaryResultT BSubtract a a = a
   BinaryResultT BSubtract a ECVec = IfRealNumber a ECVec (TE.TypeError (TE.ShowType a :<>: TE.Text " and " :<>: TE.ShowType ECVec :<>: TE.Text " cannot be subtracted." ))
   BinaryResultT BSubtract ECVec a = IfRealNumber a ECVec (TE.TypeError (TE.ShowType ECVec :<>: TE.Text " and " :<>: TE.ShowType a :<>: TE.Text " cannot be subtracted." ))
   BinaryResultT BSubtract a ERVec = IfRealNumber a ERVec (TE.TypeError (TE.ShowType a :<>: TE.Text " and " :<>: TE.ShowType ECVec :<>: TE.Text " cannot be subtracted." ))

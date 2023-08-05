@@ -58,6 +58,17 @@ lgamma :: VectorizedReal t => Function t '[t]
 lgamma = simpleFunction "lgamma"
 {-# INLINEABLE lgamma #-}
 
+log :: VectorizedReal t => Function t '[t]
+log = simpleFunction "log"
+
+log1m :: VectorizedReal t => Function t '[t]
+log1m = simpleFunction "log1m"
+
+-- vectorized log of real-valued binomial coefficient
+-- see: https://mc-stan.org/docs/functions-reference/betafun.html
+lChoose :: VectorizedReal t => Function t '[t, t]
+lChoose = simpleFunction "lchoose"
+
 inv :: VectorizedReal t => Function t '[t]
 inv = simpleFunction "inv"
 {-# INLINEABLE inv #-}
@@ -468,7 +479,7 @@ binomial_logit_lupmf :: BinDensityC t t' => Density t '[t, t']
 binomial_logit_lupmf = simpleDensity "binomial_logit_lupmf"
 {-# INLINEABLE binomial_logit_lupmf #-}
 
-beta :: (TypeOneOf t [EReal, ECVec], GenSType t) => Density t '[t, t]
+beta :: (VectorizedReal t, GenSType t) => Density t '[t, t]
 beta = simpleDensity "beta"
 {-# INLINEABLE beta #-}
 
@@ -477,15 +488,15 @@ betaS = simpleDensity "beta"
 {-# INLINEABLE betaS #-}
 
 
-beta_lpdf :: (TypeOneOf t [EReal, ECVec], GenSType t) => Density t '[t, t]
+beta_lpdf :: (VectorizedReal t, GenSType t) => Density t '[t, t]
 beta_lpdf = simpleDensity "beta_lpdf"
 {-# INLINEABLE beta_lpdf #-}
 
-beta_lupdf :: (TypeOneOf t [EReal, ECVec], GenSType t) => Density t '[t, t]
+beta_lupdf :: (VectorizedReal t, GenSType t) => Density t '[t, t]
 beta_lupdf = simpleDensity "beta_lupdf"
 {-# INLINEABLE beta_lupdf #-}
 
-beta_rng :: (TypeOneOf t [EReal, ECVec], GenSType t) => Function t '[t, t]
+beta_rng :: (VectorizedReal t, GenSType t) => Function t '[t, t]
 beta_rng = simpleFunction "beta_rng"
 {-# INLINEABLE beta_rng #-}
 
