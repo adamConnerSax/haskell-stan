@@ -117,6 +117,7 @@ library
                  , Stan.ModelBuilder.BuildingBlocks.ArrayHelpers
                  , Stan.ModelBuilder.BuildingBlocks.CovarianceStructure
                  , Stan.ModelBuilder.BuildingBlocks.DirichletMultinomial
+                 , Stan.ModelBuilder.BuildingBlocks.GroupAlpha
                  , Stan.ModelBuilder.DesignMatrix
                  , Stan.ModelBuilder.Distributions
                  , Stan.ModelBuilder.Distributions.RealBinomial

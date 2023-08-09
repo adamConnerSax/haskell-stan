@@ -138,10 +138,17 @@ instance Hashable.Hashable (Some.Some GroupTypeTag) where
 
 data IntIndex row = IntIndex { i_Size :: Int, i_Index :: row -> Either Text Int }
 
+instance Contravariant IntIndex where
+  contramap f (IntIndex s g) = IntIndex s (g . f)
+
 data MakeIndex r k where
-  GivenIndex :: Ord k => (Map k Int) -> (r -> k) -> MakeIndex r k
+  GivenIndex :: Ord k => Map k Int -> (r -> k) -> MakeIndex r k
   FoldToIndex :: Ord k =>  (Foldl.Fold r (Map k Int)) -> (r -> k) -> MakeIndex r k
 --  SupplementalIndex :: (Ord k, Foldable f) => f k -> MakeIndex r k
+
+contraMakeIndex :: (a -> b) -> MakeIndex b k -> MakeIndex a k
+contraMakeIndex f (GivenIndex m g) = GivenIndex m (g . f)
+contraMakeIndex f (FoldToIndex fld g) = FoldToIndex (Foldl.premap f fld) (g . f)
 
 -- Index makers for one row type
 newtype GroupIndexMakers r = GroupIndexMakers (DHash.DHashMap GroupTypeTag (MakeIndex r))
@@ -149,8 +156,11 @@ newtype GroupIndexMakers r = GroupIndexMakers (DHash.DHashMap GroupTypeTag (Make
 newtype GroupIndexes r = GroupIndexes (DHash.DHashMap GroupTypeTag (IndexMap r))
 
 newtype DataToIntMap r k = DataToIntMap { unDataToIntMap :: Foldl.FoldM (Either Text) r (IntMap k) }
-newtype GroupIntMapBuilders r = GroupIntMapBuilders (DHash.DHashMap GroupTypeTag (DataToIntMap r))
 
+contraDataToIntMap :: (a -> b) -> DataToIntMap b k -> DataToIntMap a k
+contraDataToIntMap f (DataToIntMap fldM) = DataToIntMap $ Foldl.premapM (pure . f) fldM
+
+newtype GroupIntMapBuilders r = GroupIntMapBuilders (DHash.DHashMap GroupTypeTag (DataToIntMap r))
 
 -- r is a Phantom type here
 newtype GroupIntMaps r = GroupIntMaps (DHash.DHashMap GroupTypeTag IntMap.IntMap)
@@ -168,13 +178,15 @@ displayGroupIntMaps (GroupIntMaps gim) = h gim where
 
 data GroupIndexAndIntMapMakers d r = GroupIndexAndIntMapMakers (ToFoldable d r) (GroupIndexMakers r) (GroupIntMapBuilders r)
 
-
 data IndexMap r k = IndexMap
                     { rowToGroupIndex :: IntIndex r,
                       groupKeyToGroupIndex :: k -> Either Text Int,
                       groupIndexToGroupKey :: IntMap.IntMap k,
                       rowToGroup :: r -> k
                     }
+
+contraIndexMap :: (a -> b) -> IndexMap b k -> IndexMap a k
+contraIndexMap f (IndexMap rgi ggi gigk rg) = IndexMap (contramap f rgi) ggi gigk (rg . f)
 
 data RowInfo d r = RowInfo
                    {
