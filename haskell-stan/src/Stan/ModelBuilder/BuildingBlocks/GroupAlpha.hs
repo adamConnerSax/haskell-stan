@@ -25,6 +25,7 @@ import qualified Stan.ModelBuilder.TypedExpressions.Indexing as TE
 import qualified Stan.ModelBuilder.TypedExpressions.Operations as TE
 import qualified Stan.ModelBuilder.TypedExpressions.StanFunctions as SF
 import qualified Stan.ModelBuilder.TypedExpressions.DAG as DAG
+import qualified Stan.ModelBuilder.TypedExpressions.DAGTypes as DAG
 import qualified Stan.ModelBuilder as SB
 import qualified Stan.ModelBuilder.Distributions as SMD
 
@@ -36,6 +37,7 @@ import qualified Stan.ModelConfig as SB
 import Stan.ModelBuilder.BuilderTypes (dataSetSizeName)
 
 addModelIndexes :: forall a b md gq .
+
                    SB.RowTypeTag a
                 -> (a -> b)
                 -> [DSum.DSum SB.GroupTypeTag (GroupFromData b)]
@@ -145,20 +147,21 @@ binaryAlpha gtt bp = GroupAlphaTD bp tdCW f where
   f :: TE.VectorE -> TE.UExpr TE.EReal -> SB.RowTypeTag a -> TE.CodeWriter TE.VectorE
   f splitIndex aE rtt = pure $ aE `TE.timesE` splitIndex
 
-
 firstOrderAlpha :: SB.GroupTypeTag k -> DAG.BuildParameter TE.ECVec -> GroupAlpha
 firstOrderAlpha gtt bp = GroupAlphaE bp f where
   f :: forall a md gq . TE.VectorE -> SB.RowTypeTag a -> TE.VectorE
   f aE rtt = TE.indexE TE.s0 (SB.byGroupIndexE rtt gtt) aE
 
-firstOrderAlphaDC :: SB.GroupTypeTag k -> DAG.BuildParameter TE.ECVec -> k -> GroupAlpha
-firstOrderAlphaDC gtt bp controlK = GroupAlphaTD bp tdCW f where
-  f :: forall a md gq . TE.VectorE -> SB.RowTypeTag a -> TE.VectorE
-  f aE rtt = TE.indexE TE.s0 (SB.byGroupIndexE rtt gtt) aE
-  dummyIndexNDS ::  SB.RowTypeTag a -> TE.NamedDeclSpec TE.ECVec
-  dummyIndexNDS rtt = TE.NamedDeclSpec ("dummyIndex_" <> SB.taggedGroupName gtt <> "_" <> SB.dataSetName rtt) $ TE.vectorSpec (SB.dataSetSizeE rtt) []
-  tdCW ::  SB.RowTypeTag a -> TE.CodeWriter TE.VectorE
-  tdCW rtt = TE.declareRHSNW (dummyIndexNDS rtt) $ TE.realE 1.5 `TE.minusE` indexVec rtt
+
+-- dummy coding. For now just append 0. Would be helpful to choose where to put the zero so we could
+-- choose which entry to dummy code.
+firstOrderAlphaDC :: SB.GroupTypeTag k -> DAG.BuildParameter TE.ECVec -> GroupAlpha
+firstOrderAlphaDC gtt bp = GroupAlphaCW bp f where
+  f :: forall a md gq . TE.VectorE -> SB.RowTypeTag a -> TE.CodeWriter TE.VectorE
+  f aE rtt = do
+    let aDCNDS = TE.NamedDeclSpec (DAG.bParameterName bp <> "_dc") $ TE.vectorSpec (SB.groupSizeE gtt) []
+    aDC <- TE.declareRHSNW aDCNDS $ TE.functionE SF.append_to_vector (aE :> TE.realE 0 :> TNil)
+    pure $ TE.indexE TE.s0 (SB.byGroupIndexE rtt gtt) aDC
 
 secondOrderAlpha :: SB.GroupTypeTag k
                  -> SB.GroupTypeTag k

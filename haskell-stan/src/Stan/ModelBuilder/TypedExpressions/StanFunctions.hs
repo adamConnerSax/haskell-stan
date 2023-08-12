@@ -236,6 +236,19 @@ append_col :: Function EMat [EMat, ECVec]
 append_col = simpleFunction "append_col"
 {-# INLINEABLE append_col #-}
 
+append_row :: Function EMat [EMat, ERVec]
+append_row = simpleFunction "append_row"
+{-# INLINEABLE append_row #-}
+
+append_to_row_vector :: Function ERVec [ERVec, EReal]
+append_to_row_vector = simpleFunction "append_col"
+{-# INLINEABLE append_to_row_vector #-}
+
+append_to_vector :: Function ECVec [ECVec, EReal]
+append_to_vector = simpleFunction "append_row"
+{-# INLINEABLE append_to_vector #-}
+
+
 rows :: (TypeOneOf t [EMat, ESqMat], GenSType t) => Function EInt '[t]
 rows = simpleFunction "rows"
 {-# INLINEABLE rows #-}
