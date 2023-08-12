@@ -245,7 +245,7 @@ addBuildParameterE bp bpc = do
   let pName =  bParameterName bp
 --      pSType = bParameterSType bp
   if Set.member pName (usedNames bpc)
-    then Left $ "Attempt to add " <> pName <> "to parameter collection but a parameter of that name is already present."
+    then Left $ "Attempt to add " <> pName <> " to parameter collection but a parameter of that name is already present."
     else Right $ let ttn = parameterTagFromBP bp in (BParameterCollection (DM.insert ttn bp $ pdm bpc) (Set.insert pName $ usedNames bpc), ttn)
 
 lookupParameterExpressions :: Parameters ts -> DM.DMap ParameterTag TE.UExpr -> Either Text (TE.TypedList TE.UExpr ts)

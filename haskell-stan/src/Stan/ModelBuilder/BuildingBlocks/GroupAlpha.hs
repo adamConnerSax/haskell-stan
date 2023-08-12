@@ -57,32 +57,54 @@ addGroupIntMaps rtt f gfds = traverse_ g gfds where
     let (GroupFromData _ _ gim) = contraGroupFromData f gfd
     SB.addGroupIntMapForDataSet gtt rtt gim
 
-type AlphaByDataVecCW md gq = forall a . SB.RowTypeTag a -> SB.StanBuilderM md gq (TE.CodeWriter TE.VectorE)
+data AlphaByDataVecCW md gq where
+  AlphaByDataVecCW :: (forall a . SB.RowTypeTag a -> SB.StanBuilderM md gq (TE.CodeWriter TE.VectorE)) -> AlphaByDataVecCW md gq
 
-setupAlpha :: forall md gq . GroupAlpha -> AlphaByDataVecCW md gq
-setupAlpha (GroupAlphaE bp avE) rtt = do
+-- Do one time per model things: add parameters, etc.
+setupAlpha :: forall md gq . GroupAlpha -> SB.StanBuilderM md gq (AlphaByDataVecCW md gq)
+setupAlpha (GroupAlphaE bp avE) = do
   aE <- DAG.parameterExpr <$> DAG.addBuildParameter bp
-  pure $ pure $ avE aE rtt
-setupAlpha (GroupAlphaCW bp avCW) rtt = do
+  let  f :: SB.RowTypeTag a -> SB.StanBuilderM md gq (TE.CodeWriter TE.VectorE)
+       f rtt = pure $ pure $ avE aE rtt
+  pure $ AlphaByDataVecCW f
+setupAlpha (GroupAlphaCW bp avCW) = do
   aE <- DAG.parameterExpr <$> DAG.addBuildParameter bp
-  pure $ avCW aE rtt
-setupAlpha (GroupAlphaTD bp tdCW avCW) rtt = do
+  let f :: SB.RowTypeTag a -> SB.StanBuilderM md gq (TE.CodeWriter TE.VectorE)
+      f rtt = pure $ avCW aE rtt
+  pure $ AlphaByDataVecCW f
+setupAlpha (GroupAlphaTD bp tdCW avCW) = do
   aE <- DAG.parameterExpr <$> DAG.addBuildParameter bp
-  td <- SB.inBlock SB.SBTransformedData $ SB.addFromCodeWriter $ tdCW rtt
-  pure $ avCW td aE rtt
-
-setupAlphaSum :: forall md gq . NonEmpty GroupAlpha -> AlphaByDataVecCW md gq
-setupAlphaSum gts rtt = do
-  cws :: NonEmpty (TE.CodeWriter TE.VectorE) <- traverse (flip setupAlpha rtt) gts
-  pure $ (\x -> foldl' TE.plusE (head x) (tail x)) <$> sequence cws
-
-{-  let f :: SB.RowTypeTag a -> SB.StanBuilderM md gq (TE.CodeWriter TE.VectorE)
+  let f :: SB.RowTypeTag a -> SB.StanBuilderM md gq (TE.CodeWriter TE.VectorE)
       f rtt = do
-        cws :: NonEmpty (TE.CodeWriter TE.VectorE) <- traverse (\af -> af rtt) afs
-        let cwvs :: TE.CodeWriter (NonEmpty TE.VectorE) = sequence cws
-        pure $ fmap (\vs -> foldl' TE.plusE (head vs) (tail vs)) cwvs
-  pure f
+        let block = case SB.inputDataType rtt of
+              SB.ModelData -> SB.SBTransformedData
+              SB.GQData -> SB.SBTransformedDataGQ
+        td <- SB.inBlock block $ SB.addFromCodeWriter $ tdCW rtt
+        pure $ avCW td aE rtt
+  pure $ AlphaByDataVecCW f
+
+-- do once per data-set things and sum
+setupAlphaSum :: forall md gq . NonEmpty GroupAlpha -> SB.StanBuilderM md gq (AlphaByDataVecCW md gq)
+setupAlphaSum gts = do
+  abdvcws :: NonEmpty (AlphaByDataVecCW md gq) <- traverse setupAlpha gts
+  let f :: SB.RowTypeTag a -> SB.StanBuilderM md gq (TE.CodeWriter TE.VectorE)
+      f rtt = do
+        x <- traverse (\abdv -> let (AlphaByDataVecCW g) = abdv in g rtt) abdvcws
+        pure $ fmap (\z -> foldl' TE.plusE (head z) (tail z)) $ sequence x
+  pure $ AlphaByDataVecCW f
+
+{-
+setupAlphaSum :: forall md gq . NonEmpty GroupAlpha -> AlphaByDataVecCW md gq
+setupAlphaSum gts =
+  let abdvcws :: NonEmpty (AlphaByDataVecCW md gq) = fmap setupAlpha gts
+      f :: SB.RowTypeTag a -> SB.StanBuilderM md gq (TE.CodeWriter TE.VectorE)
+      f rtt = do
+        x <- traverse (\abdv -> let (AlphaByDataVecCW g) = abdv in g rtt) abdvcws
+        pure $ fmap (\z -> foldl' TE.plusE (head z) (tail z)) $ sequence x
+  in AlphaByDataVecCW f
 -}
+
+
 
 data GroupFromData r k = GroupFromData { gfdGroup :: r -> k
                                        , gfdMakeIndex :: SB.MakeIndex r k
@@ -116,7 +138,7 @@ binaryAlpha gtt bp = GroupAlphaTD bp tdCW f where
   indexVec :: SB.RowTypeTag a -> TE.VectorE
   indexVec rtt = TE.functionE SF.to_vector (SB.byGroupIndexE rtt gtt :> TNil)
   splitIndexNDS :: SB.RowTypeTag a -> TE.NamedDeclSpec TE.ECVec
-  splitIndexNDS rtt = TE.NamedDeclSpec ("splitIndex_" <> SB.taggedGroupName gtt) $ TE.vectorSpec (SB.dataSetSizeE rtt) []
+  splitIndexNDS rtt = TE.NamedDeclSpec ("splitIndex_" <> SB.taggedGroupName gtt <> "_" <> SB.dataSetName rtt) $ TE.vectorSpec (SB.dataSetSizeE rtt) []
   tdCW :: SB.RowTypeTag a -> TE.CodeWriter TE.VectorE
   tdCW rtt = TE.declareRHSNW (splitIndexNDS rtt) $ TE.realE 1.5 `TE.minusE` indexVec rtt
 
@@ -128,6 +150,15 @@ firstOrderAlpha :: SB.GroupTypeTag k -> DAG.BuildParameter TE.ECVec -> GroupAlph
 firstOrderAlpha gtt bp = GroupAlphaE bp f where
   f :: forall a md gq . TE.VectorE -> SB.RowTypeTag a -> TE.VectorE
   f aE rtt = TE.indexE TE.s0 (SB.byGroupIndexE rtt gtt) aE
+
+firstOrderAlphaDC :: SB.GroupTypeTag k -> DAG.BuildParameter TE.ECVec -> k -> GroupAlpha
+firstOrderAlphaDC gtt bp controlK = GroupAlphaTD bp tdCW f where
+  f :: forall a md gq . TE.VectorE -> SB.RowTypeTag a -> TE.VectorE
+  f aE rtt = TE.indexE TE.s0 (SB.byGroupIndexE rtt gtt) aE
+  dummyIndexNDS ::  SB.RowTypeTag a -> TE.NamedDeclSpec TE.ECVec
+  dummyIndexNDS rtt = TE.NamedDeclSpec ("dummyIndex_" <> SB.taggedGroupName gtt <> "_" <> SB.dataSetName rtt) $ TE.vectorSpec (SB.dataSetSizeE rtt) []
+  tdCW ::  SB.RowTypeTag a -> TE.CodeWriter TE.VectorE
+  tdCW rtt = TE.declareRHSNW (dummyIndexNDS rtt) $ TE.realE 1.5 `TE.minusE` indexVec rtt
 
 secondOrderAlpha :: SB.GroupTypeTag k
                  -> SB.GroupTypeTag k
