@@ -181,3 +181,23 @@ secondOrderAlpha gtt1 gtt2 bp = GroupAlphaCW bp f where
       $ TE.for "n" (TE.SpecificNumbered (TE.intE 1) $ SB.dataSetSizeE rtt)
       $ \nE -> [(aV `TE.at` nE) `TE.assign` TE.mAt reIndexedAlpha nE nE]
     pure aV
+
+
+insertZeroAtFunction :: SB.StanBuilderM md gq (TE.Function TE.ECVec [TE.ECVec, TE.EInt])
+insertZeroAtFunction = do
+  let leq = TE.binaryOpE (TEO.SBoolOp TEO.SLEq)
+      geq = TE.binaryOpE (TEO.SBoolOp TEO.SGEq)
+      f :: TE.Function TE.ECVec [TE.ECVec, TE.EInt]
+      f = TE.simpleFunction "insert_zero_at"
+  SB.addFunctionOnce f (TE.Arg "v" :> TE.Arg "n" :> TNil)
+    $ \(v :> n :> TNil)  -> TE.writerL $ do
+    szE <- TE.declareRHSNW (TE.NamedDeclSpec "m" $ TE.intSpec []) $ TE.functionE TE.size (v :> TNil) `TE.plus` TE.intE 1
+    wzero <- TE.declareRHSNW (TE.NamedDeclSpec "wz" $ TE.vectorSpec szE [])
+             $ TE.functionE SF.rep_vector (TE.realE 0 :> szE :> TNil)
+    TE.addStmt $ TE.ifThen (n `geq` TE.intE 2)
+      $ TE.for "l" (TE.SpecificNumbered (TE.intE 1) (n `TE.minusE` TE.intE 1))
+      $ \l -> wzero `TE.at` l `TE.assignE` v `TE.at` l
+    TE.addStmt $ TE.ifThen (n `leq` (szE `TE.minusE` TE.intE 1))
+      $ TE.for "l" (TE.SpecificNumbered (n `TE.plusE` TE.intE 1) szE)
+      $ \l -> wzero `TE.at` l `TE.assignE` v `TE.at` l
+    return wzero
