@@ -278,8 +278,11 @@ intVecLoops :: forall m f . (VecToSameTypedListF VarAndForType EInt m, Traversab
             -> UStmt
 intVecLoops counterPrefix v stmtF = nestedLoops (vecVFT counterPrefix v) stmtF
 
-ifThen :: UExpr EBool -> UStmt -> UStmt -> UStmt
-ifThen ce sTrue = SIfElse $ (ce, sTrue) :| []
+nullS :: UStmt
+nullS = SContext Nothing []
+
+ifThen :: UExpr EBool -> UStmt -> UStmt
+ifThen ce sTrue = SIfElse ((ce, sTrue) :| []) nullS
 
 ifThenElse :: NonEmpty (UExpr EBool, UStmt) -> UStmt -> UStmt
 ifThenElse = SIfElse

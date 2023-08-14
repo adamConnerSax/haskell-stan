@@ -23,6 +23,7 @@ import Stan.ModelBuilder.TypedExpressions.TypedList (TypedList(..))
 import qualified Stan.ModelBuilder.TypedExpressions.Statements as TE
 import qualified Stan.ModelBuilder.TypedExpressions.Indexing as TE
 import qualified Stan.ModelBuilder.TypedExpressions.Operations as TE
+import qualified Stan.ModelBuilder.TypedExpressions.Functions as TE
 import qualified Stan.ModelBuilder.TypedExpressions.StanFunctions as SF
 import qualified Stan.ModelBuilder.TypedExpressions.DAG as DAG
 import qualified Stan.ModelBuilder.TypedExpressions.DAGTypes as DAG
@@ -84,6 +85,16 @@ setupAlpha (GroupAlphaTD bp tdCW avCW) = do
         td <- SB.inBlock block $ SB.addFromCodeWriter $ tdCW rtt
         pure $ avCW td aE rtt
   pure $ AlphaByDataVecCW f
+setupAlpha (GroupAlphaPrep bp prep avCW) = do
+  aE <- DAG.parameterExpr <$> DAG.addBuildParameter bp
+  let f :: SB.RowTypeTag a -> SB.StanBuilderM md gq (TE.CodeWriter TE.VectorE)
+      f rtt = do
+        let block = case SB.inputDataType rtt of
+              SB.ModelData -> SB.SBTransformedData
+              SB.GQData -> SB.SBTransformedDataGQ
+        a <- prep rtt
+        pure $ avCW a aE rtt
+  pure $ AlphaByDataVecCW f
 
 -- do once per data-set things and sum
 setupAlphaSum :: forall md gq . NonEmpty GroupAlpha -> SB.StanBuilderM md gq (AlphaByDataVecCW md gq)
@@ -130,6 +141,11 @@ data GroupAlpha where
                -> (forall a . SB.RowTypeTag a -> TE.CodeWriter td)
                -> (forall a . td -> TE.UExpr t -> SB.RowTypeTag a -> TE.CodeWriter TE.VectorE)
                -> GroupAlpha
+  GroupAlphaPrep :: forall t p . DAG.BuildParameter t
+                 -> (forall a md gq . SB.RowTypeTag a -> SB.StanBuilderM md gq p)
+                 -> (forall a . p -> TE.UExpr t -> SB.RowTypeTag a -> TE.CodeWriter TE.VectorE)
+                 -> GroupAlpha
+
 
 
 --zeroOrderAlpha :: DAG.BuildParameter TE.EReal -> GroupAlpha r TE.EReal
@@ -155,12 +171,19 @@ firstOrderAlpha gtt bp = GroupAlphaE bp f where
 
 -- dummy coding. For now just append 0. Would be helpful to choose where to put the zero so we could
 -- choose which entry to dummy code.
-firstOrderAlphaDC :: SB.GroupTypeTag k -> DAG.BuildParameter TE.ECVec -> GroupAlpha
-firstOrderAlphaDC gtt bp = GroupAlphaCW bp f where
-  f :: forall a md gq . TE.VectorE -> SB.RowTypeTag a -> TE.CodeWriter TE.VectorE
-  f aE rtt = do
+firstOrderAlphaDC :: SB.GroupTypeTag k -> k -> DAG.BuildParameter TE.ECVec -> GroupAlpha
+firstOrderAlphaDC gtt controlK bp = GroupAlphaPrep bp prep f where
+  prep :: SB.RowTypeTag a -> SB.StanBuilderM md gq (TE.Function TE.ECVec [TE.ECVec, TE.EInt], Int)
+  prep rtt = do
+    insert_zero_at <- insertZeroAtFunction
+    (SB.IndexMap _ kgi _ _) <- SB.indexMap rtt gtt
+    cn <- SB.stanBuildEither $ kgi controlK
+    pure (insert_zero_at, cn)
+  f :: forall a md gq . (TE.Function TE.ECVec [TE.ECVec, TE.EInt], Int) -> TE.VectorE -> SB.RowTypeTag a -> TE.CodeWriter TE.VectorE
+  f (insert_zero_at, cn) aE rtt = do
     let aDCNDS = TE.NamedDeclSpec (DAG.bParameterName bp <> "_dc") $ TE.vectorSpec (SB.groupSizeE gtt) []
-    aDC <- TE.declareRHSNW aDCNDS $ TE.functionE SF.append_to_vector (aE :> TE.realE 0 :> TNil)
+--    aDC <- TE.declareRHSNW aDCNDS $ TE.functionE SF.append_to_vector (aE :> TE.realE 0 :> TNil)
+    aDC <- TE.declareRHSNW aDCNDS $ TE.functionE insert_zero_at (aE :> TE.intE cn :> TNil)
     pure $ TE.indexE TE.s0 (SB.byGroupIndexE rtt gtt) aDC
 
 secondOrderAlpha :: SB.GroupTypeTag k
@@ -185,19 +208,18 @@ secondOrderAlpha gtt1 gtt2 bp = GroupAlphaCW bp f where
 
 insertZeroAtFunction :: SB.StanBuilderM md gq (TE.Function TE.ECVec [TE.ECVec, TE.EInt])
 insertZeroAtFunction = do
-  let leq = TE.binaryOpE (TEO.SBoolOp TEO.SLEq)
-      geq = TE.binaryOpE (TEO.SBoolOp TEO.SGEq)
+  let le = TE.boolOpE TE.SLT
+      eq = TE.boolOpE TE.SEq
       f :: TE.Function TE.ECVec [TE.ECVec, TE.EInt]
       f = TE.simpleFunction "insert_zero_at"
   SB.addFunctionOnce f (TE.Arg "v" :> TE.Arg "n" :> TNil)
     $ \(v :> n :> TNil)  -> TE.writerL $ do
-    szE <- TE.declareRHSNW (TE.NamedDeclSpec "m" $ TE.intSpec []) $ TE.functionE TE.size (v :> TNil) `TE.plus` TE.intE 1
-    wzero <- TE.declareRHSNW (TE.NamedDeclSpec "wz" $ TE.vectorSpec szE [])
-             $ TE.functionE SF.rep_vector (TE.realE 0 :> szE :> TNil)
-    TE.addStmt $ TE.ifThen (n `geq` TE.intE 2)
-      $ TE.for "l" (TE.SpecificNumbered (TE.intE 1) (n `TE.minusE` TE.intE 1))
-      $ \l -> wzero `TE.at` l `TE.assignE` v `TE.at` l
-    TE.addStmt $ TE.ifThen (n `leq` (szE `TE.minusE` TE.intE 1))
-      $ TE.for "l" (TE.SpecificNumbered (n `TE.plusE` TE.intE 1) szE)
-      $ \l -> wzero `TE.at` l `TE.assignE` v `TE.at` l
+    szE <- TE.declareRHSNW (TE.NamedDeclSpec "m" $ TE.intSpec []) $ TE.functionE SF.size (v :> TNil) `TE.plusE` TE.intE 1
+    wzero <- TE.declareNW (TE.NamedDeclSpec "wz" $ TE.vectorSpec szE [])
+--             $ TE.functionE SF.rep_vector (TE.realE 0 :> szE :> TNil)
+    TE.addStmt $ TE.for "l" (TE.SpecificNumbered (TE.intE 1) szE)
+      $ \l -> [TE.ifThenElse
+                ((l `le` n, (wzero `TE.at` l) `TE.assign` (v `TE.at` l)) :|
+                [(l `eq` n, (wzero `TE.at` l) `TE.assign` TE.realE 0)])
+                ((wzero `TE.at` l) `TE.assign` (v `TE.at` (l `TE.minusE` TE.intE 1)))]
     return wzero
