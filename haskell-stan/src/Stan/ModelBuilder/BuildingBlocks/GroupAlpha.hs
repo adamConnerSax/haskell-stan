@@ -262,7 +262,7 @@ secondOrderAlphaDC gtt1 gtt2 (controlK1, controlK2) bp = GroupAlphaPrep bp prep 
                         `TE.assign`
                         (TE.condE
                           ((k1 `neq` TE.intE cn1) `or` (k2 `neq` TE.intE cn2))
-                          (wzero `TE.at` (((k1 `TE.minusE` TE.intE 1) `TE.timesE` gs2E) `TE.plusE` k2))
+                          (wzero `TE.at` (((k1 `TE.minusE` TE.intE 1) `TE.timesE` gs1E) `TE.plusE` k2))
                           (TE.realE 0)
                         )]
                ]
