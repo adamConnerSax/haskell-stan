@@ -254,7 +254,7 @@ secondOrderAlphaDC gtt1 gtt2 (controlK1, controlK2) bp = GroupAlphaPrep bp prep 
     am <- TE.declareNW alphaMNDS
     TE.addStmt $ TE.scoped $ TE.writerL' $ do
       let adcNDS = TE.NamedDeclSpec "withZero" $ TE.vectorSpec (gs1E `TE.timesE` gs2E) []
-          czE = (TE.intE (cn1 - 1) `TE.timesE` gs1E) `TE.plusE` TE.intE cn2
+          czE = (TE.intE (cn1 - 1) `TE.timesE` gs2E) `TE.plusE` TE.intE cn2
       wzero <- TE.declareRHSNW adcNDS $ TE.functionE insert_zero_at (aV :> czE :> TNil)
       TE.addStmt $ TE.for "k1" (TE.SpecificNumbered (TE.intE 1) gs1E)
           $ \k1 -> [TE.for "k2" (TE.SpecificNumbered (TE.intE 1) gs2E)
@@ -262,7 +262,7 @@ secondOrderAlphaDC gtt1 gtt2 (controlK1, controlK2) bp = GroupAlphaPrep bp prep 
                         `TE.assign`
                         (TE.condE
                           ((k1 `neq` TE.intE cn1) `or` (k2 `neq` TE.intE cn2))
-                          (wzero `TE.at` (((k1 `TE.minusE` TE.intE 1) `TE.timesE` gs1E) `TE.plusE` k2))
+                          (wzero `TE.at` (((k1 `TE.minusE` TE.intE 1) `TE.timesE` gs2E) `TE.plusE` k2))
                           (TE.realE 0)
                         )]
                ]
@@ -271,8 +271,6 @@ secondOrderAlphaDC gtt1 gtt2 (controlK1, controlK2) bp = GroupAlphaPrep bp prep 
         index2 = SB.byGroupIndexE rtt gtt2
     SBB.vectorizeExpr (SB.dataSetSizeE rtt) ("alpha_" <> SB.taggedGroupName gtt1 <> "_" <> SB.taggedGroupName gtt2)
       $ \k -> TE.mAt (TE.indexE TE.s1 index2 (TE.indexE TE.s0 index1 am)) k k
-
-
 
 thirdOrderAlphaDC :: SB.GroupTypeTag k1
                   -> SB.GroupTypeTag k2
@@ -304,8 +302,8 @@ thirdOrderAlphaDC gtt1 gtt2 gtt3 (controlK1, controlK2, controlK3) bp = GroupAlp
     am <- TE.declareNW alphaMNDS
     TE.addStmt $ TE.scoped $ TE.writerL' $ do
       let adcNDS = TE.NamedDeclSpec "withZero" $ TE.vectorSpec (gs1E `TE.timesE` gs2E `TE.timesE` gs3E) []
-          czE = (TE.intE (cn1 - 1)  `TE.timesE` gs1E `TE.timesE` gs2E)
-                `TE.plusE` (TE.intE (cn2 - 1) `TE.timesE` gs2E)
+          czE = (TE.intE (cn1 - 1)  `TE.timesE` gs2E `TE.timesE` gs3E)
+                `TE.plusE` (TE.intE (cn2 - 1) `TE.timesE` gs3E)
                 `TE.plusE` TE.intE cn3
       wzero <- TE.declareRHSNW adcNDS $ TE.functionE insert_zero_at (aV :> czE :> TNil)
       TE.addStmt $ TE.for "k1" (TE.SpecificNumbered (TE.intE 1) gs1E)
@@ -315,8 +313,8 @@ thirdOrderAlphaDC gtt1 gtt2 gtt3 (controlK1, controlK2, controlK3) bp = GroupAlp
                                    `TE.assign`
                                    (TE.condE
                                     ((k1 `neq` TE.intE cn1) `or` (k2 `neq` TE.intE cn2) `or` (k3 `neq` TE.intE cn3))
-                                    (wzero `TE.at` ((k3 `TE.minusE` TE.intE 1) `TE.timesE` gs2E `TE.timesE` gs1E)
-                                     `TE.plusE` ((k2 `TE.minusE` TE.intE 1) `TE.timesE` gs1E)
+                                    (wzero `TE.at` ((k3 `TE.minusE` TE.intE 1) `TE.timesE` gs2E `TE.timesE` gs3E)
+                                     `TE.plusE` ((k2 `TE.minusE` TE.intE 1) `TE.timesE` gs3E)
                                       `TE.plusE` k3)
                                     (TE.realE 0)
                                    )]

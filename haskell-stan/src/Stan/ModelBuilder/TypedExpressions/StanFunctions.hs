@@ -257,6 +257,10 @@ cols :: (TypeOneOf t [EMat, ESqMat], GenSType t) => Function EInt '[t]
 cols = simpleFunction "cols"
 {-# INLINEABLE cols #-}
 
+diagonal :: (TypeOneOf t [EMat, ESqMat], GenSType t) => Function ECVec '[t]
+diagonal = simpleFunction "diagonal"
+{-# INLINEABLE diagonal #-}
+
 -- NB: Stan docs warn against using this because there's usually a more efficient option
 -- But I'm not sure what to do with multiple draws from uncorrelated normals
 diag_matrix :: (TypeOneOf t [ERVec, ECVec], GenSType t
