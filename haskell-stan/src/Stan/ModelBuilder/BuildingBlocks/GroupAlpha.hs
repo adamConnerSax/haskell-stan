@@ -209,8 +209,8 @@ vectorInsertZeroAtFunction = do
                 ((wzero `TE.at` l) `TE.assign` (v `TE.at` (l `TE.minusE` TE.intE 1)))]
     return wzero
 
-secondOrderAlpha :: SB.GroupTypeTag k
-                 -> SB.GroupTypeTag k
+secondOrderAlpha :: SB.GroupTypeTag k1
+                 -> SB.GroupTypeTag k2
                  -> DAG.BuildParameter TE.EMat
                  -> GroupAlpha
 secondOrderAlpha gtt1 gtt2 bp = GroupAlphaCW bp f where

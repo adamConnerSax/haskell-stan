@@ -232,6 +232,7 @@ addNonCenteredParameter nds ps tpl rawDS rawD qs eF = do
   let tpDES (rV TE.:> qsE) = DT.DeclRHS $ eF qsE rV
   addBuildParameter $ simpleTransformedP nds [] (rawP TE.:> qs) tpl tpDES
 
+
 -- Only use if density uses constant args. E.g., stdNormal.
 -- If it uses named parameters,
 -- those should be dependencies, so use `nonCenteredParameters'
@@ -282,9 +283,16 @@ iidMatrixP :: TE.NamedDeclSpec TE.EMat
           -> DT.Parameters qs
           -> TE.Density TE.ECVec qs
           -> SB.StanBuilderM md gq (DT.Parameter TE.EMat)
-iidMatrixP nds ftd ps d = addBuildParameter
-                          $ DT.UntransformedP nds ftd ps
-                          $ \qs m -> TE.addStmt $ TE.sample (TE.functionE TE.to_vector (m TE.:> TE.TNil)) d qs
+iidMatrixP nds ftd ps d = addBuildParameter $ iidMatrixBP nds ftd ps d
+
+
+iidMatrixBP :: TE.NamedDeclSpec TE.EMat
+            -> [DT.FunctionToDeclare]
+            -> DT.Parameters qs
+            -> TE.Density TE.ECVec qs
+            -> DT.BuildParameter TE.EMat
+iidMatrixBP nds ftd ps d = DT.UntransformedP nds ftd ps
+                           $ \qs m -> TE.addStmt $ TE.sample (TE.functionE TE.to_vector (m TE.:> TE.TNil)) d qs
 
 -- this puts the prior on the raw parameters
 withIIDRawMatrix :: TE.NamedDeclSpec TE.EMat
