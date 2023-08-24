@@ -243,7 +243,7 @@ generatePosteriorPrediction' :: SB.RowTypeTag r
                              -> TE.CodeWriter (TE.IntE -> TE.ExprList rts)
                              -> (TE.IntE -> TE.UExpr t -> TE.UExpr t)
                              -> SB.StanBuilderM md gq (TE.ArrayE t)
-generatePosteriorPrediction' rtt nds rngF psFCW f = SB.inBlock SB.SBGeneratedQuantities $ do
+generatePosteriorPrediction' rtt nds rngF psFCW f = SB.inBlock SB.SBPosteriorPrediction $ do
   ppE <- SB.stanDeclareN nds
   SB.addScopedFromCodeWriter $ do
     psF <- psFCW
@@ -258,7 +258,7 @@ generatePosteriorPredictionV :: (TE.TypeOneOf t [TE.ECVec, TE.ERVec])
                              -> TE.ExprList rts
                              -> SB.StanBuilderM md gq (TE.UExpr t)
 generatePosteriorPredictionV nds sDist ps =
-  SB.inBlock SB.SBGeneratedQuantities
+  SB.inBlock SB.SBPosteriorPrediction
   $ SB.stanDeclareRHSN nds $ SMD.familyRNG sDist ps
 
 diagVectorFunction :: SB.StanBuilderM md gq (TE.Function TE.ECVec '[TE.EArray1 TE.ECVec, TE.EInt])

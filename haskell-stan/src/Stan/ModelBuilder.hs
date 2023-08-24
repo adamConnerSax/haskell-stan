@@ -1505,6 +1505,7 @@ stanProfileName SBTransformedParameters = "transformed data"
 stanProfileName SBModel = "model"
 stanProfileName SBGeneratedQuantities = "generated quantities"
 stanProfileName SBLogLikelihood = "generated quantities (LL)"
+stanProfileName SBPosteriorPrediction = "generated quantities (PP)"
 
 {-
 stanForLoop :: Text -- counter

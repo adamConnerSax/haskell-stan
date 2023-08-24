@@ -27,6 +27,7 @@ import Stan.ModelBuilder.TypedExpressions.Types
 import Stan.ModelBuilder.TypedExpressions.TypedList
 import Stan.ModelBuilder.TypedExpressions.Functions
 import Stan.ModelBuilder.TypedExpressions.Indexing
+import Stan.ModelBuilder.TypedExpressions.Expressions
 
 import qualified GHC.TypeLits as TE
 import GHC.TypeLits (ErrorMessage((:<>:)))
@@ -101,6 +102,11 @@ to_vector :: (TypeOneOf t [ECVec, ERVec, EArray1 EInt, EArray1 EReal, EMat, ESqM
           => Function ECVec '[t]
 to_vector = simpleFunction "to_vector"
 {-# INLINEABLE to_vector #-}
+
+toVec :: (TypeOneOf t [ECVec, ERVec, EArray1 EInt, EArray1 EReal, EMat, ESqMat], GenSType t)
+          => UExpr t -> UExpr ECVec
+toVec x = functionE to_vector (x :> TNil)
+{-# INLINEABLE toVec #-}
 
 to_row_vector :: (TypeOneOf t [ECVec, ERVec, EArray1 EInt, EArray1 EReal, EMat, ESqMat], GenSType t)
           => Function ERVec '[t]

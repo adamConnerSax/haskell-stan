@@ -30,7 +30,7 @@ data RunnerInputNames = RunnerInputNames
   , rinData :: Text
   }  deriving stock (Show, Ord, Eq)
 
-data ModelRun = MRNoGQ | MROnlyLL | MRFull deriving stock (Show, Eq)
+data ModelRun = MRNoGQ | MROnlyLL | MROnlyPP | MRFull deriving stock (Show, Eq)
 
 -- for merged samples
 llSuffix :: Text
@@ -39,6 +39,7 @@ llSuffix = "_LL"
 modelSuffix :: ModelRun -> RunnerInputNames -> Text
 modelSuffix MRNoGQ _ = "_noGQ"
 modelSuffix MROnlyLL _ = "_onlyLL"
+modelSuffix MROnlyPP _ = "_onlyPP"
 modelSuffix MRFull rin = "_" <> fromMaybe "GQ" (gqModelName <$> rinGQ rin)
 {-# INLINEABLE modelSuffix #-}
 
@@ -49,6 +50,7 @@ unmergedSamplesSuffix mr rin = modelSuffix mr rin
 mergedSamplesSuffix :: ModelRun -> Text
 mergedSamplesSuffix MRNoGQ = "_noGQ"
 mergedSamplesSuffix MROnlyLL = "_ll"
+mergedSamplesSuffix MROnlyPP = "_pp"
 mergedSamplesSuffix MRFull = ""
 {-# INLINEABLE mergedSamplesSuffix #-}
 
@@ -89,6 +91,7 @@ data StanExeConfigWrapper = MultiThreadedExeConfig CS.StanExeConfig |  SingleThr
 
 data ModelRunnerConfig = ModelRunnerConfig
   { mrcDoOnlyLL :: Bool
+  , mrcDoOnlyPP :: Bool
   , mrcStanMakeConfig :: ModelRun -> CS.MakeConfig
   , mrcStanSummaryConfig :: CS.StansummaryConfig
   , mrcInputNames :: RunnerInputNames

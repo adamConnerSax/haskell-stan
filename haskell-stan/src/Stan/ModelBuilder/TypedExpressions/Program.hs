@@ -43,6 +43,9 @@ emptyStanProgram = StanProgram $ Array.listArray (minBound, maxBound) $ repeat [
 programHasLLBlock :: StanProgram -> Bool
 programHasLLBlock p = not $ null (unStanProgram p Array.! SBT.SBLogLikelihood)
 
+programHasPPBlock :: StanProgram -> Bool
+programHasPPBlock p = not $ null (unStanProgram p Array.! SBT.SBPosteriorPrediction)
+
 -- this is...precarious.  No way to check that we are using all of the array
 programToStmt :: SBT.GeneratedQuantities -> StanProgram -> TE.UStmt
 programToStmt gq p = TE.SContext Nothing fullProgramStmt
@@ -74,11 +77,13 @@ programToStmt gq p = TE.SContext Nothing fullProgramStmt
     gqStmtM =
         let gqs = stmtsArray ! SBT.SBGeneratedQuantities
             lls = stmtsArray ! SBT.SBLogLikelihood
+            pps = stmtsArray ! SBT.SBPosteriorPrediction
          in case gq of
                 SBT.NoGQ -> Nothing
-                SBT.NoLL -> Just $ TE.SBlock TE.GeneratedQuantitiesStmts gqs
+                SBT.NeitherLL_PP -> Just $ TE.SBlock TE.GeneratedQuantitiesStmts gqs
                 SBT.OnlyLL -> Just $ TE.SBlock TE.GeneratedQuantitiesStmts lls
-                SBT.All -> Just $ TE.SBlock TE.GeneratedQuantitiesStmts $ gqs ++ lls
+                SBT.OnlyPP -> Just $ TE.SBlock TE.GeneratedQuantitiesStmts pps
+                SBT.All -> Just $ TE.SBlock TE.GeneratedQuantitiesStmts $ gqs ++ lls ++ pps
 
 
 -- check if the type of statement is allowed in the block then, if so, provide the modification function

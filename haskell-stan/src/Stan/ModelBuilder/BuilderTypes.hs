@@ -41,7 +41,7 @@ type TransformedParametersBlock = T.Text
 type ModelBlock = T.Text
 type GeneratedQuantitiesBlock = T.Text
 
-data GeneratedQuantities = NoGQ | NoLL | OnlyLL | All deriving stock (Show, Eq)
+data GeneratedQuantities = NoGQ | NeitherLL_PP | OnlyLL | OnlyPP | All deriving stock (Show, Eq)
 
 data StanModel = StanModel
   { functionsBlock :: Maybe FunctionsBlock,
@@ -66,7 +66,9 @@ data StanBlock = SBFunctions
                | SBTransformedParameters
                | SBModel
                | SBGeneratedQuantities
-               | SBLogLikelihood deriving stock (Show, Eq, Ord, Enum, Bounded, Array.Ix)
+               | SBLogLikelihood
+               | SBPosteriorPrediction
+               deriving stock (Show, Eq, Ord, Enum, Bounded, Array.Ix)
 
 --data WithIndent = WithIndent Text Int
 

@@ -228,6 +228,27 @@ secondOrderAlpha gtt1 gtt2 bp = GroupAlphaCW bp f where
       $ \nE -> [(aV `TE.at` nE) `TE.assign` TE.mAt reIndexedAlpha nE nE]
     pure aV
 
+thirdOrderAlpha :: SB.GroupTypeTag k1
+                -> SB.GroupTypeTag k2
+                -> SB.GroupTypeTag k3
+                -> DAG.BuildParameter (TE.EArray1 TE.EMat)
+                -> GroupAlpha
+thirdOrderAlpha gtt1 gtt2 gtt3 bp = GroupAlphaCW bp f where
+  f :: forall a md gq . TE.ArrayE TE.EMat -> SB.RowTypeTag a -> TE.CodeWriter TE.VectorE
+  f aM rtt = do
+    let index1 = SB.byGroupIndexE rtt gtt1
+        index2 = SB.byGroupIndexE rtt gtt2
+        index3 = SB.byGroupIndexE rtt gtt3
+        alphaVNDS = TE.NamedDeclSpec ("aVec_" <> SB.taggedGroupName gtt1 <> "_" <> SB.taggedGroupName gtt2 <> "_" <> SB.taggedGroupName gtt3)
+                 $ TE.vectorSpec (SB.dataSetSizeE rtt) []
+        reIndexedAlpha = TE.indexE TE.s2 (SB.byGroupIndexE rtt gtt3) $ TE.indexE TE.s1 (SB.byGroupIndexE rtt gtt2) $ TE.indexE TE.s0 (SB.byGroupIndexE rtt gtt1) aM
+
+    aV <- TE.declareNW alphaVNDS
+    TE.addStmt
+      $ TE.for "n" (TE.SpecificNumbered (TE.intE 1) $ SB.dataSetSizeE rtt)
+      $ \nE -> [(aV `TE.at` nE) `TE.assign` TE.mAt (reIndexedAlpha `TE.at` nE) nE nE]
+    pure aV
+
 secondOrderAlphaDC :: SB.GroupTypeTag k1
                    -> SB.GroupTypeTag k2
                    -> (k1, k2)

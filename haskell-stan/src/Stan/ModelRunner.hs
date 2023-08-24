@@ -147,6 +147,9 @@ makeDefaultModelRunnerConfig runnerInputNames modelM stanMCParameters mStancConf
   let doOnlyLL = case modelM of
         Nothing -> False
         Just (_, p) ->  TE.programHasLLBlock p
+  let doOnlyPP = case modelM of
+        Nothing -> False
+        Just (_, p) ->  TE.programHasPPBlock p
       stanMakeConfig mr = do
         K.logLE K.Diagnostic $ "Making config for " <> show mr <> " run."
         writeModel runnerInputNames mr modelM
@@ -154,10 +157,12 @@ makeDefaultModelRunnerConfig runnerInputNames modelM stanMCParameters mStancConf
         return $  stanMakeNoGQConfig' {CS.stancFlags = mStancConfig}
   stanMakeNoGQConfig <- stanMakeConfig SC.MRNoGQ
   stanMakeOnlyLLConfig <- stanMakeConfig SC.MROnlyLL
+  stanMakeOnlyPPConfig <- stanMakeConfig SC.MROnlyPP
   stanMakeFullConfig <- stanMakeConfig SC.MRFull
   let makeConfigs :: SC.ModelRun -> CS.MakeConfig
       makeConfigs SC.MRNoGQ = stanMakeNoGQConfig
       makeConfigs SC.MROnlyLL = stanMakeOnlyLLConfig
+      makeConfigs SC.MROnlyPP = stanMakeOnlyPPConfig
       makeConfigs SC.MRFull = stanMakeFullConfig
   stanSummaryConfig <- do
     K.logLE K.Diagnostic "Making summary config"
@@ -165,6 +170,7 @@ makeDefaultModelRunnerConfig runnerInputNames modelM stanMCParameters mStancConf
   return $
     SC.ModelRunnerConfig
       doOnlyLL
+      doOnlyPP
       makeConfigs
       stanSummaryConfig
       runnerInputNames
@@ -176,7 +182,8 @@ makeDefaultModelRunnerConfig runnerInputNames modelM stanMCParameters mStancConf
 modelGQ :: SC.ModelRun -> SB.GeneratedQuantities -> SB.GeneratedQuantities
 modelGQ SC.MRNoGQ _ = SB.NoGQ
 modelGQ SC.MROnlyLL _ = SB.OnlyLL
-modelGQ SC.MRFull _ = SB.NoLL
+modelGQ SC.MROnlyPP _ = SB.OnlyPP
+modelGQ SC.MRFull _ = SB.NeitherLL_PP
 
 writeModel ::  K.KnitEffects r
   => SC.RunnerInputNames
@@ -224,8 +231,12 @@ gqExeConfig :: SC.ModelRun
                 -> Int
                 -> CS.StanExeConfig
 gqExeConfig mr rin smp n = do
+  let dataFileName = case mr of
+        SC.MRNoGQ -> error "modelRun=MrNoGQ set in gqExeConfig"
+        SC.MRFull -> SC.combinedDataFileName rin
+        _ -> SC.modelDataFileName rin
   (CS.makeDefaultGenerateQuantities (toString $ SC.modelName mr rin) n)
-    { CS.inputData = Just (SC.dataDirPath rin $ SC.combinedDataFileName rin)
+    { CS.inputData = Just (SC.dataDirPath rin dataFileName)
     , CS.fittedParams = Just (SC.outputDirPath rin $ SC.outputPrefix SC.MRNoGQ rin <> "_" <> show n <> ".csv")
     , CS.output = Just (SC.outputDirPath rin $ SC.outputPrefix mr rin <> "_" <> show n <> ".csv")
     , CS.randomSeed = SC.smcRandomSeed smp
@@ -440,7 +451,24 @@ runModel config rScriptsToWrite dataWrangler cb makeResult toPredict md_C gq_C =
                   <$> K.sequenceConcurrently (fmap (runOneGQ SC.MROnlyLL) [1 .. (SC.smcNumChains $ SC.mrcStanMCParameters config)])
           K.knitMaybe "There was an error generating LL for a chain." mRes
         writeRScripts @st @cd (looOf rScriptsToWrite) SC.MROnlyLL config
-        return ()
+        pure ()
+    case SC.mrcDoOnlyPP config of
+      False -> K.logLE K.Diagnostic "No onlyPP run indicated by config."
+      True -> do
+        curModelOnlyPP_C <- SC.modelDependency SC.MROnlyPP runnerInputNames
+        let runPPDeps  = (,) <$> modelIndices_C <*> curModelOnlyPP_C -- indices carries data update time
+        let onlySamplesFileNames = SC.samplesFileNames SC.MROnlyPP config
+        onlyPPSamplesFileDep <- K.oldestUnit <$> traverse K.fileDependency onlySamplesFileNames
+        _ <- K.updateIf onlyPPSamplesFileDep runPPDeps $ \_ -> do
+          let ppOnlyMakeConfig = SC.mrcStanMakeConfig config SC.MROnlyPP
+          K.logLE K.Diagnostic "Stan posterior prediction outputs older than model input data or model code. Generating PP."
+          K.logLE (K.Debug 1) $ "Make CommandLine: " <> show (CS.makeConfigToCmdLine ppOnlyMakeConfig)
+          K.liftKnit $ CS.make ppOnlyMakeConfig
+          mRes <- maybe Nothing (const $ Just ()) . sequence
+                  <$> K.sequenceConcurrently (fmap (runOneGQ SC.MROnlyPP) [1 .. (SC.smcNumChains $ SC.mrcStanMCParameters config)])
+          K.knitMaybe "There was an error generating PP for a chain." mRes
+        writeRScripts @st @cd (shinyOf rScriptsToWrite) SC.MROnlyPP config
+        pure ()
     mGQRes_C <- case SC.rinGQ runnerInputNames of
       Nothing -> pure Nothing
       Just _ -> do
@@ -456,7 +484,7 @@ runModel config rScriptsToWrite dataWrangler cb makeResult toPredict md_C gq_C =
                 <$> K.sequenceConcurrently (fmap (runOneGQ SC.MRFull) [1 .. (SC.smcNumChains $ SC.mrcStanMCParameters config)])
           K.knitMaybe "There was an error running GQ for a chain." mRes
         writeRScripts @st @cd (shinyOf rScriptsToWrite) SC.MRFull config
-        return $ Just res_C
+        pure $ Just res_C
     return (modelRes_C, mGQRes_C)
   let --outputFileNames = SC.finalSamplesFileNames SC.MRFull config
       outputDep = case mGQResDep of
@@ -501,7 +529,7 @@ data StaleFiles = StaleData | StaleOutput | StaleSummary deriving stock (Show, E
 
 deleteStaleFiles :: forall st cd r.SC.KnitStan st cd r => SC.ModelRunnerConfig -> [StaleFiles] -> K.Sem r ()
 deleteStaleFiles config staleFiles = do
-  let samplesFilePaths = concat $ fmap (\mr -> SC.samplesFileNames mr config) [SC.MRNoGQ, SC.MROnlyLL, SC.MRFull]
+  let samplesFilePaths = concat $ fmap (\mr -> SC.samplesFileNames mr config) [SC.MRNoGQ, SC.MROnlyLL, SC.MROnlyPP, SC.MRFull]
       modelSummaryPath = SC.outputDirPath (SC.mrcInputNames config) $ SC.summaryFileName SC.MRNoGQ config
       gqSummaryPath = SC.outputDirPath (SC.mrcInputNames config) $ SC.summaryFileName SC.MRFull config
       modelDataPath = SC.dataDirPath (SC.mrcInputNames config) $ SC.modelDataFileName $ SC.mrcInputNames config
