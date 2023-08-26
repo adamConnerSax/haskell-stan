@@ -86,12 +86,13 @@ rPSIS :: T.Text -> Int -> T.Text
 rPSIS fitName nCores = "psis(" <> llName fitName <> ", r_eff=" <> reName fitName <> ", cores=" <> show nCores <> ")"
 
 rExtract :: T.Text -> T.Text
-rExtract fitName = "extract(" <> fitName <> ")"
+rExtract fitName = "rstan::extract(" <> fitName <> ")"
 
 rReadJSON :: SC.ModelRunnerConfig -> T.Text
 rReadJSON config =
   let modelDir = SC.mrcModelDir config
-  in "jsonData <- fromJSON(file = \"" <> modelDir <> "/data/" <> SC.modelDataFileName (SC.mrcInputNames config) <> "\")"
+      dataFilePrefix = SC.rinData $ SC.mrcInputNames config
+  in "jsonData_" <> dataFilePrefix <> " <- fromJSON(file = \"" <> modelDir <> "/data/" <> SC.modelDataFileName (SC.mrcInputNames config) <> "\")"
 
 rMessage :: T.Text -> T.Text
 rMessage t = "sink(stderr())\n" <> rPrint t <> "\nsink()\n"
@@ -125,15 +126,21 @@ unwrapCode config unwrapJSONs =
 
 shinyStanScript :: SC.ModelRun -> SC.ModelRunnerConfig -> [UnwrapJSON] -> T.Text
 shinyStanScript mr config unwrapJSONs =
-  let readStanCSV = rReadStanCSV mr config "stanfit"
+  let rin = SC.mrcInputNames config
+      fitName = "stanfit_" <> SC.rinModel rin <> "_" <> SC.rinData rin
+      readStanCSV = rReadStanCSV mr config fitName
+      samplesName =  "shiny_samples_" <> fitName
       rScript = addLibs libsForShinyStan
                 <> "\n"
                 <> rMessageText "Loading csv output.  Might take a minute or two..." <> "\n"
                 <> readStanCSV <> "\n"
                 <> unwrapCode config unwrapJSONs
+                <> rMessageText ("Extracting samples into " <> samplesName) <> "\n"
+                <> samplesName <> " <- " <> rExtract fitName <> "\n"
+
 --                <> "stanfit@stanModel <- " <> rStanModel config
                 <> rMessageText "Launching shinystan...." <> "\n"
-                <> "launch_shinystan(stanfit)\n"
+                <> "launch_shinystan(" <> fitName <> ")\n"
   in rScript
 
 looOne :: SC.ModelRun -> SC.ModelRunnerConfig -> Text -> Maybe Text -> Int -> Text
@@ -141,7 +148,7 @@ looOne mr config fitName mLooName nCores =
   let readStanCSV = rReadStanCSV mr config fitName
       psisName = "psis_" <> fitName
       looName = fromMaybe ("loo_" <> fitName) mLooName
-      samplesName = "samples_" <> fitName
+      samplesName = "ll_samples_" <> fitName
       rScript =  rMessageText ("Loading csv output for " <> fitName <> ".  Might take a minute or two...") <> "\n"
                  <> readStanCSV <> "\n"
                  <> rMessageText "Extracting log likelihood for loo..." <> "\n"
@@ -149,7 +156,7 @@ looOne mr config fitName mLooName nCores =
                  <> rMessageText "Computing r_eff for loo..." <> "\n"
                  <> reName fitName <> " <- relative_eff(exp(" <> llName fitName <> "), cores = " <> show nCores <> ")\n"
                  <> rMessageText "Computing loo.." <> "\n"
-                 <> looName <> " <- loo(" <> llName fitName <> ", r_eff=" <> reName fitName <> ", cores=" <> show nCores <> ")\n"
+                 <> looName <> " <- loo(" <> llName fitName <> ", r_eff=" <> reName fitName <> ", cores=" <> show nCores <> ", save_psis=TRUE)\n"
                  <> rMessage looName <> "\n"
                  <> rMessageText "Computing PSIS..."
                  <> psisName <> " <- " <> looName <> "$psis_object" <> "\n"
@@ -158,9 +165,11 @@ looOne mr config fitName mLooName nCores =
                  <> rMessageText ("E.g., 'ppc_loo_pit_qq(y,as.matrix(" <> samplesName <> "$y_ppred)," <> psisName <> "$log_weights)'") <> "\n"
   in rScript
 
-looScript ::  SC.ModelRun -> SC.ModelRunnerConfig -> T.Text-> Int -> T.Text
-looScript mr config looName nCores =
-  let justLoo = looOne mr config "stanfit" (Just looName) nCores
+looScript ::  SC.ModelRun -> SC.ModelRunnerConfig -> Maybe T.Text-> Int -> T.Text
+looScript mr config mLooName nCores =
+  let rin = SC.mrcInputNames config
+      fitName = "stanfit_" <> SC.rinModel rin <> "_" <> SC.rinData rin
+      justLoo = looOne mr config fitName mLooName nCores
   in addLibs libsForLoo <> justLoo
 
 {-

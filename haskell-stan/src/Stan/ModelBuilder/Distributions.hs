@@ -178,6 +178,43 @@ betaDist = StanDist Continuous sample lpdf lupdf rng
     lupdf = TE.densityE TE.beta_lupdf
     rng = TE.functionE TE.beta_rng
 
+
+-- given a (real) "count" n and probability p, log-likelihood, etc. of a given proportion theta
+-- coming from beta(alpha, beta) where
+-- alpha = np + 1
+-- beta = n (1 - p)
+countScaledBetaDist :: forall t . (TE.TypeOneOf t [TE.ECVec, TE.ERVec], TE.ScalarType t ~ TE.EReal, TE.GenSType t
+                                  , TE.BinaryResultT (TE.BElementWise 'TE.BMultiply) t t ~ t
+                                  )
+                    => SimpleDist t '[t, t]
+countScaledBetaDist = StanDist Continuous sample lpdf lupdf rng
+  where
+    eltTimes = TE.binaryOpE (TE.SElementWise TE.SMultiply)
+    sz x = TE.functionE TE.size (x :> TNil)
+    ones :: TE.UExpr t -> TE.UExpr t
+    ones x = case TE.genSType @t of
+      TE.SCVec -> TE.functionE TE.ones_vector (sz x :> TNil)
+      TE.SRVec -> TE.functionE TE.ones_row_vector (sz x :> TNil)
+    alpha n p = (p `eltTimes` n) `TE.plusE` ones n
+    beta n p = n `eltTimes` (ones n `TE.minusE` p)
+    sample t (n :> p :> TNil) = TE.sample t TE.beta (alpha n p :> beta n p :> TNil)
+    lpdf t (n :> p :> TNil) = TE.densityE TE.beta_lpdf t (alpha n p :> beta n p :> TNil)
+    lupdf t (n :> p :> TNil) = TE.densityE TE.beta_lupdf t (alpha n p :> beta n p :> TNil)
+    rng (n :> p :> TNil) = n `eltTimes` TE.functionE TE.beta_rng (alpha n p :> beta n p :> TNil)
+
+countScaledBetaDistLogit :: forall t . (TE.TypeOneOf t [TE.ECVec, TE.ERVec], TE.ScalarType t ~ TE.EReal, TE.GenSType t
+                                       , TE.BinaryResultT (TE.BElementWise 'TE.BMultiply) t t ~ t
+                                       )
+                         => SimpleDist t '[t, t]
+countScaledBetaDistLogit = StanDist Continuous sample lpdf lupdf rng
+  where
+    (StanDist _ sample' lpdf' lupdf' rng') = countScaledBetaDist
+    inv_logit x = TE.functionE TE.inv_logit (x :> TNil)
+    sample t (n :> lp :> TNil) = sample' t (n :> inv_logit lp :> TNil)
+    lpdf t (n :> lp :> TNil) = lpdf' t (n :> inv_logit lp :> TNil)
+    lupdf t (n :> lp :> TNil) = lupdf' t (n :> inv_logit lp :> TNil)
+    rng (n :> lp :> TNil) = rng' (n :> inv_logit lp :> TNil)
+
 betaDistV :: forall t . (TE.TypeOneOf t [TE.ECVec, TE.ERVec], TE.ScalarType t ~ TE.EReal, TE.GenSType t) => SimpleDist t '[t, t]
 betaDistV = StanDist Continuous sample lpdf lupdf rng
   where

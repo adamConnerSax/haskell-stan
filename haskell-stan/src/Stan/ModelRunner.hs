@@ -261,7 +261,7 @@ writeRScripts rScripts mr config = do
   let scriptPrefix = SC.mergedPrefix mr $ SC.mrcInputNames config
       write mSuffix t = writeFileText (SC.rDirPath (SC.mrcInputNames config) scriptPrefix   <> fromMaybe "" mSuffix <> ".R") t
       writeShiny ujs = write (Just "_shinystan") $ SR.shinyStanScript mr config ujs
-      writeLoo = write Nothing $ SR.looScript mr config scriptPrefix 10
+      writeLoo = write Nothing $ SR.looScript mr config Nothing 10
   case rScripts of
     None -> pure ()
     ShinyStan ujs -> writeShiny ujs

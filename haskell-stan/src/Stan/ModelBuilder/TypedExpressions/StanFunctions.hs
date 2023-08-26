@@ -125,7 +125,6 @@ sumInt :: Function EInt '[EIntArray]
 sumInt = simpleFunction "sum"
 {-# INLINEABLE sumInt #-}
 
-
 rep_vector :: Function ECVec '[EReal, EInt]
 rep_vector = simpleFunction "rep_vector"
 {-# INLINEABLE rep_vector #-}
@@ -133,6 +132,14 @@ rep_vector = simpleFunction "rep_vector"
 rep_row_vector :: Function ERVec '[EReal, EInt]
 rep_row_vector = simpleFunction "rep_row_vector"
 {-# INLINEABLE rep_row_vector #-}
+
+ones_vector :: Function ECVec '[EInt]
+ones_vector = simpleFunction "ones_vector"
+{-# INLINEABLE ones_vector #-}
+
+ones_row_vector :: Function ERVec '[EInt]
+ones_row_vector = simpleFunction "ones_row_vector"
+{-# INLINEABLE ones_row_vector #-}
 
 {-
 type family NInts (n :: Nat) :: [EType] where
