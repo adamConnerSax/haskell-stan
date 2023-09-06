@@ -61,14 +61,22 @@ lgamma = simpleFunction "lgamma"
 
 log :: VectorizedReal t => Function t '[t]
 log = simpleFunction "log"
+{-# INLINEABLE log #-}
+
+exp :: VectorizedReal t => Function t '[t]
+exp = simpleFunction "exp"
+{-# INLINEABLE exp #-}
+
 
 log1m :: VectorizedReal t => Function t '[t]
 log1m = simpleFunction "log1m"
+{-# INLINEABLE log1m #-}
 
 -- vectorized log of real-valued binomial coefficient
 -- see: https://mc-stan.org/docs/functions-reference/betafun.html
 lChoose :: VectorizedReal t => Function t '[t, t]
 lChoose = simpleFunction "lchoose"
+{-# INLINEABLE lChoose #-}
 
 inv :: VectorizedReal t => Function t '[t]
 inv = simpleFunction "inv"
@@ -293,6 +301,22 @@ diag_post_multiply = simpleFunction "diag_post_multiply"
 {-# INLINEABLE diag_post_multiply #-}
 
 -- Densities & RNGs
+
+uniform :: (TypeOneOf t [EReal, ECVec, ERVec], GenSType t) => Density t '[t, t]
+uniform = simpleDensity "uniform"
+{-# INLINEABLE uniform #-}
+
+uniform_lpdf :: (TypeOneOf t [EReal, ECVec, ERVec], GenSType t) => Density t '[t, t]
+uniform_lpdf = simpleDensity "uniform_lpdf"
+{-# INLINEABLE uniform_lpdf #-}
+
+uniform_lupdf :: (TypeOneOf t [EReal, ECVec, ERVec], GenSType t) => Density t '[t, t]
+uniform_lupdf = simpleDensity "uniform_lupdf"
+{-# INLINEABLE uniform_lupdf #-}
+
+uniform_rng :: (TypeOneOf t [EReal, ECVec, ERVec], GenSType t) => Function t '[t, t]
+uniform_rng = simpleFunction "uniform_rng"
+{-# INLINEABLE uniform_rng #-}
 
 normal :: (TypeOneOf t [EReal, ECVec, ERVec], GenSType t) => Density t '[t, t]
 normal = simpleDensity "normal"

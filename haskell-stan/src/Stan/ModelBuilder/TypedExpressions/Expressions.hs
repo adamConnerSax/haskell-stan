@@ -278,6 +278,7 @@ sliceEntireArray e v = Vec.withDict v $ go e v where
 -}
 
 -- some type aliases for ergonomics
+type BoolE = UExpr EBool
 type IntE = UExpr EInt
 type RealE = UExpr EReal
 type ArrayE :: EType -> Type

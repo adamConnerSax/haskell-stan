@@ -110,16 +110,18 @@ rPrintText t = rPrint $ "\"" <> t <> "\""
 -- Expr version lets you run R code to build the value to put in global namespace
 data UnwrapJSON = UnwrapNamed T.Text T.Text | UnwrapExpr T.Text T.Text deriving stock (Show, Eq, Ord)
 
-unwrap :: UnwrapJSON -> T.Text
-unwrap (UnwrapNamed jn rn) = rn <> " <- jsonData $ " <> jn <> "\n"
-unwrap (UnwrapExpr je rn) = rn <> " <- " <> je <> "\n"
+unwrap :: Text -> UnwrapJSON -> T.Text
+unwrap n (UnwrapNamed jn rn) = rn <> " <- jsonData_" <> n <> " $ " <> jn <> "\n"
+unwrap _ (UnwrapExpr je rn) = rn <> " <- " <> je <> "\n"
 
 unwrapCode :: SC.ModelRunnerConfig -> [UnwrapJSON] -> T.Text
 unwrapCode config unwrapJSONs =
   if null unwrapJSONs
   then ""
   else
-    let unwraps = mconcat $ fmap unwrap unwrapJSONs
+    let rin = SC.mrcInputNames config
+        n = SC.rinData rin
+        unwraps = mconcat $ fmap (unwrap n) unwrapJSONs
     in rReadJSON config
        <> "\n"
        <> unwraps
@@ -162,7 +164,7 @@ looOne mr config fitName mLooName nCores =
                  <> psisName <> " <- " <> looName <> "$psis_object" <> "\n"
                  <> rMessageText ("Placing samples in " <> samplesName) <> "\n"
                  <> samplesName <> " <- " <> rExtract fitName <> "\n"
-                 <> rMessageText ("E.g., 'ppc_loo_pit_qq(y,as.matrix(" <> samplesName <> "$y_ppred)," <> psisName <> "$log_weights)'") <> "\n"
+                 <> rMessageText ("E.g., 'ppc_loo_pit_qq(yXXX_" <> fitName <> ", as.matrix(" <> samplesName <> "$y_ppred), weights(" <> psisName <> "))'") <> "\n"
   in rScript
 
 looScript ::  SC.ModelRun -> SC.ModelRunnerConfig -> Maybe T.Text-> Int -> T.Text
