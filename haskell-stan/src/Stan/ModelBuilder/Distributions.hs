@@ -202,6 +202,20 @@ countScaledBetaDist = StanDist Continuous sample lpdf lupdf rng
     lupdf t (n :> p :> TNil) = TE.densityE TE.beta_lupdf t (alpha n p :> beta n p :> TNil)
     rng (n :> p :> TNil) = n `eltTimes` TE.functionE TE.beta_rng (alpha n p :> beta n p :> TNil)
 
+scalarCountScaledBetaDist :: SimpleDist TE.EReal '[TE.EReal, TE.EReal]
+scalarCountScaledBetaDist = StanDist Continuous sample lpdf lupdf rng
+  where
+    alpha n p = (p `TE.timesE` n) `TE.plusE` TE.realE 1
+    beta n p = n `TE.timesE` (TE.realE 1 `TE.minusE` p)
+    sample :: TE.RealE -> TE.ExprList '[TE.EReal, TE.EReal] -> TE.UStmt
+    sample t (n :> p :> TNil) = TE.sample t TE.betaS (alpha n p :> beta n p :> TNil)
+    lpdf :: TE.RealE -> TE.ExprList '[TE.EReal, TE.EReal] -> TE.UExpr TE.EReal
+    lpdf t (n :> p :> TNil) = TE.densityE TE.betaS_lpdf t (alpha n p :> beta n p :> TNil)
+    lupdf :: TE.RealE -> TE.ExprList '[TE.EReal, TE.EReal] -> TE.UExpr TE.EReal
+    lupdf t (n :> p :> TNil) = TE.densityE TE.betaS_lupdf t (alpha n p :> beta n p :> TNil)
+    rng :: TE.ExprList '[TE.EReal, TE.EReal] -> TE.RealE
+    rng (n :> p :> TNil) = n `TE.timesE` TE.functionE (TE.betaS_rng @TE.EReal) (alpha n p :> beta n p :> TNil)
+
 countScaledBetaDistLogit :: forall t . (TE.TypeOneOf t [TE.ECVec, TE.ERVec], TE.ScalarType t ~ TE.EReal, TE.GenSType t
                                        , TE.BinaryResultT (TE.BElementWise 'TE.BMultiply) t t ~ t
                                        )
@@ -213,6 +227,20 @@ countScaledBetaDistLogit = StanDist Continuous sample lpdf lupdf rng
     sample t (n :> lp :> TNil) = sample' t (n :> inv_logit lp :> TNil)
     lpdf t (n :> lp :> TNil) = lpdf' t (n :> inv_logit lp :> TNil)
     lupdf t (n :> lp :> TNil) = lupdf' t (n :> inv_logit lp :> TNil)
+    rng (n :> lp :> TNil) = rng' (n :> inv_logit lp :> TNil)
+
+scalarCountScaledBetaDistLogit :: SimpleDist TE.EReal '[TE.EReal, TE.EReal]
+scalarCountScaledBetaDistLogit = StanDist Continuous sample lpdf lupdf rng
+  where
+    (StanDist _ sample' lpdf' lupdf' rng') = scalarCountScaledBetaDist
+    inv_logit x = TE.functionE TE.inv_logit (x :> TNil)
+    sample :: TE.RealE -> TE.ExprList '[TE.EReal, TE.EReal] -> TE.UStmt
+    sample t (n :> lp :> TNil) = sample' t (n :> inv_logit lp :> TNil)
+    lpdf :: TE.RealE -> TE.ExprList '[TE.EReal, TE.EReal] -> TE.UExpr TE.EReal
+    lpdf t (n :> lp :> TNil) = lpdf' t (n :> inv_logit lp :> TNil)
+    lupdf :: TE.RealE -> TE.ExprList '[TE.EReal, TE.EReal] -> TE.UExpr TE.EReal
+    lupdf t (n :> lp :> TNil) = lupdf' t (n :> inv_logit lp :> TNil)
+    rng :: TE.ExprList '[TE.EReal, TE.EReal] -> TE.RealE
     rng (n :> lp :> TNil) = rng' (n :> inv_logit lp :> TNil)
 
 betaDistV :: forall t . (TE.TypeOneOf t [TE.ECVec, TE.ERVec], TE.ScalarType t ~ TE.EReal, TE.GenSType t) => SimpleDist t '[t, t]

@@ -415,8 +415,6 @@ multi_normal_rng = simpleFunction "multi_normal_rng"
 {-# INLINEABLE multi_normal_rng #-}
 
 
-
-
 lognormal :: (TypeOneOf t [EReal, ECVec, ERVec], GenSType t) => Density t '[t, t]
 lognormal = simpleDensity "lognormal"
 {-# INLINEABLE lognormal #-}
@@ -537,11 +535,6 @@ beta :: (VectorizedReal t, GenSType t) => Density t '[t, t]
 beta = simpleDensity "beta"
 {-# INLINEABLE beta #-}
 
-betaS :: (TypeOneOf t [EReal, ECVec, ERVec], GenSType t) => Density t '[EReal, EReal]
-betaS = simpleDensity "beta"
-{-# INLINEABLE betaS #-}
-
-
 beta_lpdf :: (VectorizedReal t, GenSType t) => Density t '[t, t]
 beta_lpdf = simpleDensity "beta_lpdf"
 {-# INLINEABLE beta_lpdf #-}
@@ -553,6 +546,24 @@ beta_lupdf = simpleDensity "beta_lupdf"
 beta_rng :: (VectorizedReal t, GenSType t) => Function t '[t, t]
 beta_rng = simpleFunction "beta_rng"
 {-# INLINEABLE beta_rng #-}
+
+betaS :: (TypeOneOf t [EReal, ECVec, ERVec], GenSType t) => Density t '[EReal, EReal]
+betaS = simpleDensity "beta"
+{-# INLINEABLE betaS #-}
+
+betaS_lpdf :: (TypeOneOf t [EReal, ECVec, ERVec], GenSType t) => Density t '[EReal, EReal]
+betaS_lpdf = simpleDensity "beta_lpdf"
+{-# INLINEABLE betaS_lpdf #-}
+
+betaS_lupdf :: (TypeOneOf t [EReal, ECVec, ERVec], GenSType t) => Density t '[EReal, EReal]
+betaS_lupdf = simpleDensity "beta_lupdf"
+{-# INLINEABLE betaS_lupdf #-}
+
+betaS_rng :: (TypeOneOf t [EReal, ECVec, ERVec], GenSType t) => Function t '[EReal, EReal]
+betaS_rng = simpleFunction "beta_rng"
+{-# INLINEABLE betaS_rng #-}
+
+
 
 beta_proportion ::  (TypeOneOf t [EReal, ECVec], GenSType t) => Density t '[t, t]
 beta_proportion = simpleDensity "beta_proportion"

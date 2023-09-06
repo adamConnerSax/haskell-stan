@@ -31,7 +31,6 @@ realBinomialLogitDistM :: forall t md gq . RealBinomialT t => SB.StanBuilderM md
 realBinomialLogitDistM = do
   sampleD <- realBinomialLogit @t
   lpdfD <- realBinomialLogitLPDF @t
---  lupmfD <- realBinomialLogitLUPMF @t
   rngF <- realBinomialLogitRng @t
   let sample gE args = TE.sample gE sampleD args
       lpdf = TE.densityE lpdfD
