@@ -170,20 +170,24 @@ binomialLogitDistWithConstants = binomialLogitDist' True
 --vecTimes = TE.binaryOpE (TE.SElementWise TE.SMultiply)
 --vecDivide = TE.binaryOpE (TE.SElementWise TE.SDivide)
 
-betaDist :: SimpleDist TE.EReal '[TE.EReal, TE.EReal]
+betaDist :: forall t . (TE.TypeOneOf t [TE.EReal, TE.ECVec, TE.ERVec], TE.GenSType t) => SimpleDist t '[t, t] --SimpleDist TE.EReal '[TE.EReal, TE.EReal]
 betaDist = StanDist Continuous sample lpdf lupdf rng
   where
     sample x = TE.sample x TE.beta
     lpdf = TE.densityE TE.beta_lpdf
     lupdf = TE.densityE TE.beta_lupdf
-    rng = TE.functionE TE.beta_rng
+    rng ps = case TE.genSType @t of
+      TE.SReal -> TE.functionE TE.beta_rng ps
+      TE.SCVec -> TE.functionE TE.to_vector (TE.functionE TE.beta_rng ps :> TNil)
+      TE.SRVec -> TE.functionE TE.to_row_vector (TE.functionE TE.beta_rng ps :> TNil)
+--TE.functionE TE.beta_rng
 
 
 -- given a (real) "count" n and probability p, log-likelihood, etc. of a given proportion theta
 -- coming from beta(alpha, beta) where
 -- alpha = np + 1
 -- beta = n (1 - p)
-countScaledBetaDist :: forall t . (TE.TypeOneOf t [TE.ECVec, TE.ERVec], TE.ScalarType t ~ TE.EReal, TE.GenSType t
+countScaledBetaDist :: forall t . (TE.TypeOneOf t [TE.EReal, TE.ECVec, TE.ERVec], TE.GenSType t
                                   , TE.BinaryResultT (TE.BElementWise 'TE.BMultiply) t t ~ t
                                   )
                     => SimpleDist t '[t, t]
@@ -195,18 +199,19 @@ countScaledBetaDist = StanDist Continuous sample lpdf lupdf rng
     ones x = case TE.genSType @t of
       TE.SCVec -> TE.functionE TE.ones_vector (sz x :> TNil)
       TE.SRVec -> TE.functionE TE.ones_row_vector (sz x :> TNil)
-    alpha n p = (p `eltTimes` n) `TE.plusE` ones n
-    beta n p = n `eltTimes` (ones n `TE.minusE` p)
-    sample t (n :> p :> TNil) = TE.sample t TE.beta (alpha n p :> beta n p :> TNil)
+      TE.SReal -> TE.realE 1
+    alpha n p = p `eltTimes` n `TE.plusE` ones n
+    beta n p = (n `eltTimes` (ones n `TE.minusE` p)) `TE.plusE` ones n
+    sample t (n :> p :> TNil) = TE.sample t (TE.beta @t) (alpha n p :> beta n p :> TNil)
     lpdf t (n :> p :> TNil) = TE.densityE TE.beta_lpdf t (alpha n p :> beta n p :> TNil)
     lupdf t (n :> p :> TNil) = TE.densityE TE.beta_lupdf t (alpha n p :> beta n p :> TNil)
-    rng (n :> p :> TNil) = n `eltTimes` TE.functionE TE.beta_rng (alpha n p :> beta n p :> TNil)
+    rng (n :> p :> TNil) = (n `TE.plusE` ones n)  `eltTimes` TE.functionE TE.beta_rng (alpha n p :> beta n p :> TNil)
 
 scalarCountScaledBetaDist :: SimpleDist TE.EReal '[TE.EReal, TE.EReal]
 scalarCountScaledBetaDist = StanDist Continuous sample lpdf lupdf rng
   where
-    alpha n p = (p `TE.timesE` n) `TE.plusE` TE.realE 1
-    beta n p = n `TE.timesE` (TE.realE 1 `TE.minusE` p)
+    alpha n p = p `TE.timesE` n `TE.plusE` TE.realE 1
+    beta n p = n `TE.timesE` (TE.realE 1 `TE.minusE` p) `TE.plusE` TE.realE 1
     sample :: TE.RealE -> TE.ExprList '[TE.EReal, TE.EReal] -> TE.UStmt
     sample t (n :> p :> TNil) = TE.sample t TE.betaS (alpha n p :> beta n p :> TNil)
     lpdf :: TE.RealE -> TE.ExprList '[TE.EReal, TE.EReal] -> TE.UExpr TE.EReal
@@ -214,9 +219,9 @@ scalarCountScaledBetaDist = StanDist Continuous sample lpdf lupdf rng
     lupdf :: TE.RealE -> TE.ExprList '[TE.EReal, TE.EReal] -> TE.UExpr TE.EReal
     lupdf t (n :> p :> TNil) = TE.densityE TE.betaS_lupdf t (alpha n p :> beta n p :> TNil)
     rng :: TE.ExprList '[TE.EReal, TE.EReal] -> TE.RealE
-    rng (n :> p :> TNil) = n `TE.timesE` TE.functionE (TE.betaS_rng @TE.EReal) (alpha n p :> beta n p :> TNil)
+    rng (n :> p :> TNil) = (n `TE.plusE` TE.realE 1) `TE.timesE` TE.functionE (TE.betaS_rng @TE.EReal) (alpha n p :> beta n p :> TNil)
 
-countScaledBetaDistLogit :: forall t . (TE.TypeOneOf t [TE.ECVec, TE.ERVec], TE.ScalarType t ~ TE.EReal, TE.GenSType t
+countScaledBetaDistLogit :: forall t . (TE.TypeOneOf t [TE.EReal, TE.ECVec, TE.ERVec], TE.ScalarType t ~ TE.EReal, TE.GenSType t
                                        , TE.BinaryResultT (TE.BElementWise 'TE.BMultiply) t t ~ t
                                        )
                          => SimpleDist t '[t, t]
@@ -243,7 +248,7 @@ scalarCountScaledBetaDistLogit = StanDist Continuous sample lpdf lupdf rng
     rng :: TE.ExprList '[TE.EReal, TE.EReal] -> TE.RealE
     rng (n :> lp :> TNil) = rng' (n :> inv_logit lp :> TNil)
 
-betaDistV :: forall t . (TE.TypeOneOf t [TE.ECVec, TE.ERVec], TE.ScalarType t ~ TE.EReal, TE.GenSType t) => SimpleDist t '[t, t]
+betaDistV :: forall t . (TE.TypeOneOf t [TE.EReal, TE.ECVec, TE.ERVec], TE.GenSType t) => SimpleDist t '[t, t]
 betaDistV = StanDist Continuous sample lpdf lupdf rng
   where
     sample x = TE.sample x TE.beta
@@ -254,13 +259,16 @@ betaDistV = StanDist Continuous sample lpdf lupdf rng
 betaMu :: TE.UExpr TE.EReal -> TE.UExpr TE.EReal -> TE.UExpr TE.EReal
 betaMu aE bE = aE `TE.divideE` (aE `TE.plusE` bE)
 
-betaProportionDist :: SimpleDist TE.EReal '[TE.EReal, TE.EReal]
+betaProportionDist :: forall t . (TE.TypeOneOf t [TE.EReal, TE.ECVec, TE.ERVec], TE.GenSType t) => SimpleDist t '[t, t]
 betaProportionDist = StanDist Continuous sample lpdf lupdf rng
   where
     sample x = TE.sample x TE.beta_proportion
     lpdf = TE.densityE TE.beta_proportion_lpdf
     lupdf = TE.densityE TE.beta_proportion_lupdf
-    rng = TE.functionE TE.beta_proportion_rng
+    rng ps =  case TE.genSType @t of
+      TE.SReal -> TE.functionE TE.beta_proportion_rng ps
+      TE.SCVec -> TE.functionE TE.to_vector (TE.functionE TE.beta_proportion_rng ps :> TNil)
+      TE.SRVec -> TE.functionE TE.to_row_vector (TE.functionE TE.beta_proportion_rng ps :> TNil)
 
 realToSameSizeVec :: TE.UExpr (TE.EArray1 TE.EInt) -> TE.UExpr TE.EReal -> TE.UExpr TE.ECVec
 realToSameSizeVec v x = TE.functionE TE.rep_vector (x :> TE.functionE TE.size (v :> TNil) :> TNil)

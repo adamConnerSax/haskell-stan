@@ -67,7 +67,6 @@ exp :: VectorizedReal t => Function t '[t]
 exp = simpleFunction "exp"
 {-# INLINEABLE exp #-}
 
-
 log1m :: VectorizedReal t => Function t '[t]
 log1m = simpleFunction "log1m"
 {-# INLINEABLE log1m #-}
@@ -85,6 +84,14 @@ inv = simpleFunction "inv"
 abs :: VectorizedReal t => Function t '[t]
 abs = simpleFunction "abs"
 {-# INLINEABLE abs #-}
+
+fmin ::  VectorizedReal t => Function t '[t, t]
+fmin = simpleFunction "fmin"
+{-# INLINEABLE fmin #-}
+
+fmax ::  VectorizedReal t => Function t '[t, t]
+fmax = simpleFunction "fmax"
+{-# INLINEABLE fmax #-}
 
 mean :: (TypeOneOf t [ECVec, ERVec, EMat, ESqMat], GenSType t) => Function EReal '[t]
 mean = simpleFunction "mean"
@@ -120,6 +127,10 @@ to_row_vector :: (TypeOneOf t [ECVec, ERVec, EArray1 EInt, EArray1 EReal, EMat, 
           => Function ERVec '[t]
 to_row_vector = simpleFunction "to_row_vector"
 {-# INLINEABLE to_row_vector #-}
+
+to_array_1d :: (TypeOneOf t [ECVec, ERVec], GenSType t) => Function (EArray1 EReal) '[t]
+to_array_1d = simpleFunction "to_array_1d"
+{-# INLINEABLE to_array_1d #-}
 
 size :: (IsContainer t, GenSType t) => Function EInt '[t]
 size = simpleFunction "size"
@@ -531,19 +542,19 @@ binomial_logit_lupmf :: BinDensityC t t' => Density t '[t, t']
 binomial_logit_lupmf = simpleDensity "binomial_logit_lupmf"
 {-# INLINEABLE binomial_logit_lupmf #-}
 
-beta :: (VectorizedReal t, GenSType t) => Density t '[t, t]
+beta ::  (TypeOneOf t [EReal, ECVec, ERVec], GenSType t)  => Density t '[t, t]
 beta = simpleDensity "beta"
 {-# INLINEABLE beta #-}
 
-beta_lpdf :: (VectorizedReal t, GenSType t) => Density t '[t, t]
+beta_lpdf ::  (TypeOneOf t [EReal, ECVec, ERVec], GenSType t)  => Density t '[t, t]
 beta_lpdf = simpleDensity "beta_lpdf"
 {-# INLINEABLE beta_lpdf #-}
 
-beta_lupdf :: (VectorizedReal t, GenSType t) => Density t '[t, t]
+beta_lupdf ::  (TypeOneOf t [EReal, ECVec, ERVec], GenSType t)  => Density t '[t, t]
 beta_lupdf = simpleDensity "beta_lupdf"
 {-# INLINEABLE beta_lupdf #-}
 
-beta_rng :: (VectorizedReal t, GenSType t) => Function t '[t, t]
+beta_rng ::  (TypeOneOf t [EReal, ECVec, ERVec], GenSType t) => Function t '[t, t]
 beta_rng = simpleFunction "beta_rng"
 {-# INLINEABLE beta_rng #-}
 
@@ -565,19 +576,19 @@ betaS_rng = simpleFunction "beta_rng"
 
 
 
-beta_proportion ::  (TypeOneOf t [EReal, ECVec], GenSType t) => Density t '[t, t]
+beta_proportion ::  (TypeOneOf t [EReal, ECVec, ERVec], GenSType t) => Density t '[t, t]
 beta_proportion = simpleDensity "beta_proportion"
 {-# INLINEABLE beta_proportion #-}
 
-beta_proportion_lpdf :: (TypeOneOf t [EReal, ECVec], GenSType t) => Density t '[t, t]
+beta_proportion_lpdf :: (TypeOneOf t [EReal, ECVec, ERVec], GenSType t) => Density t '[t, t]
 beta_proportion_lpdf = simpleDensity "beta_proportion_lpdf"
 {-# INLINEABLE beta_proportion_lpdf #-}
 
-beta_proportion_lupdf ::  (TypeOneOf t [EReal, ECVec], GenSType t) => Density t '[t, t]
+beta_proportion_lupdf ::  (TypeOneOf t [EReal, ECVec, ERVec], GenSType t) => Density t '[t, t]
 beta_proportion_lupdf = simpleDensity "beta_proportion_lupdf"
 {-# INLINEABLE beta_proportion_lupdf #-}
 
-beta_proportion_rng ::  (TypeOneOf t [EReal, ECVec], GenSType t) => Function t '[t, t]
+beta_proportion_rng ::  (TypeOneOf t [EReal, ECVec, ERVec], GenSType t) => Function t '[t, t]
 beta_proportion_rng = simpleFunction "beta_proportion_rng"
 {-# INLINEABLE beta_proportion_rng #-}
 

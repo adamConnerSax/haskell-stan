@@ -182,9 +182,9 @@ generateLogLikelihood rtt sDist slicedArgsFCW slicedYFCW =
 -- 2nd arg returns something which might need slicing at the loop index for paramters that depend on the index
 -- 3rd arg also
 data LLDetails r = forall t pts . LLDetails
-                   (TE.UExpr t -> TE.ExprList pts -> TE.UExpr TE.EReal) --(SMD.StanDist t pts rts)
-                   (TE.CodeWriter (TE.UExpr TE.EInt -> TE.ExprList pts))
-                   (TE.CodeWriter (TE.UExpr TE.EInt -> TE.UExpr t))
+                   (TE.UExpr t -> TE.ExprList pts -> TE.RealE) --(SMD.StanDist t pts rts)
+                   (TE.CodeWriter (TE.IntE -> TE.ExprList pts))
+                   (TE.CodeWriter (TE.IntE -> TE.UExpr t))
 --  LLDetails :: forall args.SMD.StanDist args -> SB.StanBuilderM md gq args -> SME.StanVar -> LLDetails md gq r
 
 newtype LLDetailsList r = LLDetailsList [LLDetails r]
@@ -229,6 +229,8 @@ generateLogLikelihood' llSet =  SB.inBlock SB.SBLogLikelihood $ do
   _ <- evalStateT (DHash.traverseWithKey doList llSet) []
   pure ()
 
+
+
 generatePosteriorPrediction :: SB.RowTypeTag r
                             -> TE.NamedDeclSpec (TE.EArray1 t)
                             -> SMD.StanDist t pts rts
@@ -252,14 +254,29 @@ generatePosteriorPrediction' rtt nds rngF psFCW f = SB.inBlock SB.SBPosteriorPre
       $ \nE -> [TE.sliceE TE.s0 nE ppE `TE.assign` f nE (rngF psF nE)]
     return ppE
 
+generatePosteriorPredictionV' :: (TE.TypeOneOf t [TE.ECVec, TE.ERVec])
+                              => TE.NamedDeclSpec t'
+                              -> SMD.StanDist t pts rts
+                              -> TE.MaybeCW (TE.ExprList rts)
+                              -> (TE.UExpr t -> TE.UExpr t')
+                              -> SB.StanBuilderM md gq (TE.UExpr t')
+generatePosteriorPredictionV' nds sDist psMCW f = SB.inBlock SB.SBPosteriorPrediction $ do
+  case psMCW of
+    TE.NeedsCW psCW -> do
+      pp <- SB.stanDeclareN nds
+      SB.addScopedFromCodeWriter $ do
+        ps <- psCW
+        TE.addStmt $ pp `TE.assign` f (SMD.familyRNG sDist ps)
+        pure pp
+    TE.NoCW ps -> SB.addFromCodeWriter $ TE.declareRHSNW nds $ f (SMD.familyRNG sDist ps)
+
 generatePosteriorPredictionV :: (TE.TypeOneOf t [TE.ECVec, TE.ERVec])
                              => TE.NamedDeclSpec t
                              -> SMD.StanDist t pts rts
-                             -> TE.ExprList rts
+                             -> TE.MaybeCW (TE.ExprList rts)
                              -> SB.StanBuilderM md gq (TE.UExpr t)
-generatePosteriorPredictionV nds sDist ps =
-  SB.inBlock SB.SBPosteriorPrediction
-  $ SB.stanDeclareRHSN nds $ SMD.familyRNG sDist ps
+generatePosteriorPredictionV nds sDist psMCW = generatePosteriorPredictionV' nds sDist psMCW id
+
 
 diagVectorFunction :: SB.StanBuilderM md gq (TE.Function TE.ECVec '[TE.EArray1 TE.ECVec, TE.EInt])
 diagVectorFunction = do

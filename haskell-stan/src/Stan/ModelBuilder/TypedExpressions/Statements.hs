@@ -3,7 +3,9 @@
 {-# LANGUAGE DerivingVia #-}
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE LambdaCase #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE PolyKinds #-}
 {-# LANGUAGE QuantifiedConstraints #-}
 {-# LANGUAGE RankNTypes #-}
@@ -366,16 +368,35 @@ multiplierM = VarMultiplier
 
 newtype CodeWriter a = CodeWriter { unCodeWriter :: W.Writer [UStmt] a } deriving newtype (Functor, Applicative, Monad, W.MonadWriter [UStmt])
 
-{-
-writerNE :: CodeWriter a -> Maybe (NonEmpty UStmt, a)
-writerNE cw = do
-  let (stmts, a) = writerL cw
-  stmtsNE <- nonEmpty stmts
-  return (stmtsNE, a)
+data MaybeCW a = NoCW a | NeedsCW (CodeWriter a)
 
-writerNE' :: CodeWriter a -> Maybe (NonEmpty UStmt)
-writerNE' = fmap fst . writerNE
--}
+instance Functor MaybeCW where
+  fmap f (NoCW a) = NoCW $ f a
+  fmap f (NeedsCW cw) = NeedsCW $ fmap f cw
+
+instance Applicative MaybeCW where
+  pure = NoCW
+  (NoCW f) <*> (NoCW a) = NoCW $ f a
+  (NoCW f) <*> (NeedsCW cw) = NeedsCW $ fmap f cw
+  (NeedsCW f) <*> (NoCW a) = NeedsCW $ f <*> (pure a)
+  (NeedsCW f) <*> (NeedsCW cw) = NeedsCW $ f <*> cw
+
+instance Monad MaybeCW where
+  (NoCW a) >>= f = f a
+  (NeedsCW cwa) >>= f = NeedsCW $ do
+    a <- cwa
+    case f a of
+      NoCW b -> pure b
+      NeedsCW cwb -> cwb
+
+instance W.MonadWriter [UStmt] MaybeCW where
+  tell w = NeedsCW $ W.tell w
+  listen m = case m of
+    NoCW a -> NoCW (a, [])
+    NeedsCW cwa -> NeedsCW $ W.listen cwa
+  pass m = case m of
+    NoCW (a, _) -> NoCW a
+    NeedsCW cw -> NeedsCW $ W.pass cw
 
 writerL :: CodeWriter a -> ([UStmt], a)
 writerL (CodeWriter w) = (stmts, a)
