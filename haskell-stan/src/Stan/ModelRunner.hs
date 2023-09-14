@@ -92,6 +92,7 @@ runModel' cacheDirE configE mStanParams dataWrangler stanProgram resultAction rS
   K.logLE (K.Debug 1) $ "modelDep: " <> show (K.cacheTime modelDep)
   K.logLE (K.Debug 1) $ "modelDataDep: " <> show (K.cacheTime modelData_C)
   K.logLE (K.Debug 1) $ "gqDataDep: " <> show (K.cacheTime gqData_C)
+  K.logLE (K.Debug 1) $ "resultCacheKey: " <> resultCacheKey
   let dataModelDep = (,,) <$> modelDep <*> modelData_C <*> gqData_C
   K.retrieveOrMake @st @cd resultCacheKey dataModelDep $ \_ -> do
     K.logLE K.Diagnostic "Data or model newer then last cached result. (Re)-running..."

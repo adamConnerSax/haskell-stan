@@ -254,8 +254,7 @@ generatePosteriorPrediction' rtt nds rngF psFCW f = SB.inBlock SB.SBPosteriorPre
       $ \nE -> [TE.sliceE TE.s0 nE ppE `TE.assign` f nE (rngF psF nE)]
     return ppE
 
-generatePosteriorPredictionV' :: (TE.TypeOneOf t [TE.ECVec, TE.ERVec])
-                              => TE.NamedDeclSpec t'
+generatePosteriorPredictionV' :: TE.NamedDeclSpec t'
                               -> SMD.StanDist t pts rts
                               -> TE.MaybeCW (TE.ExprList rts)
                               -> (TE.UExpr t -> TE.UExpr t')
@@ -270,8 +269,7 @@ generatePosteriorPredictionV' nds sDist psMCW f = SB.inBlock SB.SBPosteriorPredi
         pure pp
     TE.NoCW ps -> SB.addFromCodeWriter $ TE.declareRHSNW nds $ f (SMD.familyRNG sDist ps)
 
-generatePosteriorPredictionV :: (TE.TypeOneOf t [TE.ECVec, TE.ERVec])
-                             => TE.NamedDeclSpec t
+generatePosteriorPredictionV :: TE.NamedDeclSpec t
                              -> SMD.StanDist t pts rts
                              -> TE.MaybeCW (TE.ExprList rts)
                              -> SB.StanBuilderM md gq (TE.UExpr t)
@@ -392,9 +390,10 @@ zeroMatrixE rowsE colsE = TE.functionE TE.rep_matrix (TE.realE 0 :> rowsE :> col
 ps_by_group :: TE.Function TE.ECVec [TE.EInt, TE.EInt, TE.EIndexArray, TE.ECVec, TE.ECVec]
 ps_by_group = TE.simpleFunction "ps_by_group"
 
-psByGroupFunction :: SB.StanBuilderM md gq (TE.Function TE.ECVec [TE.EInt, TE.EInt, TE.EIndexArray, TE.ECVec, TE.ECVec])
-psByGroupFunction = do
-  SB.addFunctionOnce ps_by_group (TE.DataArg "Nps" :> TE.DataArg "Ngrp" :> TE.DataArg "grpPSIndex" :> TE.DataArg "wgts" :> TE.Arg "probs" :> TNil)
+psByGroupFunction :: Bool -> SB.StanBuilderM md gq (TE.Function TE.ECVec [TE.EInt, TE.EInt, TE.EIndexArray, TE.ECVec, TE.ECVec])
+psByGroupFunction wgtsAreData = do
+  let wgtsArg = if wgtsAreData then TE.DataArg "wgts" else TE.Arg "wgts"
+  SB.addFunctionOnce ps_by_group (TE.DataArg "Nps" :> TE.DataArg "Ngrp" :> TE.DataArg "grpPSIndex" :> wgtsArg :> TE.Arg "probs" :> TNil)
     $ \(nPS :> nGrp :> grpPSIndex :> wgts :> probs :> TNil) -> TE.writerL $ do
     let vds = TE.vectorSpec nGrp []
         plusEq = TE.opAssign TE.SAdd
@@ -431,12 +430,15 @@ postStratifiedParameterF :: Bool
                          -> SB.RowTypeTag r -- data set to post-stratify
                          -> SB.GroupTypeTag k -- group by
                          -> TE.UExpr TE.EIndexArray -- PS Index for group
-                         -> TE.UExpr TE.ECVec -- PS weight
+                         -> TE.MaybeCW TE.VectorE -- PS weight
                          -> TE.CodeWriter TE.VectorE --  code for expression of parameters to post-stratify. Should be indexed by PS data
                          -> Maybe (SB.RowTypeTag r', TE.UExpr TE.EIndexArray) -- re-index?
                          -> SB.StanBuilderM md gq (TE.UExpr TE.ECVec)
-postStratifiedParameterF prof block varNameM rtt gtt grpIndex wgtsV pCW reIndexRttM = do
+postStratifiedParameterF prof block varNameM rtt gtt grpIndex wgtsMCW pCW reIndexRttM = do
   _ <- psByGroupFunction
+       $ case wgtsMCW of
+           TE.NoCW _ -> True
+           TE.NeedsCW _ -> False
   let dsName = SB.dataSetName rtt
       gName = SB.taggedGroupName gtt
       dsSizeE = TE.namedE (SB.dataSetSizeName rtt) TE.SInt
@@ -455,12 +457,14 @@ postStratifiedParameterF prof block varNameM rtt gtt grpIndex wgtsV pCW reIndexR
       probV <- SB.stanDeclare varName grpVecDS
       SB.addStmtToCode $ scopeF $ TE.writerL' $ do
         pV <- pCW
+        wgtsV <- TE.asCW wgtsMCW
         TE.addStmt $ probV `TE.assign` TE.functionE ps_by_group (dsSizeE :>  grpSizeE :> grpIndex :> wgtsV :> pV :> TNil)
       pure probV
     Just (reIndexRtt, reIndex') -> do
       riProb <-  SB.stanDeclare varName $ TE.vectorSpec (TE.namedE (SB.dataSetSizeName reIndexRtt) TE.SInt) [] --(SB.StanVector $ SB.NamedDim reIndexKey) ""
       SB.addStmtToCode $ scopeF $ TE.writerL' $ do
         pV <- pCW
+        wgtsV <- TE.asCW wgtsMCW
         gProb <- TE.declareRHSW psDataByGroupName grpVecDS $ TE.functionE ps_by_group (dsSizeE :>  grpSizeE :> grpIndex :> wgtsV :> pV :> TNil)
         TE.addStmt $ riProb `TE.assign` TE.indexE TE.s0 reIndex' gProb
       pure riProb

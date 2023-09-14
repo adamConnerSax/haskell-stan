@@ -71,6 +71,10 @@ log1m :: VectorizedReal t => Function t '[t]
 log1m = simpleFunction "log1m"
 {-# INLINEABLE log1m #-}
 
+atanh :: VectorizedReal t => Function t '[t]
+atanh = simpleFunction "atanh"
+{-# INLINEABLE atanh #-}
+
 -- vectorized log of real-valued binomial coefficient
 -- see: https://mc-stan.org/docs/functions-reference/betafun.html
 lChoose :: VectorizedReal t => Function t '[t, t]

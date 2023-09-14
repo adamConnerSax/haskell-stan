@@ -370,6 +370,10 @@ newtype CodeWriter a = CodeWriter { unCodeWriter :: W.Writer [UStmt] a } derivin
 
 data MaybeCW a = NoCW a | NeedsCW (CodeWriter a)
 
+asCW :: MaybeCW a -> CodeWriter a
+asCW (NoCW a) = pure a
+asCW (NeedsCW cw) = cw
+
 instance Functor MaybeCW where
   fmap f (NoCW a) = NoCW $ f a
   fmap f (NeedsCW cw) = NeedsCW $ fmap f cw
