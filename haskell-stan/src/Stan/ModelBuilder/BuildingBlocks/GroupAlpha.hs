@@ -157,21 +157,22 @@ data GroupAlpha where
 --zeroOrderAlpha :: DAG.BuildParameter TE.EReal -> GroupAlpha r TE.EReal
 --zeroOrderAlpha n bp = GroupAlpha bp (\_ -> pure (\t -> t))
 
-binaryAlpha :: Eq k => SB.GroupTypeTag k -> DAG.BuildParameter TE.EReal -> GroupAlpha
-binaryAlpha gtt bp = GroupAlphaTD bp tdCW f where
+binaryAlpha :: Maybe Text -> SB.GroupTypeTag k -> DAG.BuildParameter TE.EReal -> GroupAlpha
+binaryAlpha prefixM gtt bp = GroupAlphaTD bp tdCW f where
   indexVec :: SB.RowTypeTag a -> TE.VectorE
   indexVec rtt = TE.functionE SF.to_vector (SB.byGroupIndexE rtt gtt :> TNil)
+  prefixed t = maybe t (<> "_" <> t) prefixM
   splitIndexNDS :: SB.RowTypeTag a -> TE.NamedDeclSpec TE.ECVec
-  splitIndexNDS rtt = TE.NamedDeclSpec ("splitIndex_" <> SB.taggedGroupName gtt <> "_" <> SB.dataSetName rtt) $ TE.vectorSpec (SB.dataSetSizeE rtt) []
+  splitIndexNDS rtt = TE.NamedDeclSpec (prefixed "splitIndex_" <> SB.taggedGroupName gtt <> "_" <> SB.dataSetName rtt) $ TE.vectorSpec (SB.dataSetSizeE rtt) []
   tdCW :: SB.RowTypeTag a -> TE.CodeWriter TE.VectorE
   tdCW rtt = TE.declareRHSNW (splitIndexNDS rtt) $ TE.realE 1.5 `TE.minusE` indexVec rtt
 
   f :: TE.VectorE -> TE.UExpr TE.EReal -> SB.RowTypeTag a -> TE.CodeWriter TE.VectorE
-  f splitIndex aE rtt = pure $ aE `TE.timesE` splitIndex
+  f splitIndex aE _rtt = pure $ aE `TE.timesE` splitIndex
 
 firstOrderAlpha :: SB.GroupTypeTag k -> DAG.BuildParameter TE.ECVec -> GroupAlpha
 firstOrderAlpha gtt bp = GroupAlphaE bp f where
-  f :: forall a md gq . TE.VectorE -> SB.RowTypeTag a -> TE.VectorE
+  f :: forall a . TE.VectorE -> SB.RowTypeTag a -> TE.VectorE
   f aE rtt = TE.indexE TE.s0 (SB.byGroupIndexE rtt gtt) aE
 
 
@@ -185,7 +186,7 @@ firstOrderAlphaDC gtt controlK bp = GroupAlphaPrep bp prep f where
     (SB.IndexMap _ kgi _ _) <- SB.indexMap rtt gtt
     cn <- SB.stanBuildEither $ kgi controlK
     pure (insert_zero_at, cn)
-  f :: forall a md gq . (TE.Function TE.ECVec [TE.ECVec, TE.EInt], Int) -> TE.VectorE -> SB.RowTypeTag a -> TE.CodeWriter TE.VectorE
+  f :: forall a . (TE.Function TE.ECVec [TE.ECVec, TE.EInt], Int) -> TE.VectorE -> SB.RowTypeTag a -> TE.CodeWriter TE.VectorE
   f (insert_zero_at, cn) aE rtt = do
     let aDCNDS = TE.NamedDeclSpec (DAG.bParameterName bp <> "_dc") $ TE.vectorSpec (SB.groupSizeE gtt) []
 --    aDC <- TE.declareRHSNW aDCNDS $ TE.functionE SF.append_to_vector (aE :> TE.realE 0 :> TNil)
@@ -209,18 +210,20 @@ vectorInsertZeroAtFunction = do
                 ((wzero `TE.at` l) `TE.assign` (v `TE.at` (l `TE.minusE` TE.intE 1)))]
     return wzero
 
-secondOrderAlpha :: SB.GroupTypeTag k1
+secondOrderAlpha :: Maybe Text
+                 -> SB.GroupTypeTag k1
                  -> SB.GroupTypeTag k2
                  -> DAG.BuildParameter TE.EMat
                  -> GroupAlpha
-secondOrderAlpha gtt1 gtt2 bp = GroupAlphaCW bp f where
-  f :: forall a md gq . TE.MatrixE -> SB.RowTypeTag a -> TE.CodeWriter TE.VectorE
+secondOrderAlpha prefixM gtt1 gtt2 bp = GroupAlphaCW bp f where
+  f :: forall a . TE.MatrixE -> SB.RowTypeTag a -> TE.CodeWriter TE.VectorE
   f aM rtt = do
     let index1 = SB.byGroupIndexE rtt gtt1
         index2 = SB.byGroupIndexE rtt gtt2
-        alphaVNDS = TE.NamedDeclSpec ("aVec_" <> SB.taggedGroupName gtt1 <> "_" <> SB.taggedGroupName gtt2)
+        prefixed t = maybe t (<> "_" <> t) prefixM
+        alphaVNDS = TE.NamedDeclSpec (prefixed "aVec_" <> SB.taggedGroupName gtt1 <> "_" <> SB.taggedGroupName gtt2)
                  $ TE.vectorSpec (SB.dataSetSizeE rtt) []
-        reIndexedAlpha = TE.indexE TE.s1 (SB.byGroupIndexE rtt gtt2)$ TE.indexE TE.s0 (SB.byGroupIndexE rtt gtt1) aM
+        reIndexedAlpha = TE.indexE TE.s1 (SB.byGroupIndexE rtt gtt2) $ TE.indexE TE.s0 (SB.byGroupIndexE rtt gtt1) aM
 
     aV <- TE.declareNW alphaVNDS
     TE.addStmt
@@ -228,18 +231,20 @@ secondOrderAlpha gtt1 gtt2 bp = GroupAlphaCW bp f where
       $ \nE -> [(aV `TE.at` nE) `TE.assign` TE.mAt reIndexedAlpha nE nE]
     pure aV
 
-thirdOrderAlpha :: SB.GroupTypeTag k1
+thirdOrderAlpha :: Maybe Text
+                -> SB.GroupTypeTag k1
                 -> SB.GroupTypeTag k2
                 -> SB.GroupTypeTag k3
                 -> DAG.BuildParameter (TE.EArray1 TE.EMat)
                 -> GroupAlpha
-thirdOrderAlpha gtt1 gtt2 gtt3 bp = GroupAlphaCW bp f where
-  f :: forall a md gq . TE.ArrayE TE.EMat -> SB.RowTypeTag a -> TE.CodeWriter TE.VectorE
+thirdOrderAlpha prefixM gtt1 gtt2 gtt3 bp = GroupAlphaCW bp f where
+  f :: forall a . TE.ArrayE TE.EMat -> SB.RowTypeTag a -> TE.CodeWriter TE.VectorE
   f aM rtt = do
     let index1 = SB.byGroupIndexE rtt gtt1
         index2 = SB.byGroupIndexE rtt gtt2
         index3 = SB.byGroupIndexE rtt gtt3
-        alphaVNDS = TE.NamedDeclSpec ("aVec_" <> SB.taggedGroupName gtt1 <> "_" <> SB.taggedGroupName gtt2 <> "_" <> SB.taggedGroupName gtt3)
+        prefixed t = maybe t (<> "_" <> t) prefixM
+        alphaVNDS = TE.NamedDeclSpec (prefixed "aVec_" <> SB.taggedGroupName gtt1 <> "_" <> SB.taggedGroupName gtt2 <> "_" <> SB.taggedGroupName gtt3)
                  $ TE.vectorSpec (SB.dataSetSizeE rtt) []
         reIndexedAlpha = TE.indexE TE.s2 (SB.byGroupIndexE rtt gtt3) $ TE.indexE TE.s1 (SB.byGroupIndexE rtt gtt2) $ TE.indexE TE.s0 (SB.byGroupIndexE rtt gtt1) aM
 
@@ -249,12 +254,13 @@ thirdOrderAlpha gtt1 gtt2 gtt3 bp = GroupAlphaCW bp f where
       $ \nE -> [(aV `TE.at` nE) `TE.assign` TE.mAt (reIndexedAlpha `TE.at` nE) nE nE]
     pure aV
 
-secondOrderAlphaDC :: SB.GroupTypeTag k1
+secondOrderAlphaDC :: Maybe Text
+                   -> SB.GroupTypeTag k1
                    -> SB.GroupTypeTag k2
                    -> (k1, k2)
                    -> DAG.BuildParameter TE.ECVec
                    -> GroupAlpha
-secondOrderAlphaDC gtt1 gtt2 (controlK1, controlK2) bp = GroupAlphaPrep bp prep f where
+secondOrderAlphaDC prefixM gtt1 gtt2 (controlK1, controlK2) bp = GroupAlphaPrep bp prep f where
   prep :: SB.RowTypeTag a -> SB.StanBuilderM md gq (TE.Function TE.ECVec [TE.ECVec, TE.EInt], Int, Int)
   prep rtt = do
     insert_zero_at <- vectorInsertZeroAtFunction
@@ -270,7 +276,8 @@ secondOrderAlphaDC gtt1 gtt2 (controlK1, controlK2) bp = GroupAlphaPrep bp prep 
         gs2E = SB.groupSizeE gtt2
         neq = TE.boolOpE TE.SNEq
         or = TE.boolOpE TE.SOr
-    let alphaMNDS = TE.NamedDeclSpec ("alpha_" <> SB.taggedGroupName gtt1 <> "_" <> SB.taggedGroupName gtt2)
+    let prefixed t = maybe t (<> "_" <> t) prefixM
+        alphaMNDS = TE.NamedDeclSpec (prefixed "alpha_" <> SB.taggedGroupName gtt1 <> "_" <> SB.taggedGroupName gtt2)
                     $ TE.matrixSpec gs1E gs2E []
     am <- TE.declareNW alphaMNDS
     TE.addStmt $ TE.scoped $ TE.writerL' $ do
@@ -290,7 +297,7 @@ secondOrderAlphaDC gtt1 gtt2 (controlK1, controlK2) bp = GroupAlphaPrep bp prep 
 
     let index1 = SB.byGroupIndexE rtt gtt1
         index2 = SB.byGroupIndexE rtt gtt2
-    SBB.vectorizeExpr (SB.dataSetSizeE rtt) ("alpha_" <> SB.taggedGroupName gtt1 <> "_" <> SB.taggedGroupName gtt2)
+    SBB.vectorizeExpr (SB.dataSetSizeE rtt) (prefixed "alpha_" <> SB.taggedGroupName gtt1 <> "_" <> SB.taggedGroupName gtt2)
       $ \k -> TE.mAt (TE.indexE TE.s1 index2 (TE.indexE TE.s0 index1 am)) k k
 
 thirdOrderAlphaDC :: SB.GroupTypeTag k1

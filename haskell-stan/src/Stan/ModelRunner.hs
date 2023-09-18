@@ -547,15 +547,22 @@ deleteStaleFiles config staleFiles = do
 {-# INLINEABLE deleteStaleFiles #-}
 
 
+
 checkClangEnv :: (P.Member (P.Embed IO) r, K.LogWithPrefixesLE r) => K.Sem r ()
 checkClangEnv = K.wrapPrefix "checkClangEnv" $ do
   clangBinDirM <- K.liftKnit $ Env.lookupEnv "CLANG_BINDIR"
   case clangBinDirM of
     Nothing -> K.logLE K.Diagnostic "CLANG_BINDIR not set. Using existing path for clang."
     Just clangBinDir -> do
+      let clangBinDirT = toText clangBinDir
       curPath <- K.liftKnit $ Env.getEnv "PATH"
-      K.logLE K.Diagnostic $ "Current path: " <> show curPath <> ".  Adding " <> show clangBinDir <> " for llvm clang."
-      K.liftKnit $ Env.setEnv "PATH" (clangBinDir ++ ":" ++ curPath)
+      let curPathT = toText curPath
+      if T.isSuffixOf clangBinDirT curPathT || T.isPrefixOf (clangBinDirT <> ":") curPathT || T.isInfixOf (":" <> clangBinDirT <> ":") curPathT
+        then K.logLE K.Diagnostic $ "Current path, " <> show curPathT <> " already has " <> clangBinDirT
+        else (do
+                 K.logLE K.Diagnostic $ "Current path: " <> show curPath <> " does not contain " <> clangBinDirT <> ".  Adding " <> clangBinDirT <> " for llvm clang."
+                 K.liftKnit $ Env.setEnv "PATH" (clangBinDir ++ ":" ++ curPath)
+             )
 {-# INLINEABLE checkClangEnv #-}
 
 createDirIfNecessary ::
