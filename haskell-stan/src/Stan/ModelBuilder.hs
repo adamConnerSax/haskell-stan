@@ -350,7 +350,10 @@ buildGroupIndexes = do
 --            nds = TE.NamedDeclSpec indexName $  TE.intArraySpec (TE.namedSizeE dsName) [TE.lowerM $ TE.intE 1]
             ndsF lE = TE.NamedDeclSpec indexName $  TE.intArraySpec lE [TE.lowerM $ TE.intE 1]
         _ <- addFixedIntJson' (inputDataType rtt) ("J_" <> gName) (Just 1) gSize
-        _ <- addColumnMJson rtt ndsF mIntF
+        let mIntF' x = case mIntF x of
+              Left msg -> Left $ msg <> " (from buildGroupIndexes for indexName=" <> indexName <> ")"
+              Right y -> Right y
+        _ <- addColumnMJson rtt ndsF mIntF'
 --        _ <- addColumnMJson rtt indexName (SME.StanArray [SME.NamedDim dsName] SME.StanInt) "<lower=1>" mIntF
         addDeclBinding gName $ "J_" <> gName
         return Nothing

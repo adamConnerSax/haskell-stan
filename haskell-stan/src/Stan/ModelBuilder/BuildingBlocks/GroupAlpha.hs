@@ -112,6 +112,8 @@ setupAlphaSum gts = do
         pure $ fmap (\z -> foldl' TE.plusE (head z) (tail z)) $ sequence x
   pure $ AlphaByDataVecCW f
 
+
+
 {-
 setupAlphaSum :: forall md gq . NonEmpty GroupAlpha -> AlphaByDataVecCW md gq
 setupAlphaSum gts =
