@@ -10,7 +10,7 @@
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE TypeOperators #-}
 {-# LANGUAGE QuantifiedConstraints #-}
-
+{-# LANGUAGE UndecidableInstances #-}
 module Stan.ModelBuilder.BuildingBlocks.GroupAlpha
   (
     module Stan.ModelBuilder.BuildingBlocks.GroupAlpha
@@ -49,7 +49,7 @@ import qualified Data.Type.Nat as DT
 
 import qualified GHC.TypeLits as GHC
 
-{-
+
 type family AlphaExprDim (t :: TE.EType) :: SP.Dim where
   AlphaExprDim TE.EReal = SP.D0
   AlphaExprDim TE.ECVec = SP.D1
@@ -58,7 +58,11 @@ type family AlphaExprDim (t :: TE.EType) :: SP.Dim where
   AlphaExprDim TE.ESqMat = SP.D2
   AlphaExprDim (TE.EArray1 TE.EMat) = SP.D3
   AlphaExprDim q = GHC.TypeError (GHC.Text "Unsupported Type (" GHC.:<>: GHC.ShowType q GHC.:<>: GHC.Text ") in AlphaExprDim. Maybe add it?")
--}
+
+type family MapExprTypeToDim (ts :: [TE.EType]) :: [SP.Dim] where
+  MapExprTypeToDim '[] = '[]
+  MapExprTypeToDim (et ': ets) = AlphaExprDim et ': MapExprTypeToDim ets
+
 addModelIndexes :: forall a b md gq .
 
                    SB.RowTypeTag a
@@ -130,6 +134,17 @@ setupAlphaSum gts = do
         pure $ fmap (\z -> foldl' TE.plusE (head z) (tail z)) $ sequence x
   pure $ AlphaByDataVecCW f
 
+lookupAlphasPS :: GroupAlphaList r ts -> CS.StanSummary -> Either Text (PSList CS.StanStatistic (MapExprTypeToDim ts))
+lookupAlphasPS gal s = go gal [] where
+  go TNil x = x
+  go (ga :> gas) = (:+) <$> lookupAlphaPS s ga <*> lookupAlphasPS gas
+
+alphaPSToAlphaF :: GroupAlphaList r ts -> PSList CS.StanStatistic (MapExprTypeToDim ts) -> r -> [Double]
+alphaPSToAlphaF gal psl r = go gal psl [] where
+  go TNil PNil ds = ds
+  go (ga :> gas) (p :+ ps) ds = go gas ps (indexAlphaPS ga ps : ds)
+  go TNil _ = error "alphaPSToAlphaF: the impossible happened! Empty GroupAlphaList before empty PSList."
+  go _ PNil = error "alphaPSToAlphaF: the impossible happened! Empty PSList before empty GroupAlphaList."
 
 
 {-
@@ -143,6 +158,14 @@ setupAlphaSum gts =
   in AlphaByDataVecCW f
 -}
 
+data PSList :: Type -> [SP.Dim] -> Type where
+  PNil :: PSList a '[]
+  (:+) :: SP.ParameterStatistics d a -> PSList a ds -> PSList a (d ': ds)
+
+type GroupAlphaList r = TypedList (GroupAlpha r)
+
+
+--type FlippedPStatistics a d = SP.ParameterStatistics d a
 
 
 data GroupFromData r k = GroupFromData { gfdGroup :: r -> k
@@ -158,35 +181,51 @@ contraGroupFromData f (GroupFromData g mi di) = GroupFromData (g . f) (SB.contra
 
 data GroupAlpha k t where
   GroupAlphaE :: DAG.BuildParameter t
-             -> (forall a . TE.UExpr t -> SB.RowTypeTag a -> TE.VectorE)
-             -> (k -> Map String CS.StanStatistic -> Either Text Double)
+              -> (forall a . TE.UExpr t -> SB.RowTypeTag a -> TE.VectorE)
+              -> (Map String CS.StanStatistic -> Either Text (SP.ParameterStatistics (AlphaExprDim t) CS.StanStatistic))
+              -> (k -> SP.ParameterStatistics (AlphaExprDim t) CS.StanStatistic -> Double)
              -> GroupAlpha k t
   GroupAlphaCW :: DAG.BuildParameter t
                -> (forall a . TE.UExpr t -> SB.RowTypeTag a -> TE.CodeWriter TE.VectorE)
-               -> (k -> Map String CS.StanStatistic -> Either Text Double)
+               -> (Map String CS.StanStatistic -> Either Text (SP.ParameterStatistics (AlphaExprDim t) CS.StanStatistic))
+               -> (k -> SP.ParameterStatistics (AlphaExprDim t) CS.StanStatistic -> Double)
                -> GroupAlpha k t
   GroupAlphaTD :: DAG.BuildParameter t
                -> (forall a . SB.RowTypeTag a -> TE.CodeWriter td)
                -> (forall a . td -> TE.UExpr t -> SB.RowTypeTag a -> TE.CodeWriter TE.VectorE)
-               -> (k -> Map String CS.StanStatistic -> Either Text Double)
+               -> (Map String CS.StanStatistic -> Either Text (SP.ParameterStatistics (AlphaExprDim t) CS.StanStatistic))
+               -> (k ->  SP.ParameterStatistics (AlphaExprDim t) CS.StanStatistic -> Double)
                -> GroupAlpha k t
   GroupAlphaPrep :: DAG.BuildParameter t
                  -> (forall a md gq . SB.RowTypeTag a -> SB.StanBuilderM md gq p)
                  -> (forall a . p -> TE.UExpr t -> SB.RowTypeTag a -> TE.CodeWriter TE.VectorE)
-                 -> (k -> Map String CS.StanStatistic -> Either Text Double)
+                 -> (Map String CS.StanStatistic -> Either Text (SP.ParameterStatistics (AlphaExprDim t) CS.StanStatistic))
+                 -> (k -> SP.ParameterStatistics (AlphaExprDim t) CS.StanStatistic -> Double)
                  -> GroupAlpha k t
+
+lookupAlphaPS :: GroupAlpha k t ->  Map String CS.StanStatistic -> Either Text (SP.ParameterStatistics (AlphaExprDim t) CS.StanStatistic)
+lookupAlphaPS (GroupAlphaE _ _ lf _) = lf
+lookupAlphaPS (GroupAlphaCW _ _ lf _) = lf
+lookupAlphaPS (GroupAlphaTD _ _ _ lf _) = lf
+lookupAlphaPS (GroupAlphaPrep _ _ _ lf _) = lf
+
+indexAlphaPS :: GroupAlpha k t ->  SP.ParameterStatistics (AlphaExprDim t) CS.StanStatistic -> k -> Double
+indexAlphaPS (GroupAlphaE _ _ _ pf) = flip pf
+indexAlphaPS (GroupAlphaCW _ _ _ pf) = flip pf
+indexAlphaPS (GroupAlphaTD _ _ _ _ pf) = flip pf
+indexAlphaPS (GroupAlphaPrep _ _ _ _ pf) = flip pf
 
 
 contraMapGroupAlpha :: (q -> r) -> GroupAlpha r t -> GroupAlpha q t
-contraMapGroupAlpha h (GroupAlphaE bp vf rf) = GroupAlphaE vf (rf . h)
-contraMapGroupAlpha h (GroupAlphaCW bp cwvf rf) = GroupAlphaCW bp cwvf (rf . h)
-contraMapGroupAlpha h (GroupAlphaTD bp cwtd cwv rf) = GroupAlphaTD bp cwtd cwv (rf . h)
-contraMapGroupAlpha h (GroupAlphaPrep bp mp cwv rf) = GroupAlphaPrep bp mp cwv (rf . h)
+contraMapGroupAlpha h (GroupAlphaE bp vf lf rf) = GroupAlphaE vf (rf . h)
+contraMapGroupAlpha h (GroupAlphaCW bp cwvf lf rf) = GroupAlphaCW bp cwvf (rf . h)
+contraMapGroupAlpha h (GroupAlphaTD bp cwtd cwv lf rf) = GroupAlphaTD bp cwtd cwv (rf . h)
+contraMapGroupAlpha h (GroupAlphaPrep bp mp cwv lf rf) = GroupAlphaPrep bp mp cwv (rf . h)
 --zeroOrderAlpha :: DAG.BuildParameter TE.EReal -> GroupAlpha r TE.EReal
 --zeroOrderAlpha n bp = GroupAlpha bp (\_ -> pure (\t -> t))
 
 binaryAlpha :: Maybe Text -> SB.GroupTypeTag k -> (k -> Double) -> DAG.BuildParameter TE.EReal -> GroupAlpha k TE.EReal
-binaryAlpha prefixM gtt kScale bp = GroupAlphaTD bp tdCW f pf where
+binaryAlpha prefixM gtt kScale bp = GroupAlphaTD bp tdCW f lf pf where
   indexVec :: SB.RowTypeTag a -> TE.VectorE
   indexVec rtt = TE.functionE SF.to_vector (SB.byGroupIndexE rtt gtt :> TNil)
   prefixed t = maybe t (<> "_" <> t) prefixM
@@ -197,21 +236,15 @@ binaryAlpha prefixM gtt kScale bp = GroupAlphaTD bp tdCW f pf where
 
   f :: TE.VectorE -> TE.UExpr TE.EReal -> SB.RowTypeTag a -> TE.CodeWriter TE.VectorE
   f splitIndex aE _rtt = pure $ aE `TE.timesE` splitIndex
-  pf :: k -> SB.StanBuilderM md gq Double
-  pf k sm = do
-    let alphaName = DAG.bParameterName bp
-    alpha <- SP.getScalar . fmap CS.mean <$> SP.parseScalar alphaName sm
-    pure $ kScale k * alpha
+  lf sm = SP.parseScalar (DAG.bParameterName bp) sm
+  pf k s = kScale * (SP.getScalar $ fmap CS.mean $ s)
 
 firstOrderAlpha :: SB.GroupTypeTag k -> (k -> Int) -> DAG.BuildParameter TE.ECVec -> GroupAlpha k TE.ECVec
-firstOrderAlpha gtt index bp = GroupAlphaE bp f pf where
+firstOrderAlpha gtt index bp = GroupAlphaE bp f lf pf where
   f :: forall a . TE.VectorE -> SB.RowTypeTag a -> TE.VectorE
   f aE rtt = TE.indexE TE.s0 (SB.byGroupIndexE rtt gtt) aE
-  pf :: k -> SB.StanBuilderM md gq Double
-  pf k sm = do
-    let alphaName = DAG.bParameterName bp
-    aVec <- SP.getVector . fmap CS.mean <$> SP.parse1D n sm
-    pure $ aVec V.! index k
+  lf sm = SP.parse1D (DAG.bParameterName bp) sm
+  pf k s = (SP.getVector $ fmap CS.mean s) V.! index k
 
 
 -- dummy coding. For now just append 0. Would be helpful to choose where to put the zero so we could
