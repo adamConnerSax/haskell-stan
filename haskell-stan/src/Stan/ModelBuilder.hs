@@ -37,6 +37,8 @@ import qualified Stan.ModelBuilder.TypedExpressions.Types as TE
 import Stan.ModelBuilder.Distributions
 import Stan.ModelBuilder.BuilderTypes
 
+import qualified Knit.Report as K
+
 import Prelude hiding (All)
 import Control.Monad.Writer.Strict as W
 import qualified Control.Foldl as Foldl
@@ -1631,32 +1633,38 @@ stanModelAsText gq sm =
 -- need an available file name to proceed
 data ModelState = New | Same | Updated T.Text deriving stock Show
 
-renameAndWriteIfNotSame :: GeneratedQuantities -> TE.StanProgram -> T.Text -> T.Text -> IO ModelState
+renameAndWriteIfNotSame :: K.KnitEffects r => GeneratedQuantities -> TE.StanProgram -> T.Text -> T.Text -> K.Sem r ModelState
 renameAndWriteIfNotSame gq p modelDir modelName = do
   let fileName d n = T.unpack $ d <> "/" <> n <> ".stan"
       curFile = fileName modelDir modelName
       findAvailableName modelDir' modelName' n = do
         let newName = fileName modelDir' (modelName' <> "_o" <> T.pack (show (n :: Int)))
-        newExists <- Dir.doesFileExist newName
+        newExists <- K.liftKnit $ Dir.doesFileExist newName
         if newExists then findAvailableName modelDir modelName (n + 1) else return $ T.pack newName
-  Say.say "Generating model stan code"
+  K.logLE K.Diagnostic "Generating model stan code"
   newModel <- case TE.programAsText gq p of
     Right x -> pure x
-    Left msg -> X.throwIO $ X.userError $ toString msg
+    Left msg -> K.liftKnit $ X.throwIO $ X.userError $ toString msg
 --  Say.say $ "new model is\n" <> newModel
-  Say.say $ "Checking if file=" <> toText curFile <> " exists."
-  exists <- Dir.doesFileExist curFile
+  K.logLE K.Diagnostic $ "Checking if file=" <> toText curFile <> " exists."
+  exists <- K.liftKnit $ Dir.doesFileExist curFile
   if exists then (do
 --    Say.say $ "reading file=" <> toText curFile
-    extant <- T.readFile curFile
+                     extant <- K.liftKnit $ T.readFile curFile
 --    Say.say $ "read file=" <> toText curFile
-    if extant == newModel then Say.say ("model file:" <> toText curFile <> " exists and is identical to model.") >> return Same else (do
-      Say.say $ "model file:" <> T.pack curFile <> " exists and is different. Renaming and writing new model to file."
-      newName <- findAvailableName modelDir modelName 1
-      Dir.renameFile (fileName modelDir modelName) (T.unpack newName)
-      T.writeFile (fileName modelDir modelName) newModel
-      return $ Updated newName)) else (do
-    Say.say $ "model file:" <> T.pack curFile <> " doesn't exist.  Writing new."
-    T.writeFile (fileName modelDir modelName) newModel
-    Say.say $ "model file:" <> T.pack curFile <> " written."
-    return New)
+                     if extant == newModel
+                       then K.logLE K.Diagnostic ("model file:" <> toText curFile <> " exists and is identical to model.") >> return Same
+                       else (do
+                                K.logLE K.Diagnostic $ "model file:" <> T.pack curFile <> " exists and is different. Renaming and writing new model to file."
+                                newName <- findAvailableName modelDir modelName 1
+                                K.liftKnit $ Dir.renameFile (fileName modelDir modelName) (T.unpack newName)
+                                K.liftKnit $ T.writeFile (fileName modelDir modelName) newModel
+                                pure $ Updated newName
+                            )
+                 )
+    else (do
+             K.logLE K.Diagnostic $ "model file:" <> T.pack curFile <> " doesn't exist.  Writing new."
+             K.liftKnit $ T.writeFile (fileName modelDir modelName) newModel
+             K.logLE K.Diagnostic $ "model file:" <> T.pack curFile <> " written."
+             pure New
+         )

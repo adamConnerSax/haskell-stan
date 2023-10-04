@@ -85,7 +85,7 @@ runModel' cacheDirE configE mStanParams dataWrangler stanProgram resultAction rS
       pure $ cacheKey d
     Right d -> pure $ cacheKey d
   K.logLE K.Info
-    $ "Running: model="
+    $ "Running/retrieving: model="
     <> SC.rinModel rin <> " using model data=" <> SC.rinData rin
     <> maybe "" (" and GQ data=" <>) (SC.gqDataName <$> SC.rinGQ rin)
   modelDep <- SC.modelDependency SC.MRFull $ SC.mrcInputNames stanConfig
@@ -186,7 +186,7 @@ modelGQ SC.MROnlyLL _ = SB.OnlyLL
 modelGQ SC.MROnlyPP _ = SB.OnlyPP
 modelGQ SC.MRFull _ = SB.NeitherLL_PP
 
-writeModel ::  K.KnitEffects r
+writeModel :: K.KnitEffects r
   => SC.RunnerInputNames
   -> SC.ModelRun
   -- | Assume model file exists when Nothing.  Otherwise generate from this and use.
@@ -202,7 +202,7 @@ writeModel runnerInputNames modelRun modelM = do
       createDirIfNecessary modelDir
       let gq = modelGQ modelRun gq'
       K.logLE K.Diagnostic "Renaming old if neccessary, writing if new."
-      modelState <- K.liftKnit $ SB.renameAndWriteIfNotSame gq m modelDir mName
+      modelState <- SB.renameAndWriteIfNotSame gq m modelDir mName
       case modelState of
         SB.New -> K.logLE K.Diagnostic "Given model was new."
         SB.Same -> K.logLE K.Diagnostic "Given model was the same as existing model file."

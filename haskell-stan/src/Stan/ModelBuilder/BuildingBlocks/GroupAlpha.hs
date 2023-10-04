@@ -37,6 +37,7 @@ import qualified CmdStan.Types as CS
 import Prelude hiding (sum, All)
 import qualified Data.List as List
 import qualified Data.Dependent.Sum as DSum
+import qualified Data.Some as Some
 import qualified Data.Dependent.HashMap as DHash
 import qualified Data.IntMap as IntMap
 import qualified Data.Vector as V
@@ -122,17 +123,26 @@ setupAlpha (GroupAlphaPrep bp prep avCW _ _) = do
         pure $ avCW a aE rtt
   pure $ AlphaByDataVecCW f
 
-newtype SomeGroupAlpha r = SomeGroupAlpha { someGroupAlpha :: forall t . GroupAlpha r t}
+--newtype SomeGroupAlpha r = SomeGroupAlpha { someGroupAlpha :: forall t . GroupAlpha r t}
 
 -- do once per data-set things and sum
-setupAlphaSum :: forall md gq r . NonEmpty (SomeGroupAlpha r) -> SB.StanBuilderM md gq (AlphaByDataVecCW md gq)
-setupAlphaSum gts = do
-  abdvcws :: NonEmpty (AlphaByDataVecCW md gq) <- traverse (setupAlpha . someGroupAlpha)  gts
+setupAlphaSum' :: forall md gq r . NonEmpty (Some.Some (GroupAlpha r)) -> SB.StanBuilderM md gq (AlphaByDataVecCW md gq)
+setupAlphaSum' gts = do
+  abdvcws :: NonEmpty (AlphaByDataVecCW md gq) <- traverse (\x -> Some.withSome x setupAlpha)  gts
   let f :: SB.RowTypeTag a -> SB.StanBuilderM md gq (TE.CodeWriter TE.VectorE)
       f rtt = do
         x <- traverse (\abdv -> let (AlphaByDataVecCW g) = abdv in g rtt) abdvcws
         pure $ fmap (\z -> foldl' TE.plusE (head z) (tail z)) $ sequence x
   pure $ AlphaByDataVecCW f
+
+
+setupAlphaSum :: forall md gq ts r . GroupAlphaList r ts -> SB.StanBuilderM md gq (AlphaByDataVecCW md gq)
+setupAlphaSum gs  = maybe emptyErr setupAlphaSum' $ nonEmpty $ toSomeGroupAlphaList gs where
+  toSomeGroupAlphaList :: GroupAlphaList r qs -> [Some.Some (GroupAlpha r)]
+  toSomeGroupAlphaList TNil = []
+  toSomeGroupAlphaList (g :> gs') = Some.mkSome g : toSomeGroupAlphaList gs'
+  emptyErr = SB.stanBuildError "setupAlphaSum: empty GroupAlphaList given"
+
 
 lookupAlphasPS :: forall r ts . GroupAlphaList r ts -> CS.StanSummary -> Either Text (PSList CS.StanStatistic (MapExprTypeToDim ts))
 lookupAlphasPS TNil _ = Right PNil
@@ -200,11 +210,11 @@ indexAlphaPS (GroupAlphaCW _ _ _ pf) = flip pf
 indexAlphaPS (GroupAlphaTD _ _ _ _ pf) = flip pf
 indexAlphaPS (GroupAlphaPrep _ _ _ _ pf) = flip pf
 
-contraMapGroupAlpha :: (q -> r) -> GroupAlpha r t -> GroupAlpha q t
-contraMapGroupAlpha h (GroupAlphaE bp vf lf rf) = GroupAlphaE bp vf lf (rf . h)
-contraMapGroupAlpha h (GroupAlphaCW bp cwvf lf rf) = GroupAlphaCW bp cwvf lf (rf . h)
-contraMapGroupAlpha h (GroupAlphaTD bp cwtd cwv lf rf) = GroupAlphaTD bp cwtd cwv lf (rf . h)
-contraMapGroupAlpha h (GroupAlphaPrep bp mp cwv lf rf) = GroupAlphaPrep bp mp cwv lf (rf . h)
+contramapGroupAlpha :: (q -> r) -> GroupAlpha r t -> GroupAlpha q t
+contramapGroupAlpha h (GroupAlphaE bp vf lf rf) = GroupAlphaE bp vf lf (rf . h)
+contramapGroupAlpha h (GroupAlphaCW bp cwvf lf rf) = GroupAlphaCW bp cwvf lf (rf . h)
+contramapGroupAlpha h (GroupAlphaTD bp cwtd cwv lf rf) = GroupAlphaTD bp cwtd cwv lf (rf . h)
+contramapGroupAlpha h (GroupAlphaPrep bp mp cwv lf rf) = GroupAlphaPrep bp mp cwv lf (rf . h)
 --zeroOrderAlpha :: DAG.BuildParameter TE.EReal -> GroupAlpha r TE.EReal
 --zeroOrderAlpha n bp = GroupAlpha bp (\_ -> pure (\t -> t))
 
