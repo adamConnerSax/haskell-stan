@@ -1323,9 +1323,7 @@ addLengthJson :: RowTypeTag r
               -> Text
               -> TE.IndexKey
               -> StanBuilderM md gq (TE.UExpr TE.EInt)
-addLengthJson rtt tName _ = do
---  addDeclBinding iKey name
-  addJsonOnce rtt (TE.NamedDeclSpec tName (TE.intSpec [TE.lowerM $ TE.intE 1])) (Stan.namedF tName Foldl.length)
+addLengthJson rtt  tName _ = addJsonOnce rtt (TE.NamedDeclSpec tName (TE.intSpec [TE.lowerM $ TE.intE 1])) (Stan.namedF tName Foldl.length)
 
 nameSuffixMsg :: TE.StanName -> Text -> Text
 nameSuffixMsg n dsName = "name=\"" <> show n <> "\" data-set=\"" <> show dsName <> "\""
@@ -1374,10 +1372,10 @@ addColumnMJson rtt ndsF toMX = do
 addColumnMJsonOnce :: (Aeson.ToJSON x
 --                      , TE.TypeOneOf t [TE.EArray (S Z) TE.EInt, TE.ECVec, TE.EMat]
                       )
-               => RowTypeTag r
-               -> (TE.UExpr TE.EInt -> TE.NamedDeclSpec t)
-               -> (r -> Either Text x)
-               -> StanBuilderM md gq (TE.UExpr t)
+                   => RowTypeTag r
+                   -> (TE.UExpr TE.EInt -> TE.NamedDeclSpec t)
+                   -> (r -> Either Text x)
+                   -> StanBuilderM md gq (TE.UExpr t)
 addColumnMJsonOnce rtt ndsF toMX = do
   let lE = TE.namedE (dataSetSizeName rtt) TE.SInt
       nds = ndsF lE
@@ -1407,7 +1405,8 @@ add2dMatrixJson rtt mrfd@(MatrixRowFromData tName _ cols vecF) cs = do
       wdName = tName <> underscoredIf dsName
       colName = mrfdColumnsName mrfd
       ndsF rowsE = TE.NamedDeclSpec wdName $ TE.matrixSpec rowsE (TE.namedE colName TE.SInt) cs
-  _ <- addFixedIntJson' (inputDataType rtt) colName Nothing cols
+      idt = inputDataType rtt
+  _ <- addFixedIntJson' idt colName Nothing cols
   addColumnJson rtt ndsF vecF
 
 modifyCode' :: (TE.StanProgram -> TE.StanProgram) -> BuilderState md gq -> BuilderState md gq

@@ -61,11 +61,11 @@ addFixedInt :: Text -> Int -> SB.StanBuilderM md gq TE.IntE
 addFixedInt t n = SB.addFixedIntJson SB.ModelData t Nothing n
 
 addIntData :: SB.RowTypeTag r
-            -> TE.StanName
-            -> Maybe Int
-            -> Maybe Int
-            -> (r -> Int)
-            -> SB.StanBuilderM md gq TE.IntArrayE
+           -> TE.StanName
+           -> Maybe Int
+           -> Maybe Int
+           -> (r -> Int)
+           -> SB.StanBuilderM md gq TE.IntArrayE
 addIntData rtt varName mLower mUpper f = do
   let cs = maybe [] (pure . TE.lowerM . TE.intE) mLower ++ maybe [] (pure . TE.upperM . TE.intE) mUpper
       ndsF lE = TE.NamedDeclSpec varName $ TE.intArraySpec lE cs
@@ -89,12 +89,12 @@ addRealData rtt varName mLower mUpper f = do
   SB.addColumnJson rtt ndsF f
 
 addIntArrayData :: SB.RowTypeTag r
-              -> TE.StanName
-              -> TE.IntE
-              -> Maybe Int
-              -> Maybe Int
-              -> (r -> VU.Vector Int)
-              -> SB.StanBuilderM md gq (TE.UExpr (TE.EArray1 (TE.EArray1 TE.EInt)))
+                -> TE.StanName
+                -> TE.IntE
+                -> Maybe Int
+                -> Maybe Int
+                -> (r -> VU.Vector Int)
+                -> SB.StanBuilderM md gq (TE.UExpr (TE.EArray1 (TE.EArray1 TE.EInt)))
 addIntArrayData rtt varName innerSizeE mLower mUpper f = do
   let cs = maybe [] (pure . TE.lowerM . TE.intE) mLower ++ maybe [] (pure . TE.upperM . TE.intE) mUpper
       ndsF lE = TE.NamedDeclSpec varName $ TE.array1Spec lE (TE.array1Spec innerSizeE $ TE.intSpec cs)
