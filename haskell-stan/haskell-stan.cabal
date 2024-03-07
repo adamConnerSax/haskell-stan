@@ -4,7 +4,6 @@ version:             0.1.0.0
 synopsis:            haskell/Stan interface
 description:         tools for writing Stan code from haskell, managing Stan's runtime environment, etc.
 license:             BSD-3-Clause
-license-file:        LICENSE
 author:              Adam Conner-Sax
 maintainer:          adam_conner_sax@yahoo.com
 -- copyright:
@@ -61,11 +60,9 @@ library
                , array >= 0.5.4 && < 0.6
                , aeson >= 1.4 && < 2.3
                , bytestring >= 0.10 && < 0.14
-               , cereal  >= 0.5.7 && < 0.6
                , cereal-vector >= 0.2 && < 0.3
                , colonnade
                , containers
-               , data-fix >= 0.3.0 && < 0.4
                , dependent-hashmap >= 0.1.0.1 && < 0.2
                , dependent-map >= 0.4 && < 0.5
                , dependent-sum >= 0.7.0 && < 0.8
@@ -83,7 +80,6 @@ library
                , monadic-recursion-schemes >= 0.1.11 && < 0.2
                , mtl >= 2.2 && < 2.4
                , polysemy
-               , pretty >= 1.1 && < 1.2
                , prettyprinter >= 1.7 && < 1.8
                , process >= 1.6 && < 1.7
                , recursion-schemes >= 5.1.2 && < 5.3
@@ -92,7 +88,6 @@ library
                , scientific >= 0.3.5 && < 0.4
                , some >= 1.0.2 && < 1.1
                , text >= 1.2 && < 2.1
-               , transformers-compat >= 0.6 && < 0.8
                , vec >= 0.4 && < 0.6
                , vector
                , vector-builder >= 0.3.7 && < 0.4
