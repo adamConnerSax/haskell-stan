@@ -41,7 +41,7 @@ import qualified Relude.Extra as Relude
 import qualified Stan.ModelBuilder.TypedExpressions.Program as TE
 import qualified Stan.ModelBuilder.TypedExpressions.DAG as DAG
 
-import qualified Data.IORef as IORef
+--import qualified Data.IORef as IORef
 
 -- simplified runner for common cases
 runModel' :: forall st cd md gq b c r.
@@ -391,7 +391,7 @@ runModel config rScriptsToWrite dataWrangler cb makeResult toPredict md_C gq_C =
   K.logLE K.Info "running Model (if necessary)"
   let runnerInputNames = SC.mrcInputNames config
       stanMCParameters = SC.mrcStanMCParameters config
-  checkClangEnv
+  checkCPPEnv
   createDirIfNecessary (SC.mrcModelDir config)
   createDirIfNecessary (SC.mrcModelDir config <> "/data") -- json inputs
   createDirIfNecessary (SC.mrcModelDir config <> "/output") -- csv model run output
@@ -546,24 +546,23 @@ deleteStaleFiles config staleFiles = do
   traverse_ (K.liftKnit. Dir.removeFile) extantPaths
 {-# INLINEABLE deleteStaleFiles #-}
 
-
-
-checkClangEnv :: (P.Member (P.Embed IO) r, K.LogWithPrefixesLE r) => K.Sem r ()
-checkClangEnv = K.wrapPrefix "checkClangEnv" $ do
-  clangBinDirM <- K.liftKnit $ Env.lookupEnv "CLANG_BINDIR"
-  case clangBinDirM of
-    Nothing -> K.logLE K.Diagnostic "CLANG_BINDIR not set. Using existing path for clang."
-    Just clangBinDir -> do
-      let clangBinDirT = toText clangBinDir
+checkCPPEnv :: (P.Member (P.Embed IO) r, K.LogWithPrefixesLE r) => K.Sem r ()
+checkCPPEnv = K.wrapPrefix "checkCPPEnv" $ do
+  let ev = "HS_CPP_BINDIR"
+  cppBinDirM <- K.liftKnit $ Env.lookupEnv ev
+  case cppBinDirM of
+    Nothing -> K.logLE K.Diagnostic $ toText ev <> " not set. Using existing path for C++ tools."
+    Just cppBinDir -> do
+      let cppBinDirT = toText cppBinDir
       curPath <- K.liftKnit $ Env.getEnv "PATH"
       let curPathT = toText curPath
-      if T.isSuffixOf clangBinDirT curPathT || T.isPrefixOf (clangBinDirT <> ":") curPathT || T.isInfixOf (":" <> clangBinDirT <> ":") curPathT
-        then K.logLE K.Diagnostic $ "Current path, " <> show curPathT <> " already has " <> clangBinDirT
+      if T.isSuffixOf cppBinDirT curPathT || T.isPrefixOf (cppBinDirT <> ":") curPathT || T.isInfixOf (":" <> cppBinDirT <> ":") curPathT
+        then K.logLE K.Diagnostic $ "Current path, " <> show curPathT <> " already has " <> cppBinDirT
         else (do
-                 K.logLE K.Diagnostic $ "Current path: " <> show curPath <> " does not contain " <> clangBinDirT <> ".  Adding " <> clangBinDirT <> " for llvm clang."
-                 K.liftKnit $ Env.setEnv "PATH" (clangBinDir ++ ":" ++ curPath)
+                 K.logLE K.Diagnostic $ "Current path: " <> show curPath <> " does not contain " <> cppBinDirT <> ".  Prepending " <> cppBinDirT <> " to path for C++ tools."
+                 K.liftKnit $ Env.setEnv "PATH" (cppBinDir ++ ":" ++ curPath)
              )
-{-# INLINEABLE checkClangEnv #-}
+{-# INLINEABLE checkCPPEnv #-}
 
 createDirIfNecessary ::
   (P.Member (P.Embed IO) r, K.LogWithPrefixesLE r) =>
