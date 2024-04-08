@@ -1,4 +1,4 @@
-packages: haskell-stan ../knit-haskell
+packages: haskell-stan
 jobs: 4
 with-compiler: ghc
 allow-newer: base, bytestring, ghc-prim, template-haskell, polysemy-zoo:constraints
@@ -15,10 +15,10 @@ source-repository-package
   location: https://github.com/adamConnerSax/hs-cmdstan
   tag: 0cdb6d634faeedf8728a37b5ae4aecaf05022bb2
 
---source-repository-package
---  type: git
---  location: https://github.com/adamConnerSax/knit-haskell
---  tag: 9f1d2cf3fb85509813c99a37de7449c8df8d8e41
+source-repository-package
+  type: git
+  location: https://github.com/adamConnerSax/knit-haskell
+  tag: 204ec1df5b59967dd16b393e0a97b7cddb517730
 
 source-repository-package
   type: git
