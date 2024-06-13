@@ -397,7 +397,7 @@ psByGroupFunction wgtsAreData = do
     $ \(nPS :> nGrp :> grpPSIndex :> wgts :> probs :> TNil) -> TE.writerL $ do
     let vds = TE.vectorSpec nGrp []
         plusEq = TE.opAssign TE.SAdd
-        elDivEq = TE.opAssign (TE.SElementWise TE.SDivide)
+--        elDivEq = TE.opAssign (TE.SElementWise TE.SDivide)
     sumByGroup <- TE.declareRHSW "SumByGroup" vds $ zeroVectorE nGrp
     sumWgts <- TE.declareRHSW "SumWgts" vds $ zeroVectorE nGrp
     TE.addStmt $ TE.for "k" (TE.SpecificNumbered (TE.intE 1) nPS)
@@ -407,7 +407,18 @@ psByGroupFunction wgtsAreData = do
           in [atk (indexByPS sumByGroup) `plusEq` (atk wgts `TE.timesE` atk probs)
              , atk (indexByPS sumWgts) `plusEq` atk wgts
              ]
-    TE.addStmt $ sumByGroup `elDivEq` sumWgts
+    -- we do the division in a loop so we can avoid the divide by zero of empty groups
+    TE.addStmt $ TE.for "l" (TE.SpecificNumbered (TE.intE 1) nGrp)
+      $ \l ->
+          let atl = TE.sliceE TE.s0 l
+              sbgl = atl sumByGroup
+              swl = atl sumWgts
+              z = TE.realE 0
+              gt = TE.boolOpE TE.SGT
+          in [sbgl `TE.assign` TE.condE (swl `gt` z) (sbgl `TE.divideE` swl) z]
+
+
+--    TE.addStmt $ sumByGroup `elDivEq` sumWgts
     return sumByGroup
 
 {-
