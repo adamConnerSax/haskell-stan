@@ -289,7 +289,8 @@ wrangleData :: forall st cd md gq b p r.SC.KnitStan st cd r
   -> K.ActionWithCacheTime r gq
   -> p
   -> K.Sem r (K.ActionWithCacheTime r (Either T.Text b), K.ActionWithCacheTime r (Either T.Text b))
-wrangleData config w cb md_C gq_C p = do
+wrangleData config w cb md_C gq_C p = K.wrapPrefix "wrangleData" $ do
+  K.logLE K.Diagnostic "Wrangling Data..."
   let (indexerType, modelIndexAndEncoder, mGQIndexAndEncoder) = case w of
         SC.Wrangle x y z -> (x, y, z)
         SC.WrangleWithPredictions x y z _ -> (x, y, z)
@@ -309,6 +310,7 @@ wrangleData config w cb md_C gq_C p = do
       case mGQData_C of
         Nothing -> return $ pure $ Left "wrangleData: Attempt to wrangle GQ data but config.mrcInputNames.rinQG is Nothing."
         Just gqData_C -> do
+          K.logLE K.Diagnostic "Wrangling GQ Data"
           (newGQData_C, gqIndexes_C) <- wranglerPrep @st @cd config SC.GQData indexerType gqIndexAndEncoder cb gq_C
           let gqJSONDeps = (,) <$> newGQData_C <*> gqIndexes_C
           gqJSON_C <- K.updateIf gqData_C gqJSONDeps $ \(e, eb) -> do
