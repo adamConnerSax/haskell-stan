@@ -427,7 +427,7 @@ runModel config rScriptsToWrite dataWrangler cb makeResult toPredict md_C gq_C =
     let runModelDeps = (,) <$> modelIndices_C <*> curModelNoGQ_C -- indices carries data update time
     modelRes_C <- K.updateIf modelSamplesFilesDep runModelDeps $ \_ -> do
       K.logLE K.Diagnostic "Stan model outputs older than model input data or model code.  Rebuilding Stan exe and running."
-      K.logLE (K.Debug 1) $ "Make CommandLine: " <> show (CS.makeConfigToCmdLine (SC.mrcStanMakeConfig config SC.MRNoGQ))
+      K.logLE (K.Debug 1) $ "Make CommandLine: " <> toText (CS.makeConfigToCmdLine (SC.mrcStanMakeConfig config SC.MRNoGQ))
       K.liftKnit $ CS.make (SC.mrcStanMakeConfig config SC.MRNoGQ)
       res <- runModelF
       when (SC.mrcRunDiagnose config) $ do
@@ -446,7 +446,7 @@ runModel config rScriptsToWrite dataWrangler cb makeResult toPredict md_C gq_C =
         _ <- K.updateIf onlyLLSamplesFileDep runLLDeps $ \_ -> do
           let llOnlyMakeConfig = SC.mrcStanMakeConfig config SC.MROnlyLL
           K.logLE K.Diagnostic "Stan log likelihood  outputs older than model input data or model code. Generating LL."
-          K.logLE (K.Debug 1) $ "Make CommandLine: " <> show (CS.makeConfigToCmdLine llOnlyMakeConfig)
+          K.logLE (K.Debug 1) $ "Make CommandLine: " <> toText (CS.makeConfigToCmdLine llOnlyMakeConfig)
           K.liftKnit $ CS.make llOnlyMakeConfig
           mRes <- maybe Nothing (const $ Just ()) . sequence
                   <$> K.sequenceConcurrently (fmap (runOneGQ SC.MROnlyLL) [1 .. (SC.smcNumChains $ SC.mrcStanMCParameters config)])
@@ -463,7 +463,7 @@ runModel config rScriptsToWrite dataWrangler cb makeResult toPredict md_C gq_C =
         _ <- K.updateIf onlyPPSamplesFileDep runPPDeps $ \_ -> do
           let ppOnlyMakeConfig = SC.mrcStanMakeConfig config SC.MROnlyPP
           K.logLE K.Diagnostic "Stan posterior prediction outputs older than model input data or model code. Generating PP."
-          K.logLE (K.Debug 1) $ "Make CommandLine: " <> show (CS.makeConfigToCmdLine ppOnlyMakeConfig)
+          K.logLE (K.Debug 1) $ "Make CommandLine: " <> toText (CS.makeConfigToCmdLine ppOnlyMakeConfig)
           K.liftKnit $ CS.make ppOnlyMakeConfig
           mRes <- maybe Nothing (const $ Just ()) . sequence
                   <$> K.sequenceConcurrently (fmap (runOneGQ SC.MROnlyPP) [1 .. (SC.smcNumChains $ SC.mrcStanMCParameters config)])
@@ -478,7 +478,7 @@ runModel config rScriptsToWrite dataWrangler cb makeResult toPredict md_C gq_C =
         gqSamplesFileDep <- K.oldestUnit <$> traverse K.fileDependency (SC.samplesFileNames SC.MRFull config)
         res_C <- K.updateIf gqSamplesFileDep runGQDeps $ const $ do
           K.logLE K.Diagnostic "Stan GQ outputs older than model input data, GQ input data or model code. Running GQ."
-          K.logLE (K.Debug 1) $ "Make CommandLine: " <> show (CS.makeConfigToCmdLine (SC.mrcStanMakeConfig config SC.MRFull))
+          K.logLE (K.Debug 1) $ "Make CommandLine: " <> toText (CS.makeConfigToCmdLine (SC.mrcStanMakeConfig config SC.MRFull))
           K.liftKnit $ CS.make (SC.mrcStanMakeConfig config SC.MRFull)
 --          SC.combineData $ SC.mrcInputNames config
           mRes <- maybe Nothing (const $ Just ()) . sequence
