@@ -215,8 +215,13 @@ contramapGroupAlpha h (GroupAlphaE bp vf lf rf) = GroupAlphaE bp vf lf (rf . h)
 contramapGroupAlpha h (GroupAlphaCW bp cwvf lf rf) = GroupAlphaCW bp cwvf lf (rf . h)
 contramapGroupAlpha h (GroupAlphaTD bp cwtd cwv lf rf) = GroupAlphaTD bp cwtd cwv lf (rf . h)
 contramapGroupAlpha h (GroupAlphaPrep bp mp cwv lf rf) = GroupAlphaPrep bp mp cwv lf (rf . h)
---zeroOrderAlpha :: DAG.BuildParameter TE.EReal -> GroupAlpha r TE.EReal
---zeroOrderAlpha n bp = GroupAlpha bp (\_ -> pure (\t -> t))
+
+zeroOrderAlpha :: DAG.BuildParameter TE.EReal -> GroupAlpha k TE.EReal
+zeroOrderAlpha bp = GroupAlphaE bp f lf pf where
+  f :: forall a . TE.RealE -> SB.RowTypeTag a -> TE.VectorE
+  f aE _ = SF.scalarCVec aE
+  lf =  SP.parseScalar (DAG.bParameterName bp)
+  pf _ s =  Right $ SP.getScalar (fmap CS.mean s)
 
 binaryAlpha :: Maybe Text -> SB.GroupTypeTag k -> (k -> Double) -> DAG.BuildParameter TE.EReal -> GroupAlpha k TE.EReal
 binaryAlpha prefixM gtt kScale bp = GroupAlphaTD bp tdCW f lf pf where

@@ -117,12 +117,12 @@ array_num_elements :: (SNatI n, GenSType t) => Function EInt '[EArray n t]
 array_num_elements = simpleFunction "inv"
 {-# INLINEABLE array_num_elements #-}
 
-to_vector :: (TypeOneOf t [ECVec, ERVec, EArray1 EInt, EArray1 EReal, EMat, ESqMat], GenSType t)
+to_vector :: (TypeOneOf t [EReal, ECVec, ERVec, EArray1 EInt, EArray1 EReal, EMat, ESqMat], GenSType t)
           => Function ECVec '[t]
 to_vector = simpleFunction "to_vector"
 {-# INLINEABLE to_vector #-}
 
-toVec :: (TypeOneOf t [ECVec, ERVec, EArray1 EInt, EArray1 EReal, EMat, ESqMat], GenSType t)
+toVec :: (TypeOneOf t [EReal, ECVec, ERVec, EArray1 EInt, EArray1 EReal, EMat, ESqMat], GenSType t)
           => UExpr t -> UExpr ECVec
 toVec x = functionE to_vector (x :> TNil)
 {-# INLINEABLE toVec #-}
@@ -131,6 +131,22 @@ to_row_vector :: (TypeOneOf t [ECVec, ERVec, EArray1 EInt, EArray1 EReal, EMat, 
           => Function ERVec '[t]
 to_row_vector = simpleFunction "to_row_vector"
 {-# INLINEABLE to_row_vector #-}
+
+scalar_in_cvector_context :: Function ECVec '[EReal]
+scalar_in_cvector_context = simpleFunction ""
+{-# INLINEABLE scalar_in_cvector_context #-}
+
+scalar_in_rvector_context :: Function ERVec '[EReal]
+scalar_in_rvector_context = simpleFunction ""
+{-# INLINEABLE scalar_in_rvector_context #-}
+
+scalarCVec :: UExpr EReal -> UExpr ECVec
+scalarCVec x = functionE scalar_in_cvector_context (x :> TNil)
+{-# INLINEABLE scalarCVec #-}
+
+scalarRVec :: UExpr EReal -> UExpr ERVec
+scalarRVec x = functionE scalar_in_rvector_context (x :> TNil)
+{-# INLINEABLE scalarRVec #-}
 
 to_array_1d :: (TypeOneOf t [ECVec, ERVec], GenSType t) => Function (EArray1 EReal) '[t]
 to_array_1d = simpleFunction "to_array_1d"
