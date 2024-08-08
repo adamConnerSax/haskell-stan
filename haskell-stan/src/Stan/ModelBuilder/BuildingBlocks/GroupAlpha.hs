@@ -231,7 +231,7 @@ binaryAlpha prefixM gtt kScale bp = GroupAlphaTD bp tdCW f lf pf where
   splitIndexNDS :: SB.RowTypeTag a -> TE.NamedDeclSpec TE.ECVec
   splitIndexNDS rtt = TE.NamedDeclSpec (prefixed "splitIndex_" <> SB.taggedGroupName gtt <> "_" <> SB.dataSetName rtt) $ TE.vectorSpec (SB.dataSetSizeE rtt) []
   tdCW :: SB.RowTypeTag a -> TE.CodeWriter TE.VectorE
-  tdCW rtt = TE.declareRHSNW (splitIndexNDS rtt) $ TE.realE 1.5 `TE.minusE` indexVec rtt
+  tdCW rtt = TE.declareRHSNW (splitIndexNDS rtt) $ TE.realE 2 `TE.timesE` (TE.realE 1.5 `TE.minusE` indexVec rtt)
 
   f :: TE.VectorE -> TE.UExpr TE.EReal -> SB.RowTypeTag a -> TE.CodeWriter TE.VectorE
   f splitIndex aE _rtt = pure $ aE `TE.timesE` splitIndex
