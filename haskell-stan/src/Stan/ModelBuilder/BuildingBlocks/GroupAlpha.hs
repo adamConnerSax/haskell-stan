@@ -123,6 +123,13 @@ setupAlpha (GroupAlphaPrep bp prep avCW _ _) = do
         pure $ avCW a aE rtt
   pure $ AlphaByDataVecCW f
 
+tdAsPrep :: forall md gq td b . (forall a . SB.RowTypeTag a -> TE.CodeWriter td) -> SB.RowTypeTag b -> SB.StanBuilderM md gq td
+tdAsPrep tdCW rtt = do
+  let block = case SB.inputDataType rtt of
+        SB.ModelData -> SB.SBTransformedData
+        SB.GQData -> SB.SBTransformedDataGQ
+  SB.inBlock block $ SB.addFromCodeWriter $ tdCW rtt
+
 --newtype SomeGroupAlpha r = SomeGroupAlpha { someGroupAlpha :: forall t . GroupAlpha r t}
 
 -- do once per data-set things and sum
@@ -216,6 +223,14 @@ contramapGroupAlpha h (GroupAlphaCW bp cwvf lf rf) = GroupAlphaCW bp cwvf lf (rf
 contramapGroupAlpha h (GroupAlphaTD bp cwtd cwv lf rf) = GroupAlphaTD bp cwtd cwv lf (rf . h)
 contramapGroupAlpha h (GroupAlphaPrep bp mp cwv lf rf) = GroupAlphaPrep bp mp cwv lf (rf . h)
 
+{-
+data Alpha k et where
+  Alpha :: Alpha () TE.EReal
+  GroupAlpha :: SB.GroupTypeTag k -> (k -> Either Text Int) -> Alpha k TE.ECVec
+  GroupAlphaDC :: SB.GroupTypeTag k ->  (k -> Either Text Int) -> k -> Alpha k TE.ECVec
+  BinaryAlpha :: SB.GroupTypeTag k -> (k -> Double) -> Alpha k TE.EReal
+-}
+
 zeroOrderAlpha :: DAG.BuildParameter TE.EReal -> GroupAlpha k TE.EReal
 zeroOrderAlpha bp = GroupAlphaE bp f lf pf where
   f :: forall a . TE.RealE -> SB.RowTypeTag a -> TE.VectorE
@@ -223,8 +238,8 @@ zeroOrderAlpha bp = GroupAlphaE bp f lf pf where
   lf =  SP.parseScalar (DAG.bParameterName bp)
   pf _ s =  Right $ SP.getScalar (fmap CS.mean s)
 
-binaryAlpha :: Maybe Text -> SB.GroupTypeTag k -> (k -> Double) -> DAG.BuildParameter TE.EReal -> GroupAlpha k TE.EReal
-binaryAlpha prefixM gtt kScale bp = GroupAlphaTD bp tdCW f lf pf where
+binarySI :: Maybe Text -> SB.GroupTypeTag k -> (k -> Double) -> (forall a . SB.RowTypeTag a -> TE.CodeWriter TE.VectorE)
+binarySI prefixM gtt kScale = tdCW where
   indexVec :: SB.RowTypeTag a -> TE.VectorE
   indexVec rtt = TE.functionE SF.to_vector (SB.byGroupIndexE rtt gtt :> TNil)
   prefixed t = maybe t (<> "_" <> t) prefixM
@@ -233,6 +248,19 @@ binaryAlpha prefixM gtt kScale bp = GroupAlphaTD bp tdCW f lf pf where
   tdCW :: SB.RowTypeTag a -> TE.CodeWriter TE.VectorE
   tdCW rtt = TE.declareRHSNW (splitIndexNDS rtt) $ TE.realE 2 `TE.timesE` (TE.realE 1.5 `TE.minusE` indexVec rtt)
 
+binaryAlpha :: Maybe Text -> SB.GroupTypeTag k -> (k-> Double) -> DAG.BuildParameter TE.EReal -> GroupAlpha k TE.EReal
+binaryAlpha prefixM gtt kScale bp = GroupAlphaTD bp tdCW f lf pf where
+  tdCW :: forall a . SB.RowTypeTag a -> TE.CodeWriter TE.VectorE
+  tdCW = binarySI prefixM gtt kScale
+{-
+  indexVec :: SB.RowTypeTag a -> TE.VectorE
+  indexVec rtt = TE.functionE SF.to_vector (SB.byGroupIndexE rtt gtt :> TNil)
+  prefixed t = maybe t (<> "_" <> t) prefixM
+  splitIndexNDS :: SB.RowTypeTag a -> TE.NamedDeclSpec TE.ECVec
+  splitIndexNDS rtt = TE.NamedDeclSpec (prefixed "splitIndex_" <> SB.taggedGroupName gtt <> "_" <> SB.dataSetName rtt) $ TE.vectorSpec (SB.dataSetSizeE rtt) []
+  tdCW :: SB.RowTypeTag a -> TE.CodeWriter TE.VectorE
+  tdCW rtt = TE.declareRHSNW (splitIndexNDS rtt) $ TE.realE 2 `TE.timesE` (TE.realE 1.5 `TE.minusE` indexVec rtt)
+-}
   f :: TE.VectorE -> TE.UExpr TE.EReal -> SB.RowTypeTag a -> TE.CodeWriter TE.VectorE
   f splitIndex aE _rtt = pure $ aE `TE.timesE` splitIndex
   lf = SP.parseScalar (DAG.bParameterName bp)
@@ -250,14 +278,24 @@ firstOrderAlpha gtt index bp = GroupAlphaE bp f lf pf where
 
 -- dummy coding. For now just append 0. Would be helpful to choose where to put the zero so we could
 -- choose which entry to dummy code.
+
+dcPrep :: SB.GroupTypeTag k -> k -> SB.RowTypeTag a -> SB.StanBuilderM md gq (TE.Function TE.ECVec [TE.ECVec, TE.EInt], Int)
+dcPrep gtt controlK rtt = do
+  insert_zero_at <- vectorInsertZeroAtFunction
+  (SB.IndexMap _ kgi _ _) <- SB.indexMap rtt gtt
+  cn <- SB.stanBuildEither $ kgi controlK
+  pure (insert_zero_at, cn)
+
 firstOrderAlphaDC :: SB.GroupTypeTag k -> (k -> Either Text Int) -> k -> DAG.BuildParameter TE.ECVec -> GroupAlpha k TE.ECVec
-firstOrderAlphaDC gtt index controlK bp = GroupAlphaPrep bp prep f lf pf where
+firstOrderAlphaDC gtt index controlK bp = GroupAlphaPrep bp (dcPrep gtt controlK) f lf pf where
+{-
   prep :: SB.RowTypeTag a -> SB.StanBuilderM md gq (TE.Function TE.ECVec [TE.ECVec, TE.EInt], Int)
   prep rtt = do
     insert_zero_at <- vectorInsertZeroAtFunction
     (SB.IndexMap _ kgi _ _) <- SB.indexMap rtt gtt
     cn <- SB.stanBuildEither $ kgi controlK
     pure (insert_zero_at, cn)
+-}
   f :: forall a . (TE.Function TE.ECVec [TE.ECVec, TE.EInt], Int) -> TE.VectorE -> SB.RowTypeTag a -> TE.CodeWriter TE.VectorE
   f (insert_zero_at, cn) aE rtt = do
     let aDCNDS = TE.NamedDeclSpec (DAG.bParameterName bp <> "_dc") $ TE.vectorSpec (SB.groupSizeE gtt) []
@@ -271,6 +309,33 @@ firstOrderAlphaDC gtt index controlK bp = GroupAlphaPrep bp prep f lf pf where
       LT -> safeIndexVector (SP.getVector $ fmap CS.mean s) ik
       EQ -> pure 0
       GT -> safeIndexVector (SP.getVector $ fmap CS.mean s) (ik - 1)
+
+secondOrderBinaryDC :: Maybe Text -> Maybe Text -> SB.GroupTypeTag bk -> (bk -> Double)
+                    -> SB.GroupTypeTag dck -> (dck -> Either Text Int) -> dck
+                    -> DAG.BuildParameter TE.ECVec
+                    -> GroupAlpha (bk, dck) TE.ECVec
+secondOrderBinaryDC prefixM siPrefixM bTag kScale dcTag index controlK bp = GroupAlphaPrep bp prep f lf pf where
+  tdCW :: forall a . SB.RowTypeTag a -> TE.CodeWriter TE.VectorE
+  tdCW = binarySI (siPrefixM <> prefixM) bTag kScale where
+  prep ::  SB.RowTypeTag a -> SB.StanBuilderM md gq (TE.Function TE.ECVec [TE.ECVec, TE.EInt], Int, TE.VectorE)
+  prep rtt = do
+    (izf, index) <- dcPrep dcTag controlK rtt
+    td <- tdAsPrep tdCW rtt
+    pure $ (izf, index, td)
+  f :: forall a . (TE.Function TE.ECVec [TE.ECVec, TE.EInt], Int, TE.VectorE) -> TE.VectorE -> SB.RowTypeTag a -> TE.CodeWriter TE.VectorE
+  f (insertZeroAt, cn, siE) aE rtt = do
+    let aDCNDS = TE.NamedDeclSpec (DAG.bParameterName bp <> "_dc") $ TE.vectorSpec (SB.groupSizeE dcTag) []
+        eltTimes = TE.binaryOpE (TE.SElementWise TE.SMultiply)
+    aDC <- TE.declareRHSNW aDCNDS $ TE.functionE insertZeroAt (aE :> TE.intE cn :> TNil)
+    pure $ TE.indexE TE.s0 (SB.byGroupIndexE rtt dcTag) aDC `eltTimes` siE
+  lf = SP.parse1D (DAG.bParameterName bp)
+  pf (bk, dck) s = do
+    ik <- index dck
+    ic <- index controlK
+    case compare ik ic of
+      LT -> fmap (kScale bk *) $ safeIndexVector (SP.getVector $ fmap CS.mean s) ik
+      EQ -> pure 0
+      GT -> fmap (kScale bk *) $ safeIndexVector (SP.getVector $ fmap CS.mean s) (ik - 1)
 
 vectorInsertZeroAtFunction :: SB.StanBuilderM md gq (TE.Function TE.ECVec [TE.ECVec, TE.EInt])
 vectorInsertZeroAtFunction = do
@@ -288,6 +353,8 @@ vectorInsertZeroAtFunction = do
                 [(l `eq` n, (wzero `TE.at` l) `TE.assign` TE.realE 0)])
                 ((wzero `TE.at` l) `TE.assign` (v `TE.at` (l `TE.minusE` TE.intE 1)))]
     return wzero
+
+
 
 secondOrderAlpha :: Maybe Text
                  -> SB.GroupTypeTag k1
