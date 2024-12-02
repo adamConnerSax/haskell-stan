@@ -91,15 +91,15 @@ main = do
     m = namedE "M" SMat
     r = namedE "r" SInt
     c = namedE "c" SInt
-    a = namedE "A" (SArray s2 SMat)
+    a = namedE "A" (SArray s2 SMat) -- 2D array of matrices
   cmnt "Indexing"
   writeExprCode ctxt0 $ sliceE s0 c $ sliceE s0 r m
   let a1 = rangeIndexE s2 (Just $ intE 2) (Just $ intE 4) a
   writeExprCode ctxt0 a1
   let a2 {-:: UExpr (EArray N2 ECVec)-} = sliceE s2 (intE 3) a1
   writeExprCode ctxt0 a2
-  let a4 = indexE s2 (namedE "I" (SArray s1 SInt)) a2
-  writeExprCode ctxt0 a4
+--  let a4 = indexE s2 (namedE "I" (SArray s1 SInt)) a2
+--  writeExprCode ctxt0 a4
   cmnt "Assignments"
   cmnt "simple, no context"
   writeStmtCode ctxt0 $ assign ue1 ue1
@@ -128,7 +128,7 @@ main = do
   writeStmtCode ctxt0 $ declareAndAssign "C" (arraySpec s2 (intE 2 ::: intE 2 ::: VNil) (vectorSpec (intE 2) [lowerM $ realE 0 , multiplierM $ realE 3]))
     (arrayE $ NestedVec2 ((vectorE [1,2] ::: vectorE [3,4] ::: VNil) ::: (vectorE [4,5] ::: vectorE [5, 6] ::: VNil) :::  VNil))
   cmnt "Add to target, two ways."
-  let normalDistVec = Density "normal" SCVec (SCVec ::> (SCVec ::> TypeNil)) id
+  let normalDistVec = Density "normal" SCVec (SCVec ::> (SCVec ::> TypeNil))
       stmtTarget1 = addToTarget $ densityE normalDistVec v (namedE "m" SCVec :> (namedE "sd" SCVec :> TNil))
   writeStmtCode ctxt1 stmtTarget1
   let stmtSample = sample v normalDistVec (namedE "m" SCVec :> (namedE "sd" SCVec :> TNil))
@@ -142,13 +142,10 @@ main = do
   writeStmtCode ctxt2 stmtFor2
   let stmtFor3 = for "yl" (SpecificIn $ namedE "ys" SCVec) (\ye -> [assign x (x `plus` ye)])
   writeStmtCode ctxt0 stmtFor3
-  let stmtFor4 = for "q" (IndexedIn "States" $ namedE "votes" SCVec)
-        $ \sie -> (assign (sliceE s0 sie $ namedE "w" SCVec) (realE 2) :| [assign x (x `plus` y)])
-  writeStmtCode ctxt1 stmtFor4
   cmnt "Conditionals"
   let
     eq = boolOpE SEq
-    stmtIf1 = ifThen (l `eq` n) (assign ue1 ue1) (assign x (x `plus` y))
+    stmtIf1 = ifThenElse ((l `eq` n, assign ue1 ue1) :| []) (assign x (x `plus` y))
   writeStmtCode ctxt1 stmtIf1
   cmnt "While loops"
   let stmtWhile = while (l `eq` n) (assign ue1 ue1 :| [assign x (x `plus` y), SBreak])
@@ -156,7 +153,7 @@ main = do
   cmnt "Functions"
   let
     euclideanDistance :: Function EReal [ECVec, ECVec, EArray N1 EInt]
-    euclideanDistance = Function "eDist" SReal (SCVec ::> SCVec ::> SArray s1 SInt ::> TypeNil) id
+    euclideanDistance = Function "eDist" SReal (SCVec ::> SCVec ::> SArray s1 SInt ::> TypeNil)
     eDistArgList = Arg "x1" :> Arg "x2" :> DataArg "m" :> TNil
     eDistBody :: ExprList [ECVec, ECVec, EArray N1 EInt] -> (NonEmpty UStmt, UExpr EReal)
     eDistBody (x1 :> x2 :> _ :> TNil) = (one $ rv `assign` (tr (x1 `eMinus` x2) `times` (x1 `eMinus` x2)), rv)
@@ -174,7 +171,7 @@ main = do
       b2 = namedE "b2" SBool
       and = boolOpE SAnd
       or = boolOpE SOr
-  traverse_ (writeStmtAsText 80) $ [ifThen (b1 `op1` (b2 `op2` b2)) (x `assign` y) (y `assign` x) | op1 <- [and, or], op2 <- [and, or] ]
+  traverse_ (writeStmtAsText 80) $ [ifThenElse ((b1 `op1` (b2 `op2` b2), (x `assign` y)) :| []) (y `assign` x) | op1 <- [and, or], op2 <- [and, or] ]
   writeStmtAsText 80 $ comment (one $ "Formatting...")
   let ln n = namedE ("longVarName" <> show n) SReal
       dn n = namedE ("someLongIntName" <> show n) SInt
@@ -184,10 +181,10 @@ main = do
   writeStmtAsText 80 $ declareAndAssignN (NamedDeclSpec "longRealName" $ realSpec []) (foldl' plusE (ln 2) $ fmap ln [3])
   writeStmtAsText 80 $ declareAndAssignN (NamedDeclSpec "longRealName" $ realSpec []) (foldl' plusE (ln 2) $ fmap ln [3..20])
   writeStmtAsText 80 $ ln 1 `assign` (foldl' plusE (ln 2) $ fmap ln [3..20])
-  let formatS1 = for "q" (IndexedIn "States" $ namedE "votes" SCVec)
-                 $ \sie -> (assign (sliceE s0 sie $ namedE "w" SCVec) (realE 2) :| [assign x (x `plus` y)
-                                                                                   , stmtWhile
-                                                                                   , ln 1 `assign` (foldl' plusE (ln 2) $ fmap ln [3..20])])
+  let formatS1 = for "q" (SpecificIn $ namedE "votes" SCVec)
+                 $ \sie -> (sie `assign` (realE 2) :| [assign x (x `plus` y)
+                                                      , stmtWhile
+                                                      , ln 1 `assign` (foldl' plusE (ln 2) $ fmap ln [3..20])])
   writeStmtAsText 80 formatS1
   let
     f :: Function EReal [ECVec, ECVec, EArray N1 EInt, EInt, EInt]

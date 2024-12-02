@@ -288,14 +288,6 @@ dcPrep gtt controlK rtt = do
 
 firstOrderAlphaDC :: SB.GroupTypeTag k -> (k -> Either Text Int) -> k -> DAG.BuildParameter TE.ECVec -> GroupAlpha k TE.ECVec
 firstOrderAlphaDC gtt index controlK bp = GroupAlphaPrep bp (dcPrep gtt controlK) f lf pf where
-{-
-  prep :: SB.RowTypeTag a -> SB.StanBuilderM md gq (TE.Function TE.ECVec [TE.ECVec, TE.EInt], Int)
-  prep rtt = do
-    insert_zero_at <- vectorInsertZeroAtFunction
-    (SB.IndexMap _ kgi _ _) <- SB.indexMap rtt gtt
-    cn <- SB.stanBuildEither $ kgi controlK
-    pure (insert_zero_at, cn)
--}
   f :: forall a . (TE.Function TE.ECVec [TE.ECVec, TE.EInt], Int) -> TE.VectorE -> SB.RowTypeTag a -> TE.CodeWriter TE.VectorE
   f (insert_zero_at, cn) aE rtt = do
     let aDCNDS = TE.NamedDeclSpec (DAG.bParameterName bp <> "_dc") $ TE.vectorSpec (SB.groupSizeE gtt) []

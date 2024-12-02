@@ -12,6 +12,7 @@ import qualified KnitEnvironment as KE
 
 import qualified Stan.ModelBuilder as S
 import qualified Stan.ModelBuilder.TypedExpressions.DAG as DAG
+import qualified Stan.ModelBuilder.TypedExpressions.DAGTypes as DAG
 import qualified Stan.ModelBuilder.TypedExpressions.Indexing as TE
 import qualified Stan.ModelBuilder.TypedExpressions.Types as TE
 import qualified Stan.ModelBuilder.TypedExpressions.TypedList as TE
@@ -46,9 +47,11 @@ import Stan.ModelBuilder (groupSizeE)
 import qualified Stan.ModelBuilder as TE
 import qualified Stan.ModelBuilder as DS
 
+import ModelPaths
+
 -- remove "haskell-stan" from these paths if this becomes it's own project
-F.tableTypes "FB_Result" ("test/data/football.csv")
-F.tableTypes "FB_Matchup" ("test/data/matchups1.csv")
+F.tableTypes "FB_Result" (dataDir <> "test/data/football.csv")
+F.tableTypes "FB_Matchup" (dataDir <> "test/data/matchups1.csv")
 
 
 fbResults :: forall r.(K.KnitEffects r, KE.CacheEffects r) => K.Sem r (K.ActionWithCacheTime r (F.Frame FB_Result))
@@ -127,10 +130,10 @@ spreadDiffNormal = do
          $ TE.normal
   muVP <- DAG.simpleParameter
           (TE.NamedDeclSpec "mu_fav" $ TE.vectorSpec (S.groupSizeE favoriteG) [])
-          (DAG.given (TE.realE 0) :> DAG.build sigmaMuP :> TNil)
+          (DAG.given (TE.realE 0) :> sigmaMuP :> TNil)
          $ TE.normalS
   -- get expressions for the parameters we need to model the data
-  let (sigmaE :> muVecE :> TNil) = DAG.tagsAsExprs (sigmaP :> muVP :> TNil)
+  let (sigmaE :> muVecE :> TNil) = DAG.parametersAsExprs (sigmaP :> muVP :> TNil)
 
   -- helpers for broadcasting sigma and indexing mu
   let toVec rtt x = TE.functionE TE.rep_vector (x :> S.dataSetSizeE rtt :> TNil)

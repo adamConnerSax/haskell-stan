@@ -141,6 +141,7 @@ executable model-test
    hs-source-dirs: test
    main-is: Main.hs
    other-modules: Models
+                , ModelPaths
                 , KnitEnvironment
    build-depends: base
                 , bytestring
@@ -156,6 +157,7 @@ executable model-test
                 , lens
                 , relude
                 , text
+                , th-env
                 , vector
    mixins:  base hiding (Prelude)
           , relude (Relude as Prelude
