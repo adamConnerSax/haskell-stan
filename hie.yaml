@@ -1,8 +1,0 @@
-cradle:
-  cabal:
-    - path: "./haskell-stan/src"
-      component: "lib:haskell-stan"
-    - path: "./haskell-stan/test"
-      component: "exe:model-test"
-    - path: "./haskell-stan/testExpressions"
-      component: "exe:expressions-test"

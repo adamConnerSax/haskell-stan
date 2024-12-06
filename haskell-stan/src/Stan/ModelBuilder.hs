@@ -82,11 +82,13 @@ stanCodeToStanModel (StanCode _ a) =
 emptyStanCode :: StanCode
 emptyStanCode = StanCode SBData (Array.listArray (minBound, maxBound) $ repeat (WithIndent mempty 2))
 -}
-
+{- Moved to Stan.Builder.CoreTypes
 data StanCode = StanCode { curBlock :: StanBlock
                          , program :: TE.StanProgram
                          }
+-}
 
+{- Moved To Stan.Builder.Build
 addStmtToCode :: TE.UStmt -> StanBuilderM md gq ()
 addStmtToCode stmt = do
   cb <- getBlock
@@ -118,6 +120,7 @@ addFromCodeWriter (TE.CodeWriter cw) = addStmtsToCode stmts >> return a
 addScopedFromCodeWriter :: TE.CodeWriter a -> StanBuilderM md gq a
 addScopedFromCodeWriter (TE.CodeWriter cw) = addStmtsToCode [TE.scoped stmts] >> return a
   where (a, stmts) = W.runWriter cw
+-}
 
 applyToFoldable :: Foldl.Fold row a -> ToFoldable d row -> d -> a
 applyToFoldable fld (ToFoldable f) = Foldl.fold fld . f
@@ -125,13 +128,15 @@ applyToFoldable fld (ToFoldable f) = Foldl.fold fld . f
 applyToFoldableM :: Monad m => Foldl.FoldM m row a -> ToFoldable d row -> d -> m a
 applyToFoldableM fldM (ToFoldable f) = Foldl.foldM fldM . f
 
+{- Moved to Stan.Builder.CoreTypes
 -- the key is a name for the data-set.  The tag carries the toDataSet function
 type RowBuilder d = DSum.DSum RowTypeTag (RowInfo d)
 type RowInfos d = DHash.DHashMap RowTypeTag (RowInfo d)
-
+-}
 unusedIntIndex :: IntIndex r
 unusedIntIndex = IntIndex 0 (const $ Left $ "Attempt to use an unused Int Index.")
 
+{- Moved to Stan.Builder.CoreTypes
 mapLookupE :: Ord k => (k -> Text) -> Map k a -> k -> Either Text a
 mapLookupE errMsg m k = case Map.lookup k m of
   Just a -> Right a
@@ -149,6 +154,7 @@ mapToIndexMap h m = indxMap where
 makeIndexMapF :: MakeIndex r k -> Foldl.Fold r (IndexMap r k)
 makeIndexMapF (GivenIndex m h) = pure $ mapToIndexMap h m
 makeIndexMapF (FoldToIndex fld h) = fmap (mapToIndexMap h) fld
+-}
 
 makeIndexFromEnum :: forall k r . (Enum k, Bounded k, Ord k) => (r -> k) -> MakeIndex r k
 makeIndexFromEnum h = GivenIndex m h where
@@ -279,7 +285,7 @@ getGroupIndexVar rtt gtt = do
             <> " not found in data-set=" <> dataSetName rtt <> " (input type=" <> show (inputDataType rtt) <> ") not found."
   withRowInfo dsNotFoundErr varIfGroup rtt
 
-
+{- Moved to Stan.Builder.CoreTypes
 intMapsForDataSetFoldM :: GroupIntMapBuilders r -> Foldl.FoldM (Either Text) r (GroupIntMaps r)
 intMapsForDataSetFoldM (GroupIntMapBuilders imbs) = GroupIntMaps <$> DHash.traverse unDataToIntMap imbs
 
@@ -306,6 +312,7 @@ buildRowInfo d rtt (GroupIndexAndIntMapMakers tf@(ToFoldable f) ims imbs) = Fold
   uBindings = Map.insert (dataSetName rtt) (TE.namedLIndex ("N_" <> dataSetName rtt))
                 $ useBindingsFromGroupIndexMakers rtt ims
   fld = RowInfo tf uBindings <$> gisFld <*> pure imbs <*> pure mempty
+-}
 
 groupIntMap :: IndexMap r k -> IntMap.IntMap k
 groupIntMap (IndexMap _ _ im _) = im
@@ -401,6 +408,7 @@ buildGQJSONFromDataM = do
         ds =  buildJSONFromRows dataSetJSON d
     in (<>) <$> c <*> ds
 
+{- Moved to Stan.Builder.CoreTypes
 data VariableScope = GlobalScope | ModelScope | GQScope deriving stock (Show, Eq, Ord)
 
 newtype DeclarationMap = DeclarationMap (Map TE.StanName TE.EType) deriving stock (Show)
@@ -409,13 +417,18 @@ data ScopedDeclarations = ScopedDeclarations { currentScope :: VariableScope
                                              , modelScope :: NonEmpty DeclarationMap
                                              , gqScope :: NonEmpty DeclarationMap
                                              } deriving stock (Show)
+-}
 
-changeVarScope :: VariableScope -> ScopedDeclarations -> ScopedDeclarations
-changeVarScope vs sd = sd { currentScope = vs}
 
+{- Moved to Stan.Builder.CoreTypes
 initialScopedDeclarations :: ScopedDeclarations
 initialScopedDeclarations = let x = one (DeclarationMap Map.empty)
                             in ScopedDeclarations GlobalScope x x x
+-}
+
+{- Moved to Stan.Builder.Build
+changeVarScope :: VariableScope -> ScopedDeclarations -> ScopedDeclarations
+changeVarScope vs sd = sd { currentScope = vs}
 
 declarationsNE :: VariableScope -> ScopedDeclarations -> NonEmpty DeclarationMap
 declarationsNE GlobalScope sd = globalScope sd
@@ -484,6 +497,7 @@ alreadyDeclaredAllScopes sd sn st =
                  else Left $ sn <> " (" <> show (TE.eTypeFromStanType st)
                       <> ")already declared (with different type=" <> show et <> ")!"
     Left _ -> pure ()
+-}
 {-
 addVarInScope :: TE.StanName -> SME.StanType -> StanBuilderM env d SME.StanVar
 addVarInScope sn st = do
@@ -531,6 +545,7 @@ scoped x = do
   dropScope
   pure a
 
+{- Moved to Stan.Builder.CoreTypes
 data BuilderState md gq = BuilderState { declaredVars :: !ScopedDeclarations
                                        , indexBindings :: !TE.IndexLookupCtxt
                                        , modelRowBuilders :: !(RowInfos md)
@@ -551,7 +566,7 @@ dumpBuilderState bs = -- (BuilderState dvs ibs ris js hf c) =
   <> "\n gq row-info-keys: " <> show (DHash.keys $ gqRowBuilders bs)
   <> "\n functions: " <> show (hasFunctions bs)
   <> "\n parameterCollection (keys)" <> show (DM.keys $ DT.pdm $ parameterCollection bs)
-
+-}
 getAndEmptyProgram :: StanBuilderM md gq TE.StanProgram
 getAndEmptyProgram = do
   (StanCode cb p) <- gets code
@@ -571,7 +586,7 @@ addCodeAbove ma = do
   pure a
 
 --getRowInfo :: InputDataType -> RowTypeTag r
-
+{- Moved Stan.Builder.Build
 withRowInfo :: StanBuilderM md gq y -> (forall x . RowInfo x r -> StanBuilderM md gq y) -> RowTypeTag r -> StanBuilderM md gq y
 withRowInfo missing presentF rtt =
   case inputDataType rtt of
@@ -586,6 +601,7 @@ getDataSetBindings :: RowTypeTag r -> StanBuilderM md gq TE.IndexArrayMap
 getDataSetBindings rtt = withRowInfo err (return .  expressionBindings) rtt where
   idt = inputDataType rtt
   err = stanBuildError $ "getDataSetbindings: row-info=" <> dataSetName rtt <> " not found in " <> show idt
+-}
 
 getModelDataFoldableAsListF :: RowTypeTag r -> StanBuilderM md gq (md -> [r])
 getModelDataFoldableAsListF rtt = do
@@ -630,6 +646,7 @@ getGQDataSetBindings rtt = do
     Just ri -> return $ expressionBindings ri
 -}
 
+{- Moved to Stan.Builder.Build
 setDataSetForBindings :: RowTypeTag r -> StanBuilderM md gq ()
 setDataSetForBindings rtt = do
   newUseBindings <- getDataSetBindings rtt
@@ -733,7 +750,9 @@ addConstJson idt jf = modifyConstJson idt (<> jf)
 modifyFunctionNames :: (Set Text -> Set Text) -> BuilderState md gq -> BuilderState md gq
 modifyFunctionNames f bs = bs { hasFunctions = f (hasFunctions bs)}
 --(BuilderState dv vbs mrb gqrb cj hf c) = BuilderState dv vbs mrb gqrb cj (f hf) c
+-}
 
+{- Moved to Stan.Builder.CoreTypes
 initialBuilderState :: RowInfos md -> RowInfos gq -> BuilderState md gq
 initialBuilderState modelRowInfos gqRowInfos =
   BuilderState
@@ -747,7 +766,9 @@ initialBuilderState modelRowInfos gqRowInfos =
   (DT.BParameterCollection mempty mempty)
 --  TE.emptyStanProgram
   (StanCode SBData TE.emptyStanProgram)
+-}
 
+{- Moved to Stan.Builder.CoreTypes
 type RowInfoMakers d = DHash.DHashMap RowTypeTag (GroupIndexAndIntMapMakers d)
 
 data GroupBuilderS md gq = GroupBuilderS { gbModelS :: RowInfoMakers md, gbGQS :: RowInfoMakers gq}
@@ -764,6 +785,7 @@ newtype StanGroupBuilderM md gq a
 
 stanGroupBuildError :: Text -> StanGroupBuilderM md gq a
 stanGroupBuildError t = StanGroupBuilderM $ ExceptT (pure $ Left t)
+-}
 
 withRowInfoMakers :: (forall x. RowInfoMakers x -> StanGroupBuilderM md gq (Maybe (RowInfoMakers x), y)) -> InputDataType -> StanGroupBuilderM md gq y
 withRowInfoMakers f idt =
@@ -864,6 +886,7 @@ addGroupIntMapForDataSet gtt rtt mkIntMap = withRowInfoMakers f idt where
           let newRims = DHash.insert rtt (GroupIndexAndIntMapMakers tf gims (GroupIntMapBuilders $ DHash.insert gtt mkIntMap gimbs)) rowInfoMakers
           return (Just newRims, ())
 
+{- Moved to Stan.Builder.CoreTypes
 -- This builds the indexes but not the IntMaps.  Those need to be built at the end.
 runStanGroupBuilder :: StanGroupBuilderM md gq () -> md -> gq -> BuilderState md gq
 runStanGroupBuilder sgb md gq =
@@ -871,10 +894,12 @@ runStanGroupBuilder sgb md gq =
       modelRowInfos = DHash.mapWithKey (buildRowInfo md) $ gbModelS gbs
       gqRowInfos = DHash.mapWithKey (buildRowInfo gq) $ gbGQS gbs
   in initialBuilderState modelRowInfos gqRowInfos
+-}
 
+{- Moved to Stan.Builder.CoreTypes
 newtype StanBuilderM md gq a = StanBuilderM { unStanBuilderM :: ExceptT Text (State (BuilderState md gq)) a }
                              deriving newtype (Functor, Applicative, Monad, MonadState (BuilderState md gq))
-
+-}
 dataSetTag :: forall r md gq. Typeable r => InputDataType -> Text -> StanBuilderM md gq (RowTypeTag r)
 dataSetTag idt tName = do
   let rtt :: RowTypeTag r = RowTypeTag idt tName
@@ -1099,6 +1124,7 @@ indexMap rtt gtt = withRowInfo err f rtt where
                  Just im -> return im
 -}
 
+{- Moved to Stan.Builder.CoreTypes
 runStanBuilder :: md
                -> gq
                -> StanGroupBuilderM md gq ()
@@ -1119,6 +1145,7 @@ stanBuildMaybe msg = maybe (stanBuildError msg) return
 
 stanBuildEither :: Either Text a -> StanBuilderM md gq a
 stanBuildEither = either stanBuildError return
+-}
 
 getDeclBinding :: TE.IndexKey -> StanBuilderM md gq (TE.LExpr TE.EInt)
 getDeclBinding k = do
@@ -1182,6 +1209,7 @@ indexBindingScope x = do
   modify (modifyIndexBindings $ const curIB)
   return a
 
+{- Moved to Stan.Builder.Build
 isDeclared :: TE.StanName -> StanBuilderM md gq Bool
 isDeclared sn  = do
   sd <- declaredVars <$> get
@@ -1208,6 +1236,7 @@ declare sn st = do
                 then return False
                 else stanBuildError $ "Attempt to re-declare \"" <> sn <> "\" with different type. Previous="
                      <> show et <> "; new=" <> show (TE.eTypeFromStanType st)
+-}
 
 stanDeclare' :: TE.StanName -> TE.DeclSpec t -> Maybe (TE.UExpr t) -> StanBuilderM md gq (TE.UExpr t)
 stanDeclare' sn ds mRHS = do
@@ -1409,6 +1438,7 @@ add2dMatrixJson rtt mrfd@(MatrixRowFromData tName _ cols vecF) cs = do
   _ <- addFixedIntJson' idt colName Nothing cols
   addColumnJson rtt ndsF vecF
 
+{- Moved to Stan.Builder.Build
 modifyCode' :: (TE.StanProgram -> TE.StanProgram) -> BuilderState md gq -> BuilderState md gq
 modifyCode' f bs = let (StanCode currentBlock oldProg) = code bs in bs { code = StanCode currentBlock $ f oldProg }
 
@@ -1426,7 +1456,7 @@ setBlock = modify . setBlock'
 
 getBlock :: StanBuilderM md gq StanBlock
 getBlock = gets (curBlock . code)
-
+-}
 
 {-
 addInLine' :: Text -> StanCode -> StanCode

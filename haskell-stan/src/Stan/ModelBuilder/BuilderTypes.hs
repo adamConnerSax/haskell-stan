@@ -57,6 +57,7 @@ data StanModel = StanModel
   }
   deriving stock (Show, Eq, Ord)
 
+{- Moved to Stan.Language.Program
 data StanBlock = SBFunctions
                | SBData
                | SBDataGQ
@@ -69,7 +70,7 @@ data StanBlock = SBFunctions
                | SBLogLikelihood
                | SBPosteriorPrediction
                deriving stock (Show, Eq, Ord, Enum, Bounded, Array.Ix)
-
+-}
 --data WithIndent = WithIndent Text Int
 
 data JSONSeriesFold row where

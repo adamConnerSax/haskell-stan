@@ -196,9 +196,10 @@ noLogOfSummary sc = sc { mrcLogSummary = False }
 noDiagnose :: ModelRunnerConfig -> ModelRunnerConfig
 noDiagnose sc = sc { mrcRunDiagnose = False }
 
+{- Moved to Stan.Builder.CoreTypes
 data InputDataType = ModelData | GQData deriving stock (Show, Eq, Ord, Enum, Bounded, Generic)
 instance Hashable InputDataType
-
+-}
 -- produce indexes and json producer from the data as well as a data-set to predict.
 data DataIndexerType (b :: Type) where
   NoIndex :: DataIndexerType ()

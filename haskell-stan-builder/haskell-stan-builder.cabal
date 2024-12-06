@@ -1,8 +1,8 @@
 cabal-version:       3.0
-name:                haskell-stan
+name:                haskell-stan-builder
 version:             0.1.0.0
-synopsis:            haskell/Stan interface
-description:         tools for writing Stan code from haskell, managing Stan's runtime environment, etc.
+synopsis:            Tools to assemble a stan program from building blocks
+description:         Builder Monad and associated tools for assembling a stan program
 license:             BSD-3-Clause
 author:              Adam Conner-Sax
 maintainer:          adam_conner_sax@yahoo.com
@@ -57,41 +57,32 @@ common common-options
 library
   import: common-options
   build-depends: base >= 4.12 && < 5
-               , array >= 0.5.4 && < 0.6
                , aeson >= 1.4 && < 2.3
                , bytestring >= 0.10 && < 0.14
+               , array >= 0.5.4 && < 0.6
                , cereal-vector >= 0.2 && < 0.3
-               , colonnade
                , containers
                , dependent-hashmap >= 0.1.0.1 && < 0.2
                , dependent-map >= 0.4 && < 0.5
                , dependent-sum >= 0.7.0 && < 0.8
-               , directory >= 1.3.3 && < 1.4
                , extra >= 1.7.7 && < 1.8
                , fin >= 0.2 && < 0.4
                , foldl >= 1.4 && < 1.5
-               , Frames >= 0.6.1 && < 0.8
-               , Frames-streamly >= 0.2.0
                , hashable >= 1.3 && < 1.6
-               , hs-cmdstan >= 0.1 && < 0.2
-               , knit-haskell >= 0.9 && < 0.11
-               , massiv >= 1.0 && < 1.1
-               , megaparsec >= 9.0.0 && < 10.0
+               , haskell-stan-language
+--               , hs-cmdstan >= 0.1 && < 0.2
+--               , megaparsec >= 9.0.0 && < 10.0
                , monadic-recursion-schemes >= 0.1.11 && < 0.2
                , mtl >= 2.2 && < 2.4
-               , polysemy
+--               , polysemy
                , prettyprinter >= 1.7 && < 1.8
-               , process >= 1.6 && < 1.7
                , recursion-schemes >= 5.1.2 && < 5.3
                , relude  >=1.0.0 && < 1.3
-               , say >= 0.1.0.1 && < 0.2
-               , scientific >= 0.3.5 && < 0.4
-               , some >= 1.0.2 && < 1.1
+--               , some >= 1.0.2 && < 1.1
                , text >= 1.2 && < 2.1
                , vec >= 0.4 && < 0.6
                , vector
                , vector-builder >= 0.3.7 && < 0.4
-               , vinyl >= 0.13 && < 0.15
   if flag(streamly9)
     build-depends:
       streamly >=0.9 && <0.11, streamly-core >=0.1.0 && <0.3, streamly-bytestring >=0.2.0 && < 0.3
@@ -100,65 +91,9 @@ library
   mixins:  base hiding (Prelude)
          , relude (Relude as Prelude
          , Relude.Extra)
-  exposed-modules: Stan.Parameters
-                 , Stan.Parameters.Massiv
-                 , Stan.ModelConfig
-                 , Stan.ModelRunner
-                 , Stan.SamplerCSV
-                 , Stan.ModelBuilder
---                 , Stan.ModelBuilder.BuilderTypes
-                 , Stan.ModelBuilder.BuildingBlocks
-                 , Stan.ModelBuilder.BuildingBlocks.ArrayHelpers
-                 , Stan.ModelBuilder.BuildingBlocks.CovarianceStructure
-                 , Stan.ModelBuilder.BuildingBlocks.DirichletMultinomial
-                 , Stan.ModelBuilder.BuildingBlocks.GroupAlpha
-                 , Stan.ModelBuilder.DesignMatrix
-                 , Stan.ModelBuilder.Distributions
-                 , Stan.ModelBuilder.Distributions.RealBinomial
-                 , Stan.ModelBuilder.TypedExpressions.StanFunctions
-                 , Stan.ModelBuilder.SumToZero
-                 , Stan.RScriptBuilder
-                 , Stan.Frames
+  exposed-modules: Stan.Builder.Build
+                 , Stan.Builder.CoreTypes
+                 , Stan.Builder.JSON
+                 , Stan.Builder.ParameterTypes
+                 , Stan.Builder.Parameters
   hs-source-dirs:   src
-
-executable model-test
-   import: common-options
-   ghc-options: -Wall -O
-   hs-source-dirs: test
-   main-is: Main.hs
-   other-modules: Models
-                , ModelPaths
-                , KnitEnvironment
-   build-depends: base
-                , bytestring
-                , containers
-                , foldl
-                , haskell-stan
-                , hs-cmdstan
-                , knit-haskell
-                , flat
-                , Frames
-                , Frames-serialize
-                , Frames-streamly
-                , lens
-                , relude
-                , text
-                , th-env
-                , vector
-   mixins:  base hiding (Prelude)
-          , relude (Relude as Prelude
-          , Relude.Extra)
-   default-language: Haskell2010
-
-executable expressions-test
-   import: common-options
-   ghc-options: -Wall -O
-   hs-source-dirs: testExpressions
-   main-is: Main.hs
-   build-depends: base
-                , haskell-stan
-                , prettyprinter
-                , relude
-   mixins:  base hiding (Prelude)
-          , relude (Relude as Prelude
-          , Relude.Extra)
