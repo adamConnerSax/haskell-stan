@@ -38,6 +38,7 @@ import qualified Stan.Language.TypedList as SLTL
 import Stan.Language.TypedList (TypedList(..))
 import qualified Stan.Language.Statements as SLS
 import qualified Stan.Language.Functions as SLF
+import qualified Stan.Functions.Containers as SFC
 
 import qualified Control.Monad.State as St
 --import qualified Stan.Language.StanFunctions as TE
@@ -294,7 +295,7 @@ iidMatrixBP :: SLS.NamedDeclSpec SLT.EMat
             -> SLF.Density SLT.ECVec qs
             -> PT.BuildParameter SLT.EMat
 iidMatrixBP nds ftd ps d = PT.UntransformedP nds ftd ps
-                           $ \qs m -> SLS.addStmt $ SLS.sample (SLS.functionE SLT.to_vector (m :> TNil)) d qs
+                           $ \qs m -> SLS.addStmt $ SLS.sample (SFC.to_vector m) d qs
 
 -- this puts the prior on the raw parameters
 withIIDRawMatrix :: SLS.NamedDeclSpec SLT.EMat

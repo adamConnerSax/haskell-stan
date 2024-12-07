@@ -138,13 +138,13 @@ beta_lupdf = rvDensity2p "beta_lupdf"
 beta_rng ::  RealOrVec t => SLE.UExpr t -> SLE.UExpr t -> SLE.UExpr t
 beta_rng = rvRNG2p "beta_rng"
 
-betaS, betaS_lpdf, betaS_lupdf :: RealOrVec t  => RealOrVec t => SLE.UExpr t -> SLE.RealE -> SLE.RealE -> SLE.RealE
-betaS = rvDensity2p "beta"
-betaS_lpdf = rvDensity2p "beta_lpdf"
-betaS_lupdf = rvDensity2p "beta_lupdf"
+betaS, betaS_lpdf, betaS_lupdf :: RealOrVec t => SLE.UExpr t -> SLE.RealE -> SLE.RealE -> SLE.RealE
+betaS = rvDensity2pS "beta"
+betaS_lpdf = rvDensity2pS "beta_lpdf"
+betaS_lupdf = rvDensity2pS "beta_lupdf"
 
-betaS_rng ::  RealOrVec t => SLE.RealE -> SLE.RealE t -> SLE.UExpr t
-betaS_rng = rvRNG2p "beta_rng"
+betaS_rng ::  RealOrVec t => SLE.RealE -> SLE.RealE -> SLE.UExpr t
+betaS_rng = rvRNG2pS "beta_rng"
 
 beta_proportion, beta_proportion_lpdf, beta_proportion_lupdf :: RealOrVec t  => RealOrVec t => SLE.UExpr t -> SLE.UExpr t -> SLE.UExpr t -> SLE.RealE
 beta_proportion = rvDensity2p "beta_proportion"
@@ -171,8 +171,8 @@ multiNormalDensity :: MultiNormalDensityC t => Text -> SLE.UExpr t -> SLE.UExpr 
 multiNormalDensity dName c p m = SLE.densityE (SLF.simpleDensity dName) c (p :> m :> TNil)
 
 multiNormalRNG :: (MultiNormalDensityC t, SFC.GenSType (MultiNormalRngReturnT t))
-  => SLE.UExpr t -> SLE.UExpr SLT.ESqMat -> SLE.UExpr  (MultiNormalRngReturnT t)
-multiNormalRNG rngName p m = SLE.functionE (SLF.simpleFunction rngName) (p :> m :> TNil)
+  => Text -> SLE.UExpr t -> SLE.UExpr SLT.ESqMat -> SLE.UExpr  (MultiNormalRngReturnT t)
+multiNormalRNG stanName p m = SLE.functionE (SLF.simpleFunction stanName) (p :> m :> TNil)
 
 multi_normal_cholesky, multi_normal_cholesky_lpdf, multi_normal_cholesky_lupdf ::  MultiNormalDensityC t
   => SLE.UExpr t -> SLE.UExpr t -> SLE.UExpr SLT.ESqMat -> SLE.RealE
@@ -231,6 +231,8 @@ binomial_logit_lupdf = binomialD "binomial_logit_lupdf"
 
 betaBinomialD :: BinDensityC t t' => Text -> SLE.UExpr t -> SLE.UExpr t -> SLE.UExpr t' -> SLE.UExpr t' -> SLE.RealE
 betaBinomialD stanName k n alpha beta = SLE.densityE (SLF.simpleDensity stanName) k (n :> alpha :> beta :> TNil)
+
+beta_binomial, beta_binomial_lpmf,beta_binomial_lupmf  :: BinDensityC t t' => SLE.UExpr t -> SLE.UExpr t -> SLE.UExpr t' -> SLE.UExpr t' -> SLE.RealE
 beta_binomial = betaBinomialD "beta_binomial"
 beta_binomial_lpmf = betaBinomialD "beta_binomial_lpmf"
 beta_binomial_lupmf = betaBinomialD "beta_binomial_lupmf"
@@ -244,17 +246,19 @@ type CategoricalTypes t = (SFC.TypeOneOf t [SLT.EInt, SLT.EIntArray], SFC.GenSTy
 
 categoricalD :: CategoricalTypes t => Text -> SLE.UExpr t -> SLE.VectorE -> SLE.RealE
 categoricalD stanName y theta = SLE.densityE (SLF.simpleDensity stanName) y (theta :> TNil)
+
+categorical, categorical_lpmf, categorical_lupmf  :: CategoricalTypes t => SLE.UExpr t -> SLE.VectorE -> SLE.RealE
 categorical = categoricalD "categorical"
 categorical_lpmf = categoricalD "categorical_lpmf"
-categorical_lupmf = catefgoricalD "categorical_lupmf"
+categorical_lupmf = categoricalD "categorical_lupmf"
 
 categorical_rng :: SLE.VectorE -> SLE.IntE --Function EInt '[t]
 categorical_rng theta = SLE.functionE (SLF.simpleFunction "categorical_rng") (theta :> TNil)
 {-# INLINEABLE categorical_rng #-}
 
 
-categorical_logit, categorical_logit_lpmf, categorical_logit_lupmf :: CategoricalLogitTypes t
-  => TE.UExpr t -> TE.VectorE -> TE.RealE
+categorical_logit, categorical_logit_lpmf, categorical_logit_lupmf :: CategoricalTypes t
+  => SLE.UExpr t -> SLE.VectorE -> SLE.RealE
 categorical_logit = categoricalD "categorical_logit"
 categorical_logit_lpmf = categoricalD "categorical_logit_lpmf"
 categorical_logit_lupmf = categoricalD "categorical_logit_lupmf"
@@ -265,56 +269,42 @@ categorical_logit_rng beta = SLE.functionE (SLF.simpleFunction "categorical_logi
 -- HERE
 
 -- Multinomial
-multinomial :: (TypeOneOf t [ESimplex, ECVec, ERVec], GenSType t) => Density EIntArray '[t]
-multinomial = simpleDensity "multinomial"
-{-# INLINEABLE multinomial #-}
+-- gamma should be on the simplex
+multinomialD :: SFC.Vector t => Text -> SLE.UExpr SLT.EIntArray -> SLE.UExpr t -> SLE.RealE
+multinomialD stanName ns gamma = SLE.densityE (SLF.simpleDensity stanName) ns (gamma :> TNil)
 
-multinomial_lpmf :: (TypeOneOf t [ESimplex, ECVec, ERVec], GenSType t) => Density EIntArray '[t]
-multinomial_lpmf = simpleDensity "multinomial_lpmf"
-{-# INLINEABLE multinomial_lpmf #-}
+multinomial, multinomial_lpmf, multinomial_lupmf :: SFC.Vector t => SLE.UExpr SLT.EIntArray -> SLE.UExpr t -> SLE.RealE --Density SLT.EIntArray '[t]
+multinomial = multinomialD "multinomial"
+multinomial_lpmf = multinomialD "multinomial_lpmf"
+multinomial_lupmf = multinomialD "multinomial_lupmf"
 
-multinomial_lupmf :: (TypeOneOf t [ESimplex, ECVec, ERVec], GenSType t) => Density EIntArray '[t]
-multinomial_lupmf = simpleDensity "multinomial_lupmf"
-{-# INLINEABLE multinomial_lupmf #-}
+multinomialRNG :: SFC.Vector t => Text -> SLE.UExpr t -> SLE.UExpr SLT.EIntArray
+multinomialRNG stanName gamma = SLE.functionE (SLF.simpleFunction stanName) (gamma :> TNil)
 
-multinomial_rng :: (TypeOneOf t [ESimplex, ECVec, ERVec], GenSType t) => Function EIntArray '[t, EInt]
-multinomial_rng = simpleFunction "multinomial_rng"
-{-# INLINEABLE multinomial_rng #-}
+multinomial_rng :: SFC.Vector t => SLE.UExpr t -> SLE.UExpr SLT.EIntArray --Function EIntArray '[t, EInt]
+multinomial_rng = multinomialRNG "multinomial_rng"
 
-multinomial_logit :: (TypeOneOf t [ECVec, ERVec], GenSType t) =>  Density EIntArray '[t]
-multinomial_logit = simpleDensity "multinomial_logit"
-{-# INLINEABLE multinomial_logit #-}
+multinomial_logit, multinomial_logit_lpmf, multinomial_logit_lupmf :: SFC.Vector t => SLE.UExpr SLT.EIntArray -> SLE.UExpr t -> SLE.RealE --Density EIntArray '[t]
+multinomial_logit = multinomialD "multinomial_logit"
+multinomial_logit_lpmf = multinomialD "multinomial_logit_lpmf"
+multinomial_logit_lupmf = multinomialD "multinomial_logit_lupmf"
 
-multinomial_logit_lpmf ::  (TypeOneOf t [ECVec, ERVec], GenSType t) => Density EIntArray '[t]
-multinomial_logit_lpmf = simpleDensity "multinomial_logit_lpmf"
-{-# INLINEABLE multinomial_logit_lpmf #-}
-
-multinomial_logit_lupmf ::  (TypeOneOf t [ECVec, ERVec], GenSType t) => Density EIntArray '[t]
-multinomial_logit_lupmf = simpleDensity "multinomial_logit_lupmf"
-{-# INLINEABLE multinomial_logit_lupmf #-}
-
-multinomial_logit_rng :: Function EIntArray '[ECVec, EInt]
-multinomial_logit_rng = simpleFunction "multinomial_logit_rng"
-{-# INLINEABLE multinomial_logit_rng #-}
+multinomial_logit_rng :: SFC.Vector t => SLE.UExpr t -> SLE.UExpr SLT.EIntArray
+multinomial_logit_rng = multinomialRNG "multinomial_logit_rng"
 
 -- dirichlet
-type DirichletTypes t t' = (TypeOneOf t [ECVec, ERVec, ESimplex, EArray1 ECVec, EArray1 ERVec, EArray1 ESimplex]
-                           , TypeOneOf t' [ECVec, ERVec, EArray1 ECVec, EArray1 ERVec]
-                           , Dimension t ~ Dimension t'
-                           , GenSType t, GenSType t')
+type DirichletTypes t t' = (SFC.TypeOneOf t [SLT.ECVec, SLT.ERVec, SLT.EArray1 SLT.ECVec, SLT.EArray1 SLT.ERVec]
+                           , SFC.TypeOneOf t' [SLT.ECVec, SLT.ERVec, SLT.EArray1 SLT.ECVec, SLT.EArray1 SLT.ERVec]
+                           , SLI.Dimension t ~ SLI.Dimension t'
+                           , SFC.GenSType t, SFC.GenSType t')
 
-dirichlet :: DirichletTypes t t' => Density t '[t']
-dirichlet = simpleDensity "dirichlet"
-{-# INLINEABLE dirichlet #-}
+dirichletD :: DirichletTypes t t' => Text -> SLE.UExpr t -> SLE.UExpr t' -> SLE.RealE
+dirichletD stanName theta alpha = SLE.densityE (SLF.simpleDensity stanName) theta (alpha :> TNil)
 
-dirichlet_lupdf :: DirichletTypes t t' => Density t '[t']
-dirichlet_lupdf = simpleDensity "dirichlet_lupdf"
-{-# INLINEABLE dirichlet_lupdf #-}
+dirichlet, dirichlet_lpdf, dirichlet_lupdf :: DirichletTypes t t' => SLE.UExpr t -> SLE.UExpr t' -> SLE.RealE
+dirichlet = dirichletD "dirichlet"
+dirichlet_lpdf = dirichletD "dirichlet_lpdf"
+dirichlet_lupdf = dirichletD "dirichlet_lupdf"
 
-dirichlet_lpdf :: DirichletTypes t t' => Density t '[t']
-dirichlet_lpdf = simpleDensity "dirichlet_lpdf"
-{-# INLINEABLE dirichlet_lpdf #-}
-
-dirichlet_rng :: (TypeOneOf t [ECVec, ERVec], GenSType t) => Function t '[t]
-dirichlet_rng = simpleFunction "dirichlet_rng"
-{-# INLINEABLE dirichlet_rng #-}
+dirichlet_rng :: SFC.Vector t => SLE.UExpr t -> SLE.UExpr t --Function t '[t]
+dirichlet_rng alpha = SLE.functionE (SLF.simpleFunction "dirichlet_rng") (alpha :> TNil)

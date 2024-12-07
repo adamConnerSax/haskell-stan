@@ -567,6 +567,8 @@ dumpBuilderState bs = -- (BuilderState dvs ibs ris js hf c) =
   <> "\n functions: " <> show (hasFunctions bs)
   <> "\n parameterCollection (keys)" <> show (DM.keys $ DT.pdm $ parameterCollection bs)
 -}
+
+{- Moved to Stan.Build.Builder
 getAndEmptyProgram :: StanBuilderM md gq TE.StanProgram
 getAndEmptyProgram = do
   (StanCode cb p) <- gets code
@@ -584,7 +586,7 @@ addCodeAbove ma = do
   a <- ma
   addProgramBelow pBelow
   pure a
-
+-}
 --getRowInfo :: InputDataType -> RowTypeTag r
 {- Moved Stan.Builder.Build
 withRowInfo :: StanBuilderM md gq y -> (forall x . RowInfo x r -> StanBuilderM md gq y) -> RowTypeTag r -> StanBuilderM md gq y
@@ -916,6 +918,7 @@ dataSetTag idt tName = do
     Just _ -> return rtt
 -}
 
+{- Moved to Stan.Builder.Build
 addFunctionsOnce :: Text -> StanBuilderM md gq () -> StanBuilderM md gq ()
 addFunctionsOnce functionsName fCode = do
 --  (BuilderState vars ibs rowBuilders cj fsNames code) <- get
@@ -948,7 +951,7 @@ addDensityOnce f@(TE.Density fn _ _) argNames fBF = do
     inBlock SBFunctions $ addStmtToCode $ TE.function (TE.densityAsFunction f) argNames fBF
     modify $ modifyFunctionNames (Set.insert fn)
   pure f
-
+-}
 
 -- TODO: We should error if added twice but that doesn't quite work with post-stratifation code now.  Fix.
 addIntMapBuilder :: forall r k md gq.
@@ -1593,6 +1596,8 @@ underscoredIf t = if T.null t then "" else "_" <> t
 stanIndented :: StanBuilderM md gq a -> StanBuilderM md gq a
 stanIndented = indented 2
 -}
+
+{- Moved to Stan.Build.Builder
 varScopeBlock :: StanBlock -> StanBuilderM md gq ()
 varScopeBlock sb = case sb of
   SBModel -> modify (modifyDeclaredVars $ changeVarScope ModelScope)
@@ -1608,7 +1613,7 @@ inBlock b m = do
   setBlock oldBlock
   varScopeBlock oldBlock
   return x
-
+-}
 {-
 printExprM :: Text -> SME.StanExpr -> StanBuilderM md gq Text
 printExprM context e = do

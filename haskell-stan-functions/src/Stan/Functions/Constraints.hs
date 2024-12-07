@@ -21,12 +21,14 @@ module Stan.Functions.Constraints
   (
     module Stan.Functions.Constraints
   , module Stan.Language.Types -- reexport the constraints
+  , module Stan.Language.Indexing
   )
   where
 
 import qualified Stan.Language.Types as SLT
 import qualified Stan.Language.Indexing as SLI
 import Stan.Language.Types (TypeOneOf, GenSType, IsContainer)
+import Stan.Language.Indexing (Dimension)
 --import Stan.Language.TypedList (TypedList(..))
 --import GHC.TypeLits (ErrorMessage((:<>:)))
 --import Data.Type.Nat (SNatI)
