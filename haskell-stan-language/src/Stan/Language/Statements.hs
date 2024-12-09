@@ -82,50 +82,55 @@ replaceDeclVMs vms = \case
   DeclSpec st vdims _-> DeclSpec st vdims vms
   ArraySpec n arrDims ds -> ArraySpec n arrDims (replaceDeclVMs vms ds)
 
-intSpec :: [VarModifier UExpr EInt] -> DeclSpec EInt
-intSpec = DeclSpec StanInt VNil
+addVMs :: [VarModifier UExpr (ScalarType t)] -> DeclSpec t -> DeclSpec t
+addVMs vms' = \case
+  DeclSpec st vdims vms -> DeclSpec st vdims (vms <> vms')
+  ArraySpec n arrDims ds -> ArraySpec n arrDims (addVMs vms' ds)
 
-realSpec :: [VarModifier UExpr EReal] -> DeclSpec EReal
-realSpec = DeclSpec StanReal VNil
+intSpec :: DeclSpec EInt
+intSpec = DeclSpec StanInt VNil []
 
-complexSpec :: [VarModifier UExpr EComplex] -> DeclSpec EComplex
-complexSpec = DeclSpec StanComplex VNil
+realSpec :: DeclSpec EReal
+realSpec = DeclSpec StanReal VNil []
 
-vectorSpec :: UExpr EInt -> [VarModifier UExpr EReal] -> DeclSpec ECVec
-vectorSpec ie = DeclSpec StanVector (ie ::: VNil)
+complexSpec :: DeclSpec EComplex
+complexSpec = DeclSpec StanComplex VNil []
 
-rowVectorSpec :: UExpr EInt -> [VarModifier UExpr EReal] -> DeclSpec ERVec
-rowVectorSpec ie = DeclSpec StanRowVector (ie ::: VNil)
+vectorSpec :: UExpr EInt -> DeclSpec ECVec
+vectorSpec ie = DeclSpec StanVector (ie ::: VNil) []
 
-orderedSpec :: UExpr EInt -> [VarModifier UExpr EReal] -> DeclSpec ECVec
-orderedSpec ie = DeclSpec StanOrdered (ie ::: VNil)
+rowVectorSpec :: UExpr EInt -> DeclSpec ERVec
+rowVectorSpec ie = DeclSpec StanRowVector (ie ::: VNil) []
 
-positiveOrderedSpec :: UExpr EInt -> [VarModifier UExpr EReal] -> DeclSpec ECVec
-positiveOrderedSpec ie = DeclSpec StanPositiveOrdered (ie ::: VNil)
+orderedSpec :: UExpr EInt -> DeclSpec ECVec
+orderedSpec ie = DeclSpec StanOrdered (ie ::: VNil) []
 
-simplexSpec :: UExpr EInt -> [VarModifier UExpr EReal] -> DeclSpec ECVec
-simplexSpec ie = DeclSpec StanSimplex (ie ::: VNil)
+positiveOrderedSpec :: UExpr EInt -> DeclSpec ECVec
+positiveOrderedSpec ie = DeclSpec StanPositiveOrdered (ie ::: VNil) []
 
-unitVectorSpec :: UExpr EInt -> [VarModifier UExpr EReal] -> DeclSpec ECVec
-unitVectorSpec ie = DeclSpec StanUnitVector (ie ::: VNil)
+simplexSpec :: UExpr EInt -> DeclSpec ECVec
+simplexSpec ie = DeclSpec StanSimplex (ie ::: VNil) []
 
-matrixSpec :: UExpr EInt -> UExpr EInt -> [VarModifier UExpr EReal] -> DeclSpec EMat
-matrixSpec re ce = DeclSpec StanMatrix (re ::: ce ::: VNil)
+unitVectorSpec :: UExpr EInt -> DeclSpec ECVec
+unitVectorSpec ie = DeclSpec StanUnitVector (ie ::: VNil) []
 
-sqMatrixSpec :: UExpr EInt -> [VarModifier UExpr EReal] -> DeclSpec ESqMat
-sqMatrixSpec ne = DeclSpec StanSqMatrix (ne ::: VNil)
+matrixSpec :: UExpr EInt -> UExpr EInt -> DeclSpec EMat
+matrixSpec re ce = DeclSpec StanMatrix (re ::: ce ::: VNil) []
 
-corrMatrixSpec :: UExpr EInt -> [VarModifier UExpr EReal] -> DeclSpec ESqMat
-corrMatrixSpec rce = DeclSpec StanCorrMatrix (rce ::: VNil)
+sqMatrixSpec :: UExpr EInt -> DeclSpec ESqMat
+sqMatrixSpec ne = DeclSpec StanSqMatrix (ne ::: VNil) []
 
-covMatrixSpec :: UExpr EInt -> [VarModifier UExpr EReal] -> DeclSpec ESqMat
-covMatrixSpec rce = DeclSpec StanCovMatrix (rce ::: VNil)
+corrMatrixSpec :: UExpr EInt -> DeclSpec ESqMat
+corrMatrixSpec rce = DeclSpec StanCorrMatrix (rce ::: VNil) []
 
-choleskyFactorCorrSpec :: UExpr EInt -> [VarModifier UExpr EReal] -> DeclSpec ESqMat
-choleskyFactorCorrSpec rce = DeclSpec StanCholeskyFactorCorr (rce ::: VNil)
+covMatrixSpec :: UExpr EInt -> DeclSpec ESqMat
+covMatrixSpec rce = DeclSpec StanCovMatrix (rce ::: VNil) []
 
-choleskyFactorCovSpec :: UExpr EInt -> [VarModifier UExpr EReal] -> DeclSpec ESqMat
-choleskyFactorCovSpec rce = DeclSpec StanCholeskyFactorCov (rce ::: VNil)
+choleskyFactorCorrSpec :: UExpr EInt -> DeclSpec ESqMat
+choleskyFactorCorrSpec rce = DeclSpec StanCholeskyFactorCorr (rce ::: VNil) []
+
+choleskyFactorCovSpec :: UExpr EInt -> DeclSpec ESqMat
+choleskyFactorCovSpec rce = DeclSpec StanCholeskyFactorCov (rce ::: VNil) []
 
 arraySpec :: (forall f.VecToTListC f n, forall f.TListToVecC f n, GenTypeList (SameTypeList EInt n))
           => SNat (DT.S n) -> Vec (DT.S n) (UExpr EInt) -> DeclSpec t -> DeclSpec (EArray (DT.S n) t)
@@ -137,11 +142,16 @@ array1Spec se = arraySpec s1 (se ::: VNil)
 array2Spec ::  UExpr EInt -> UExpr EInt -> DeclSpec t -> DeclSpec (EArray N2 t)
 array2Spec i1 i2 = arraySpec s2 (i1 ::: i2 ::: VNil)
 
-intArraySpec :: UExpr EInt -> [VarModifier UExpr EInt] -> DeclSpec EIndexArray
-intArraySpec se cs = arraySpec s1 (se ::: VNil) (intSpec cs)
+intArraySpec :: UExpr EInt -> DeclSpec EIndexArray
+intArraySpec se = arraySpec s1 (se ::: VNil) intSpec
 
-indexArraySpec :: UExpr EInt -> [VarModifier UExpr EInt] -> DeclSpec EIndexArray
-indexArraySpec = intArraySpec
+-- 1d int array with a lower bount of 1
+indexArraySpec :: UExpr EInt -> DeclSpec EIndexArray
+indexArraySpec se = arraySpec s1 (se ::: VNil) (addVMs [lowerM $ intE 1] intSpec)
+
+-- 1d int array with a lower bound of 0
+countArraySpec :: UExpr EInt -> DeclSpec EIndexArray
+countArraySpec se = arraySpec s1 (se ::: VNil) (addVMs [lowerM $ intE 0] intSpec)
 
 
 -- functions for ease of use and exporting.  Monomorphised to UStmt, etc.

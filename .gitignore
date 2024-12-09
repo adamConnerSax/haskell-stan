@@ -18,7 +18,7 @@ examples/html
 *.aux
 *.png
 *.hie
-.hie/
+*/\.hie/*
 .DS_Store
 .flat-kh-cache
 stan+/*

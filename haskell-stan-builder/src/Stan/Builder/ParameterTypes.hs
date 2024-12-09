@@ -77,11 +77,12 @@ instance GC.GCompare ParameterTag where
       EQ -> GC.GEQ
       LT -> GC.GLT
       GT -> GC.GGT
-    -- The below is "incomplete" since it's missing the "EQ" case. But that won't compile since a and b are not provably the same
+    -- The below is "incomplete" if missing the "EQ" case. But that won't compile since a and b are not provably the same
+    -- Or uses undefined and warns about that
     Nothing -> case compare (sTypeToEType $ taggedParameterType a) (sTypeToEType $ taggedParameterType b) of
       LT -> GC.GLT
       GT -> GC.GGT
-
+      EQ -> undefined --GC.GEQ
 
 instance Show (ParameterTag t) where
   show (ParameterTag st n) = "<" <> show st <> ": " <> show n <> ">"
@@ -164,10 +165,13 @@ data TData :: TE.EType -> Type where
 
 parameterTagFromTData :: TData t -> ParameterTag t
 parameterTagFromTData (TData (TE.NamedDeclSpec n (TE.DeclSpec st _ _)) _ _ _) = ParameterTag (TE.sTypeFromStanType st) n
+parameterTagFromTData (TData (TE.NamedDeclSpec n (TE.ArraySpec sn _ ds)) _ _ _) = ParameterTag (TE.sTypeFromStanType $ TE.StanArray sn $ TE.declType ds) n
+--parameterTagFromTData (TData _ _ _ _) = error "parameterTagFromData called "
 
 instance TestEquality TData where
   testEquality tda tdb = testEquality (f tda) (f tdb) where
     f (TData (TE.NamedDeclSpec _ (TE.DeclSpec st _ _)) _ _ _) = TE.sTypeFromStanType st
+    f (TData (TE.NamedDeclSpec _ (TE.ArraySpec sn _ ds)) _ _ _) = TE.sTypeFromStanType $ TE.StanArray sn $ TE.declType ds
 
 
 --withTData :: TData t -> (forall ts.TE.NamedDeclSpec t -> TE.TypedList TData ts -> (TE.ExprList ts -> TE.UExpr t) -> r) -> r

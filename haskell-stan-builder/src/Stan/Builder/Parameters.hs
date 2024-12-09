@@ -40,7 +40,7 @@ import qualified Stan.Language.Statements as SLS
 import qualified Stan.Language.Functions as SLF
 import qualified Stan.Functions.Containers as SFC
 
-import qualified Control.Monad.State as St
+--import qualified Control.Monad.State as St
 --import qualified Stan.Language.StanFunctions as TE
 import Stan.Language.Recursion (hfmap, K(..))
 
@@ -307,7 +307,7 @@ withIIDRawMatrix :: SLS.NamedDeclSpec SLT.EMat
                  -> SBC.StanBuilderM md gq (PT.Parameter SLT.EMat)
 withIIDRawMatrix nds tpl rawCsM dwa qs f = do
  let SLS.DeclSpec _ (rowsE ::: colsE ::: VNil) _ = SLS.decl nds
-     rawNDS = SLS.NamedDeclSpec (rawName $ SLS.declName nds) $ SLS.matrixSpec rowsE colsE $ fromMaybe [] rawCsM
+     rawNDS = SLS.NamedDeclSpec (rawName $ SLS.declName nds) $ SLS.addVMs (fromMaybe [] rawCsM) $ SLS.matrixSpec rowsE colsE
  rawP <- SLS.withDWA (\d tl -> iidMatrixP rawNDS [] (exprListToParameters tl) d) dwa
  addBuildParameter $ simpleTransformedP nds [] (rawP :> qs) tpl (\(rmE :> qsE) -> PT.DeclRHS $ f qsE rmE)
 
