@@ -70,6 +70,7 @@ library
          , Relude.Extra)
   exposed-modules: Stan.Functions
                  , Stan.Functions.Constraints
+                 , Stan.Functions.Operators
                  , Stan.Functions.Containers
                  , Stan.Functions.Numeric
                  , Stan.Functions.Probability
