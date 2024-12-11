@@ -2,8 +2,6 @@
 *~
 *#
 /dist
-\#*#
-.#*
 /dist-newstyle
 cabal.project.local
 TAGS
@@ -18,7 +16,6 @@ examples/html
 *.aux
 *.png
 *.hie
-*/\.hie/*
 .DS_Store
 .flat-kh-cache
 stan+/*
@@ -30,5 +27,4 @@ data/*.json
 /*.html
 /*.csv
 /*.eventlog
-/haskell-stan/.hie/
 /haskell-stan/test/stan/
