@@ -88,7 +88,8 @@ library
   mixins:  base hiding (Prelude)
          , relude (Relude as Prelude
          , Relude.Extra)
-  exposed-modules: Stan.Builder.Build
+  exposed-modules: Stan.Builder
+                 , Stan.Builder.Build
                  , Stan.Builder.CoreTypes
                  , Stan.Builder.JSON
                  , Stan.Builder.ParameterTypes

@@ -76,7 +76,8 @@ library
   mixins:  base hiding (Prelude)
          , relude (Relude as Prelude
          , Relude.Extra)
-  exposed-modules: Stan.Language.Evaluate
+  exposed-modules: Stan.Language
+                 , Stan.Language.Evaluate
                  , Stan.Language.Expressions
                  , Stan.Language.Format
                  , Stan.Language.Functions
