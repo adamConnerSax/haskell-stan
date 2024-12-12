@@ -388,11 +388,12 @@ opDoc = \case
   SSubtract -> "-"
   SMultiply -> "*"
   SDivide -> PP.slash
+  SIntDivide -> "%" <> PP.slash <> "%"
   SPow -> "^"
   SModulo -> "%"
   SElementWise sbo -> PP.dot <> opDoc sbo
---  SAndEqual sbo -> opDoc sbo <> PP.equals
   SBoolean bop -> boolOpDoc bop
+--  SAndEqual sbo -> opDoc sbo <> PP.equals
 
 nestedVecToCode :: NestedVec n (K IExprCode t) -> CodePP
 nestedVecToCode nv = unNestedToCode PP.braces (drop 1 $ reverse dims) itemsCode

@@ -23,16 +23,11 @@ module Stan.Functions.Probability
   where
 import qualified Stan.Functions.Constraints as SFC
 import qualified Stan.Language.Types as SLT
-import qualified Stan.Language.TypedList as SLTL
 import Stan.Language.TypedList (TypedList(..))
 import qualified Stan.Language.Functions as SLF
 import qualified Stan.Language.Indexing as SLI
 import qualified Stan.Language.Expressions as SLE
 
-import qualified GHC.TypeLits as TE
-import GHC.TypeLits (ErrorMessage((:<>:)))
-import Data.Type.Nat (SNatI)
-import Data.Type.Equality (type (~))
 import Prelude hiding (Nat)
 
 
@@ -230,7 +225,7 @@ binomial_logit_lpdf = binomialD "binomial_logit_lpdf"
 binomial_logit_lupdf = binomialD "binomial_logit_lupdf"
 
 betaBinomialD :: BinDensityC t t' => Text -> SLE.UExpr t -> SLE.UExpr t -> SLE.UExpr t' -> SLE.UExpr t' -> SLE.RealE
-betaBinomialD stanName k n alpha beta = SLE.densityE (SLF.simpleDensity stanName) k (n :> alpha :> beta :> TNil)
+betaBinomialD stanName k n alpha beta' = SLE.densityE (SLF.simpleDensity stanName) k (n :> alpha :> beta' :> TNil)
 
 beta_binomial, beta_binomial_lpmf,beta_binomial_lupmf  :: BinDensityC t t' => SLE.UExpr t -> SLE.UExpr t -> SLE.UExpr t' -> SLE.UExpr t' -> SLE.RealE
 beta_binomial = betaBinomialD "beta_binomial"
@@ -238,7 +233,7 @@ beta_binomial_lpmf = betaBinomialD "beta_binomial_lpmf"
 beta_binomial_lupmf = betaBinomialD "beta_binomial_lupmf"
 
 beta_binomial_rng :: BinDensityC t t' => SLE.UExpr t -> SLE.UExpr t' -> SLE.UExpr t' -> SLE.UExpr t
-beta_binomial_rng n alpha beta = SLE.functionE (SLF.simpleFunction "beta_binomial_rng") (n :> alpha :> beta :> TNil)
+beta_binomial_rng n alpha beta' = SLE.functionE (SLF.simpleFunction "beta_binomial_rng") (n :> alpha :> beta' :> TNil)
 {-# INLINEABLE beta_binomial_rng #-}
 
 -- Categorical
@@ -264,14 +259,12 @@ categorical_logit_lpmf = categoricalD "categorical_logit_lpmf"
 categorical_logit_lupmf = categoricalD "categorical_logit_lupmf"
 
 categorical_logit_rng :: SLE.VectorE -> SLE.IntE
-categorical_logit_rng beta = SLE.functionE (SLF.simpleFunction "categorical_logit_rng") (beta :> TNil)
-
--- HERE
+categorical_logit_rng beta' = SLE.functionE (SLF.simpleFunction "categorical_logit_rng") (beta' :> TNil)
 
 -- Multinomial
 -- gamma should be on the simplex
 multinomialD :: SFC.Vector t => Text -> SLE.UExpr SLT.EIntArray -> SLE.UExpr t -> SLE.RealE
-multinomialD stanName ns gamma = SLE.densityE (SLF.simpleDensity stanName) ns (gamma :> TNil)
+multinomialD stanName ns gamma' = SLE.densityE (SLF.simpleDensity stanName) ns (gamma' :> TNil)
 
 multinomial, multinomial_lpmf, multinomial_lupmf :: SFC.Vector t => SLE.UExpr SLT.EIntArray -> SLE.UExpr t -> SLE.RealE --Density SLT.EIntArray '[t]
 multinomial = multinomialD "multinomial"
@@ -279,7 +272,7 @@ multinomial_lpmf = multinomialD "multinomial_lpmf"
 multinomial_lupmf = multinomialD "multinomial_lupmf"
 
 multinomialRNG :: SFC.Vector t => Text -> SLE.UExpr t -> SLE.UExpr SLT.EIntArray
-multinomialRNG stanName gamma = SLE.functionE (SLF.simpleFunction stanName) (gamma :> TNil)
+multinomialRNG stanName gamma' = SLE.functionE (SLF.simpleFunction stanName) (gamma' :> TNil)
 
 multinomial_rng :: SFC.Vector t => SLE.UExpr t -> SLE.UExpr SLT.EIntArray --Function EIntArray '[t, EInt]
 multinomial_rng = multinomialRNG "multinomial_rng"

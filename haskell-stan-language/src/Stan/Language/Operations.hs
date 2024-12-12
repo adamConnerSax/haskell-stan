@@ -111,13 +111,14 @@ type family BoolResultT (bo :: BoolOp) (a :: EType) (b :: EType) :: EType where
   BoolResultT BOr EBool EBool = EBool
   BoolResultT BOr a b = TE.TypeError (TE.Text "\"" :<>: TE.ShowType a :<>: TE.Text " || " :<>: TE.ShowType b :<>: TE.Text "\" is not defined." )
 
-data BinaryOp = BSubtract | BAdd | BDivide | BMultiply | BPow | BModulo | BElementWise BinaryOp | BAndEqual BinaryOp | BBoolean BoolOp
+data BinaryOp = BSubtract | BAdd | BDivide | BIntDivide | BMultiply | BPow | BModulo | BElementWise BinaryOp  | BBoolean BoolOp -- | BAndEqual BinaryOp
 
 data SBinaryOp :: BinaryOp -> Type where
   SAdd :: SBinaryOp BAdd
   SSubtract :: SBinaryOp BSubtract
   SMultiply :: SBinaryOp BMultiply
   SDivide :: SBinaryOp BDivide
+  SIntDivide :: SBinaryOp BIntDivide
   SPow :: SBinaryOp BPow
   SModulo :: SBinaryOp BModulo
   SElementWise :: SBinaryOp op -> SBinaryOp (BElementWise op)
@@ -128,6 +129,7 @@ binaryOpFromSBinaryOp SAdd = BAdd
 binaryOpFromSBinaryOp SSubtract = BSubtract
 binaryOpFromSBinaryOp SMultiply = BMultiply
 binaryOpFromSBinaryOp SDivide = BDivide
+binaryOpFromSBinaryOp SIntDivide = BIntDivide
 binaryOpFromSBinaryOp SPow = BPow
 binaryOpFromSBinaryOp SModulo = BModulo
 binaryOpFromSBinaryOp (SElementWise sop) = BElementWise (binaryOpFromSBinaryOp sop)
@@ -142,23 +144,28 @@ needParens BSubtract BMultiply = False
 needParens BAdd BSubtract = False
 needParens BAdd BAdd = False
 needParens BAdd BDivide = False
+needParens BAdd BIntDivide = False
 needParens BAdd BMultiply = False
 needParens BDivide BMultiply = False
+needParens BIntDivide BMultiply = False
 needParens BMultiply BDivide = False
+needParens BMultiply BIntDivide = False
 needParens BMultiply BMultiply = False
 needParens (BElementWise op1) (BElementWise op2) = needParens op1 op2
 needParens (BBoolean bop1) (BBoolean bop2) = not $ noParenBoolOps bop1 bop2
 needParens _ _ = True
 
+{-
 type family CanAndEqual (bo :: BinaryOp) :: BinaryOp where
   CanAndEqual (BBoolean _) =  TE.TypeError (TE.Text "Cannot AndEqual a boolean operator. That is, something like =/= makes no sense.")
   CanAndEqual a = a
-
+-}
 instance TestEquality SBinaryOp where
   testEquality SAdd SAdd = Just Refl
   testEquality SSubtract SSubtract = Just Refl
   testEquality SMultiply SMultiply = Just Refl
   testEquality SDivide SDivide = Just Refl
+  testEquality SIntDivide SIntDivide = Just Refl
   testEquality SPow SPow = Just Refl
   testEquality SModulo SModulo = Just Refl
   testEquality (SElementWise opa) (SElementWise opb) = case testEquality opa opb of
@@ -228,6 +235,8 @@ type family BinaryResultT (bo :: BinaryOp) (a :: EType) (b :: EType) :: EType wh
   BinaryResultT BDivide ESqMat a = IfRealNumber a ESqMat (TE.TypeError (TE.ShowType ESqMat :<>: TE.Text " and " :<>: TE.ShowType a :<>: TE.Text " cannot be divided." ))
   BinaryResultT BDivide (EArray n t) a = IfNumber a (BinaryResultT BDivide t a) (TE.TypeError (TE.ShowType (EArray n t) :<>: TE.Text " and " :<>: TE.ShowType a :<>: TE.Text " cannot be divided." ))
   BinaryResultT BDivide a b = IfNumbers a b (Promoted a b) (TE.TypeError (TE.ShowType a :<>: TE.Text " and " :<>: TE.ShowType b :<>: TE.Text " cannot be divided." ))
+  BinaryResultT BIntDivide EInt EInt = EInt
+  BinaryResultT BIntDivide a b = TE.TypeError (TE.ShowType a :<>: TE.Text " and " :<>: TE.ShowType b :<>: TE.Text " must both be integers to do integer division." )
   BinaryResultT BPow EInt EInt = EReal -- Stan spec
   BinaryResultT BPow EReal EReal = EReal
   BinaryResultT BPow EReal EInt = EReal
@@ -243,5 +252,5 @@ type family BinaryResultT (bo :: BinaryOp) (a :: EType) (b :: EType) :: EType wh
   BinaryResultT (BElementWise op) EMat ESqMat = EMat
   BinaryResultT (BElementWise op) ESqMat EMat = EMat
   BinaryResultT (BElementWise _) a b = TE.TypeError (TE.ShowType a :<>: TE.Text " and " :<>: TE.ShowType b :<>: TE.Text " cannot be combined elementwise." )
-  BinaryResultT (BAndEqual op) a b = BinaryResultT op a b
+--  BinaryResultT (BAndEqual op) a b = BinaryResultT op a b
   BinaryResultT (BBoolean bop) a b = BoolResultT bop a b

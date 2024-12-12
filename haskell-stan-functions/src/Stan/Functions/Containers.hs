@@ -28,13 +28,9 @@ import qualified Stan.Language.Types as SLT
 import qualified Stan.Language.TypedList as SLTL
 import Stan.Language.TypedList (TypedList(..))
 import qualified Stan.Language.Functions as SLF
-import qualified Stan.Language.Indexing as SLI
 import qualified Stan.Language.Expressions as SLE
 
-import qualified GHC.TypeLits as TE
-import GHC.TypeLits (ErrorMessage((:<>:)))
 import Data.Type.Nat (SNatI)
-import Data.Type.Equality (type (~))
 import Prelude hiding (Nat)
 
 array_num_elements :: (SNatI n, SLT.GenSType t) => SLE.UExpr (SLT.EArray n t) -> SLE.IntE
@@ -174,13 +170,13 @@ qr_thin_Q m = SLE.functionE (SLF.simpleFunction "qr_thin_Q") (m :> TNil)
 qr_thin_R m = SLE.functionE (SLF.simpleFunction "qr_thin_R") (m :> TNil)
 
 block :: SLE.MatrixE -> SLE.IntE -> SLE.IntE -> SLE.IntE -> SLE.IntE -> SLE.MatrixE --Function EMat [EMat, EInt, EInt, EInt, EInt]
-block m startRow startCol rows cols = SLE.functionE (SLF.simpleFunction "block") (m :> startRow :> startCol :> rows :> cols :> TNil)
+block m startRow startCol nRows mCols = SLE.functionE (SLF.simpleFunction "block") (m :> startRow :> startCol :> nRows :> mCols :> TNil)
 
 sub_col :: SLE.MatrixE -> SLE.IntE -> SLE.IntE -> SLE.IntE -> SLE.UExpr SLT.ECVec --Function ECVec [EMat, EInt, EInt, EInt]
-sub_col m startRow col rows = SLE.functionE (SLF.simpleFunction "sub_col") (m :> startRow :> col :> rows :> TNil)
+sub_col m startRow col nRows = SLE.functionE (SLF.simpleFunction "sub_col") (m :> startRow :> col :> nRows :> TNil)
 
 sub_row :: SLE.MatrixE -> SLE.IntE -> SLE.IntE -> SLE.IntE -> SLE.UExpr SLT.ERVec --Function ERVec [EMat, EInt, EInt, EInt]
-sub_row m row startCol cols = SLE.functionE (SLF.simpleFunction "sub_row") (m :> row :> startCol :> cols :> TNil)
+sub_row m row startCol mCols = SLE.functionE (SLF.simpleFunction "sub_row") (m :> row :> startCol :> mCols :> TNil)
 
 append_col :: SLE.MatrixE -> SLE.VectorE -> SLE.MatrixE --Function EMat [EMat, ECVec]
 append_col m v = SLE.functionE (SLF.simpleFunction "append_col") (m :> v :> TNil)

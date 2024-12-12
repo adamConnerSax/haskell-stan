@@ -186,11 +186,21 @@ assign = SAssign
 opAssign :: (ta ~ BinaryResultT bop ta tb) => SBinaryOp bop -> UExpr ta -> UExpr tb -> UStmt
 opAssign = SOpAssign
 
-plusEq :: (ta ~ BinaryResultT BAdd ta tb) => UExpr ta -> UExpr tb -> UStmt
+plusEq, (+=) :: (ta ~ BinaryResultT BAdd ta tb) => UExpr ta -> UExpr tb -> UStmt
 plusEq = opAssign SAdd
+(+=) = opAssign SAdd
 
-divEq :: (ta ~ BinaryResultT BDivide ta tb) => UExpr ta -> UExpr tb -> UStmt
+minusEq, (-=) :: (ta ~ BinaryResultT BSubtract ta tb) => UExpr ta -> UExpr tb -> UStmt
+minusEq = opAssign SSubtract
+(-=) = opAssign SSubtract
+
+timesEq, (*=) :: (ta ~ BinaryResultT BMultiply ta tb) => UExpr ta -> UExpr tb -> UStmt
+timesEq = opAssign SMultiply
+(*=) = opAssign SMultiply
+
+divEq, (/=) :: (ta ~ BinaryResultT BDivide ta tb) => UExpr ta -> UExpr tb -> UStmt
 divEq = opAssign SDivide
+(/=) = opAssign SDivide
 
 data DensityWithArgs g where
   DensityWithArgs :: Density g args -> TypedList UExpr args -> DensityWithArgs g
@@ -204,8 +214,9 @@ target = STarget
 sample :: UExpr t -> Density t args -> TypedList UExpr args -> UStmt
 sample = SSample
 
-sampleW :: UExpr t -> DensityWithArgs t  -> UStmt
+sampleW, (|~|) :: UExpr t -> DensityWithArgs t  -> UStmt
 sampleW ue (DensityWithArgs d al)= SSample ue d al
+ue |~| dwa = sampleW ue dwa
 
 type family ForEachSlice (a :: EType) :: EType where
   ForEachSlice EInt = EInt -- required for looping over ranges. But Ick.
