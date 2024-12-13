@@ -20,11 +20,31 @@ where
 --import qualified Stan.ModelBuilder.Expressions as SME
 import Prelude hiding (Nat)
 
-import Stan.Language.Types
-import Stan.Language.Expressions
+import Stan.Language.Types ( Nat(Z, S), EType(EInt, EArray) )
+import Stan.Language.Expressions ( IndexKey, LExpr, LExprF, UExpr, UExprF(..) )
 import Stan.Language.Statements
+    ( IndexLookupCtxt(sizes, indexes),
+      LStmt,
+      Stmt,
+      StmtF(SContextF),
+      UStmt )
 import Stan.Language.Recursion
+    ( HFunctor(..),
+      type (~>),
+      HTraversable(..),
+      NatM,
+      K(..),
+      IFix(IFix),
+      iCata,
+      iCataM,
+      IAlgM )
 import Stan.Language.Format
+    ( CodePP,
+      iExprToCode,
+      IExprCode(Bare),
+      stmtToCodeE,
+      exprToDocAlg,
+      stmtToCodeAlg )
 
 import qualified Data.Functor.Foldable.Monadic as RS
 import qualified Data.Functor.Foldable as RS

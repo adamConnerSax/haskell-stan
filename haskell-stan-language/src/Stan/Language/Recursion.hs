@@ -34,6 +34,8 @@ ana coAlg = a
   where
     a = Fix . fmap a . coAlg
 
+hylo :: Functor f => Alg f b -> CoAlg f a -> a -> b
+hylo alg coalg = h where h = alg . fmap h . coalg
 
 type AlgM m f a = f a -> m a
 type CoAlgM m f a = a -> m (f a)
@@ -47,6 +49,9 @@ anaM :: forall m f a. (Monad m, Traversable f) => CoAlgM m f a -> (a -> m (Fix f
 anaM coAlgM = a
   where
     a x = fmap Fix $ coAlgM x >>= mapM a
+
+hyloM :: (Monad m, Traversable f) => AlgM m f b -> CoAlgM m f a -> a -> m b
+hyloM alg coalg = h where h x = coalg x >>= traverse h >>= alg
 
 newtype IFix (f :: (k -> Type) -> (k -> Type)) (t :: k) = IFix { unIFix :: f (IFix f) t }
 
@@ -74,12 +79,17 @@ iAna coalg = a
     a :: g ~> IFix f
     a = IFix . hfmap a . coalg
 
+iHylo :: forall f g q . HFunctor f => IAlg f g -> ICoAlg f q -> (q ~> g)
+iHylo alg coalg = h
+  where
+    h :: (q ~> g)
+    h = alg . hfmap h . coalg
+
 type NatM :: (Type -> Type) -> (k -> Type) -> (k -> Type) -> Type
 type NatM m f g = forall x. f x -> m (g x)
 
 type IAlgM m f g = NatM m (f g) g
 type ICoAlgM m f g = NatM m g (f g)
-
 
 iCataM :: forall f m g.(Monad m, HTraversable f) => IAlgM m f g -> NatM m (IFix f) g
 iCataM algM = c
@@ -93,17 +103,21 @@ iAnaM coAlgM = a
     a :: NatM m g (IFix f)
     a x = fmap IFix $ coAlgM x >>= hmapM a
 
+iHyloM :: forall m f g q . (Monad m, HTraversable f) => IAlgM m f g -> ICoAlgM m f q -> NatM m q g
+iHyloM alg coalg = h
+  where
+    h :: NatM m q g
+    h fx = coalg fx >>= hmapM h >>= alg
+
 class HFunctor f where
   hfmap :: (g ~> h) -> (f g ~> f h)
 
 class HTraversable t where
-
     -- | Map each element of a structure to a monadic action, evaluate
     -- these actions from left to right, and collect the results.
     --
-    hmapM :: (Monad m) => NatM m a b -> NatM m (t a) (t b)
-
-    htraverse :: (Applicative f) => NatM f a b -> NatM f (t a) (t b)
+    hmapM :: Monad m => NatM m a b -> NatM m (t a) (t b)
+    htraverse :: Applicative f => NatM f a b -> NatM f (t a) (t b) -- there might be a more efficient way for an applicative
 
 {-
 type f :=> a = forall i . f i -> a

@@ -19,17 +19,61 @@
 module Stan.Language.Statements
   (
     module Stan.Language.Statements
-  , module Stan.Language.Expressions
   )
   where
 
 import qualified Stan.Language.Recursion as TR
 import Stan.Language.Expressions
+    ( functionE,
+      intE,
+      namedE,
+      namedSizeE,
+      ExprList,
+      IndexKey,
+      IntE,
+      LExpr,
+      UExpr )
 import Stan.Language.Types
+    ( sTypeFromStanType,
+      Nat(..),
+      SNat,
+      EIndexArray,
+      EType(EInt, EBool, EArray, ESqMat, EMat, ERVec, ECVec, EComplex,
+            EReal),
+      GenSType(..),
+      SType(SInt),
+      ScalarType,
+      StanType(..) )
 import Stan.Language.TypedList
+    ( oneTyped,
+      typeListToTypedListOfTypes,
+      zipTypedListsWith,
+      GenTypeList,
+      SameTypeList,
+      SameTypedListToVecF,
+      TypedList(..),
+      VecToSameTypedListF(..) )
 import Stan.Language.Indexing
+    ( Vec(..),
+      DeclDimension,
+      Sliced,
+      N0,
+      DeclIndexVecF(DeclIndexVecF),
+      N1,
+      s1,
+      N2,
+      s2 )
 import Stan.Language.Operations
+    ( BinaryResultT,
+      BinaryOp(BAdd, BDivide, BMultiply, BSubtract),
+      SBinaryOp(SDivide, SAdd, SSubtract, SMultiply) )
 import Stan.Language.Functions
+    ( Density,
+      Function,
+      FuncArg,
+      funcArgName,
+      functionArgTypes,
+      simpleFunction )
 --import Stan.Language.StanFunctions
 
 import qualified Data.Vec.Lazy as Vec
@@ -543,7 +587,7 @@ type IndexSizeMap = Map IndexKey (LExpr EInt)
 type IndexArrayMap = Map IndexKey IndexArrayL
 
 array_num_elements :: (SNatI n, GenSType t) => Function EInt '[EArray n t]
-array_num_elements = simpleFunction "inv"
+array_num_elements = simpleFunction "size" {- any chance this should be num_elements? --als was "inv"?? -}
 
 indexSize :: IndexArrayU -> UExpr EInt
 indexSize = functionE array_num_elements . oneTyped

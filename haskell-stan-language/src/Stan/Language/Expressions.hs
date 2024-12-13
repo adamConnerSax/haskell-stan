@@ -141,27 +141,7 @@ instance TR.HTraversable UExprF where
 namedE :: Text -> SType t -> UExpr t
 namedE name  = TR.IFix . UL . LNamed name
 
-{-
--- we shouldn't export this constructor.
--- You should only be able to make via the function below.
-data Var :: EType -> Type where
-  Var :: Text -> StanType t -> UExpr t -> Var t
 
-varName :: Var t -> Text
-varName (Var n _ _) = n
-
-varStanType :: Var t -> StanType t
-varStanType (Var _ x _) = x
-
-varSType :: Var t -> SType t
-varSType = sTypeFromStanType . varStanType
-
-varE :: Var t -> UExpr t
-varE (Var _ _ ue) = ue
-
-var :: Text -> StanType t -> Var t
-var n st = Var n st $ namedE n $ sTypeFromStanType st
--}
 intE :: Int -> UExpr EInt
 intE = TR.IFix . UL . LInt
 
@@ -311,15 +291,6 @@ mAt :: MatrixE -> IntE -> IntE -> RealE
 mAt m r c = mRow r m `at` c
 {-# INLINEABLE mAt #-}
 
-{-
-data ContainerOf v a where
-  InnerSliceable :: Sliced N0 v ~ a => UExpr v -> ContainerOf v a
-  Functional :: (IntE -> UExpr t) -> ContainerOf EVoid a
-
-type RealContainer = ContainerOf EReal
-type IntContainer = ContainerOf EInt
-type VecContainer = ContainerOf ECVec
--}
 
 lExprTypeIs :: LExpr t -> SType t' -> Bool
 lExprTypeIs le st = case eqLExprType le (lNamedE "" st) of
@@ -331,7 +302,7 @@ eqLExpr la lb = case eqLExprType la lb of
   Just Refl -> eqLExprOf la lb
   Nothing -> False
 
--- This returns some false negatives, but will certainly work on identical epxressions
+-- This returns some false negatives, but will certainly work on identical expressions
 eqLExprType :: LExpr ta -> LExpr tb -> Maybe (ta :~: tb)
 eqLExprType = go
   where
@@ -442,3 +413,35 @@ uExprToSameTypeLExpr = TR.iCata f where
 
 exprTypeIs :: UExpr t -> SType t' -> Bool
 exprTypeIs ue = lExprTypeIs (uExprToSameTypeLExpr ue)
+
+
+{-
+-- we shouldn't export this constructor.
+-- You should only be able to make via the function below.
+data Var :: EType -> Type where
+  Var :: Text -> StanType t -> UExpr t -> Var t
+
+varName :: Var t -> Text
+varName (Var n _ _) = n
+
+varStanType :: Var t -> StanType t
+varStanType (Var _ x _) = x
+
+varSType :: Var t -> SType t
+varSType = sTypeFromStanType . varStanType
+
+varE :: Var t -> UExpr t
+varE (Var _ _ ue) = ue
+
+var :: Text -> StanType t -> Var t
+var n st = Var n st $ namedE n $ sTypeFromStanType st
+-}
+{-
+data ContainerOf v a where
+  InnerSliceable :: Sliced N0 v ~ a => UExpr v -> ContainerOf v a
+  Functional :: (IntE -> UExpr t) -> ContainerOf EVoid a
+
+type RealContainer = ContainerOf EReal
+type IntContainer = ContainerOf EInt
+type VecContainer = ContainerOf ECVec
+-}
