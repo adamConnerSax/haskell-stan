@@ -21,12 +21,39 @@ module Stan.Language.Expressions
   )
   where
 
-import qualified Stan.Language.Recursion as TR
+import qualified Stan.Language.Recursion as SLR
 import Stan.Language.Types
-import Stan.Language.TypedList
+    ( Nat(Z, S),
+      SNat(SZ, SS),
+      EArray1,
+      EIndexArray,
+      EType(ESqMat, ERVec, EInt, EBool, EArray, EMat, ECVec, EString,
+            EComplex, EReal),
+      SType(SInt, SArray) )
+import Stan.Language.TypedList ( eqTypedLists, TypedList )
 import Stan.Language.Indexing
+    ( Vec(..),
+      Sliced,
+      N0,
+      s1,
+      NestedVec,
+      Indexed,
+      SliceInnerN,
+      eqNestedVec,
+      eqSizeNestedVec,
+      eqVec,
+      nestedVecHead,
+      s0 )
 import Stan.Language.Operations
-import Stan.Language.Functions
+    ( BinaryResultT,
+      BinaryOp(BAdd, BDivide, BMultiply, BSubtract),
+      SBinaryOp(SBoolean, SAdd, SSubtract, SMultiply, SDivide),
+      UnaryOp(UNegate, UTranspose),
+      UnaryResultT,
+      SUnaryOp(..),
+      SBoolOp,
+      BoolResultT )
+import Stan.Language.Functions ( Density(..), Function(..) )
 import Prelude hiding (Nat)
 import qualified Data.Vec.Lazy as Vec
 import qualified Data.Type.Nat as DT
@@ -34,6 +61,7 @@ import qualified Data.Type.Nat as DT
 import Data.Type.Equality ((:~:)(Refl), TestEquality(testEquality))
 
 type IndexKey = Text
+type VarName = Text
 
 -- Expressions
 data LExprF :: (EType -> Type) -> EType -> Type where
@@ -58,10 +86,10 @@ data LExprF :: (EType -> Type) -> EType -> Type where
 --  LRangeIndex :: SNat n -> Maybe (r EInt) -> Maybe (r EInt) -> r t -> LExprF r (Indexed n t)
 
 
-type LExpr = TR.IFix LExprF
+type LExpr = SLR.IFix LExprF
 
 lNamedE :: Text -> SType t -> LExpr t
-lNamedE name  = TR.IFix . LNamed name
+lNamedE name  = SLR.IFix . LNamed name
 
 namedLIndex :: Text -> LExpr EIndexArray
 namedLIndex t = lNamedE t (SArray s1 SInt)
@@ -70,9 +98,9 @@ namedLSize :: Text -> LExpr EInt
 namedLSize t = lNamedE t SInt
 
 lIntE :: Int -> LExpr EInt
-lIntE = TR.IFix . LInt
+lIntE = SLR.IFix . LInt
 
-instance TR.HFunctor LExprF where
+instance SLR.HFunctor LExprF where
   hfmap nat = \case
     LNamed txt st -> LNamed txt st
     LInt n -> LInt n
@@ -83,8 +111,8 @@ instance TR.HFunctor LExprF where
     LMatrix ms -> LMatrix ms
     LArray nv -> LArray (fmap nat nv)
     LIntRange leM ueM -> LIntRange (fmap nat leM) (fmap nat ueM)
-    LFunction f al -> LFunction f (TR.hfmap nat al)
-    LDensity d st al -> LDensity d (nat st) (TR.hfmap nat al)
+    LFunction f al -> LFunction f (SLR.hfmap nat al)
+    LDensity d st al -> LDensity d (nat st) (SLR.hfmap nat al)
     LUnaryOp suo gta -> LUnaryOp suo (nat gta)
     LBinaryOp sbo gta gtb -> LBinaryOp sbo (nat gta) (nat gtb)
     LCond c ifTrue ifFalse -> LCond (nat c) (nat ifTrue) (nat ifFalse)
@@ -94,7 +122,7 @@ instance TR.HFunctor LExprF where
 --    LRangeIndex n le ue e -> LRangeIndex n (fmap nat le) (fmap nat ue) (nat e)
 
 
-instance TR.HTraversable LExprF where
+instance SLR.HTraversable LExprF where
   htraverse nat = \case
     LNamed txt st -> pure $ LNamed txt st
     LInt n -> pure $ LInt n
@@ -105,8 +133,8 @@ instance TR.HTraversable LExprF where
     LMatrix ms -> pure $ LMatrix ms
     LArray nv -> LArray <$> traverse nat nv
     LIntRange leM ueM -> LIntRange <$> traverse nat leM <*> traverse nat ueM
-    LFunction f al -> LFunction f <$> TR.htraverse nat al
-    LDensity d st al -> LDensity d <$> nat st <*> TR.htraverse nat al
+    LFunction f al -> LFunction f <$> SLR.htraverse nat al
+    LDensity d st al -> LDensity d <$> nat st <*> SLR.htraverse nat al
     LUnaryOp suo ata -> LUnaryOp suo <$> nat ata
     LBinaryOp sbo ata atb -> LBinaryOp sbo <$> nat ata <*> nat atb
     LCond c ifTrue ifFalse -> LCond <$> nat c <*> nat ifTrue <*> nat ifFalse
@@ -114,65 +142,68 @@ instance TR.HTraversable LExprF where
     LIndex n re e -> LIndex n <$> nat re <*> nat e
 --    LLam f arg -> LLam <$> nat f <*> nat arg
 --    LRangeIndex n le ue e -> LRangeIndex n <$> traverse nat le <*> traverse nat ue <*> nat e
-  hmapM = TR.htraverse
+  hmapM = SLR.htraverse
 
--- UEXpr represents expressions with un-looked-up indices/sizes
+-- UEXpr represents expressions with context lookups to resolve
 data UExprF :: (EType -> Type) -> EType -> Type where
   UL :: LExprF r et -> UExprF r et
-  UNamedIndex :: IndexKey -> UExprF r EIndexArray
-  UNamedSize :: IndexKey -> UExprF r EInt
+  UIndex :: IndexKey -> UExprF r EIndexArray
+  UIndexSize :: IndexKey -> UExprF r EInt
+  UVarExpr :: VarName -> SType t -> LExprF r t -> UExprF r t
 
-type UExpr = TR.IFix UExprF
 
-instance TR.HFunctor UExprF where
+type UExpr = SLR.IFix UExprF
+
+instance SLR.HFunctor UExprF where
   hfmap nat = \case
-    UL le -> UL $ TR.hfmap nat le
-    UNamedIndex txt -> UNamedIndex txt
-    UNamedSize txt -> UNamedSize txt
+    UL le -> UL $ SLR.hfmap nat le
+    UIndex txt -> UIndex txt
+    UIndexSize txt -> UIndexSize txt
+    UVarExpr vn st e -> UVarExpr vn st $ SLR.hfmap nat e
 
-instance TR.HTraversable UExprF where
+instance SLR.HTraversable UExprF where
   htraverse nat = \case
-    UL le -> UL <$> TR.htraverse nat le
-    UNamedIndex txt -> pure $ UNamedIndex txt
-    UNamedSize txt -> pure $ UNamedSize txt
-  hmapM = TR.htraverse
+    UL le -> UL <$> SLR.htraverse nat le
+    UIndex txt -> pure $ UIndex txt
+    UIndexSize txt -> pure $ UIndexSize txt
+    UVarExpr vn st e -> UVarExpr vn st <$> SLR.htraverse nat e
+  hmapM = SLR.htraverse
 
 
 namedE :: Text -> SType t -> UExpr t
-namedE name  = TR.IFix . UL . LNamed name
-
+namedE name st = SLR.IFix $ UVarExpr name st $ LNamed name st
 
 intE :: Int -> UExpr EInt
-intE = TR.IFix . UL . LInt
+intE = SLR.IFix . UL . LInt
 
 realE :: Double -> UExpr EReal
-realE = TR.IFix . UL . LReal
+realE = SLR.IFix . UL . LReal
 
 complexE :: Double -> Double -> UExpr EComplex
-complexE rp ip = TR.IFix $ UL $ LComplex rp ip
+complexE rp ip = SLR.IFix $ UL $ LComplex rp ip
 
 stringE :: Text -> UExpr EString
-stringE = TR.IFix . UL . LString
+stringE = SLR.IFix . UL . LString
 
 vectorE :: [Double] -> UExpr ECVec
-vectorE = TR.IFix . UL . LVector
+vectorE = SLR.IFix . UL . LVector
 
 matrixE :: [Vec n Double] -> UExpr EMat
-matrixE = TR.IFix . UL . LMatrix
+matrixE = SLR.IFix . UL . LMatrix
 
 arrayE :: NestedVec n (UExpr t) -> UExpr (EArray n t)
-arrayE = TR.IFix . UL . LArray
+arrayE = SLR.IFix . UL . LArray
 
 type ExprList = TypedList UExpr
 
 functionE :: Function rt args -> TypedList UExpr args -> UExpr rt
-functionE f al = TR.IFix $ UL $ LFunction f al
+functionE f al = SLR.IFix $ UL $ LFunction f al
 
 densityE :: Density gt args -> UExpr gt -> TypedList UExpr args -> UExpr EReal
-densityE d ge al = TR.IFix $ UL $ LDensity d ge al
+densityE d ge al = SLR.IFix $ UL $ LDensity d ge al
 
 unaryOpE :: SUnaryOp op -> UExpr t -> UExpr (UnaryResultT op t)
-unaryOpE op e = TR.IFix $ UL $ LUnaryOp op e
+unaryOpE op e = SLR.IFix $ UL $ LUnaryOp op e
 
 negateE :: UExpr t -> UExpr (UnaryResultT UNegate t)
 negateE = unaryOpE SNegate
@@ -181,7 +212,7 @@ transposeE :: UExpr t -> UExpr (UnaryResultT UTranspose t)
 transposeE = unaryOpE STranspose
 
 binaryOpE :: SBinaryOp op -> UExpr ta -> UExpr tb -> UExpr (BinaryResultT op ta tb)
-binaryOpE op ea eb = TR.IFix $ UL $ LBinaryOp op ea eb
+binaryOpE op ea eb = SLR.IFix $ UL $ LBinaryOp op ea eb
 
 plusE :: UExpr ta -> UExpr tb -> UExpr (BinaryResultT BAdd ta tb)
 plusE = binaryOpE SAdd
@@ -196,16 +227,16 @@ divideE :: UExpr ta -> UExpr tb -> UExpr (BinaryResultT BDivide ta tb)
 divideE = binaryOpE SDivide
 
 boolOpE :: SBoolOp op -> UExpr ta -> UExpr tb -> UExpr (BoolResultT op ta tb)
-boolOpE bop ea eb = TR.IFix $ UL $ LBinaryOp (SBoolean bop) ea eb
+boolOpE bop ea eb = SLR.IFix $ UL $ LBinaryOp (SBoolean bop) ea eb
 
 multiOpE :: (t ~ BinaryResultT op t t) => SBinaryOp op -> NonEmpty (UExpr t) -> UExpr t
 multiOpE op es = foldl' (binaryOpE op) (head es) (tail es)
 
 condE :: UExpr EBool -> UExpr t -> UExpr t -> UExpr t
-condE ce te fe = TR.IFix $ UL $ LCond ce te fe
+condE ce te fe = SLR.IFix $ UL $ LCond ce te fe
 
 sliceE :: SNat n -> UExpr EInt -> UExpr t -> UExpr (Sliced n t)
-sliceE sn ie e = TR.IFix $ UL $ LSlice sn ie e
+sliceE sn ie e = SLR.IFix $ UL $ LSlice sn ie e
 
 at :: UExpr t -> UExpr EInt -> UExpr (Sliced N0 t)
 at x n = sliceE s0 n x
@@ -216,16 +247,16 @@ slice0 = sliceE s0
 {-# INLINEABLE slice0 #-}
 
 indexE :: SNat n -> UExpr EIndexArray -> UExpr t -> UExpr (Indexed n t)
-indexE sn ie e = TR.IFix $ UL $ LIndex sn ie e
+indexE sn ie e = SLR.IFix $ UL $ LIndex sn ie e
 
 rangeIndexE :: SNat n -> Maybe (UExpr EInt) -> Maybe (UExpr EInt) -> UExpr t -> UExpr (Indexed n t)
-rangeIndexE n leM ueM = indexE n (TR.IFix $ UL $ LIntRange leM ueM)
+rangeIndexE n leM ueM = indexE n (SLR.IFix $ UL $ LIntRange leM ueM)
 
 namedIndexE :: Text -> UExpr EIndexArray
-namedIndexE = TR.IFix . UNamedIndex
+namedIndexE = SLR.IFix . UIndex
 
 namedSizeE :: Text -> UExpr EInt
-namedSizeE = TR.IFix . UNamedSize
+namedSizeE = SLR.IFix . UIndexSize
 
 sliceInner :: UExpr t -> UExpr EInt -> UExpr (SliceInnerN (S Z) t)
 sliceInner e i = sliceE SZ i e
@@ -307,34 +338,34 @@ eqLExprType :: LExpr ta -> LExpr tb -> Maybe (ta :~: tb)
 eqLExprType = go
   where
     go :: LExpr ta -> LExpr tb -> Maybe (ta :~: tb)
-    go (TR.IFix (LNamed _ sta)) (TR.IFix (LNamed _ stb)) = testEquality sta stb
-    go (TR.IFix (LInt _)) (TR.IFix (LInt _)) = Just Refl
-    go (TR.IFix (LReal _)) (TR.IFix (LReal _)) = Just Refl
-    go (TR.IFix (LComplex _ _)) (TR.IFix (LComplex _ _)) = Just Refl
-    go (TR.IFix (LString _)) (TR.IFix (LString _)) = Just Refl
-    go (TR.IFix (LVector _)) (TR.IFix (LVector _)) = Just Refl
-    go (TR.IFix (LMatrix _)) (TR.IFix (LMatrix _)) = Just Refl
-    go (TR.IFix (LArray nv)) (TR.IFix (LArray nv')) = do
+    go (SLR.IFix (LNamed _ sta)) (SLR.IFix (LNamed _ stb)) = testEquality sta stb
+    go (SLR.IFix (LInt _)) (SLR.IFix (LInt _)) = Just Refl
+    go (SLR.IFix (LReal _)) (SLR.IFix (LReal _)) = Just Refl
+    go (SLR.IFix (LComplex _ _)) (SLR.IFix (LComplex _ _)) = Just Refl
+    go (SLR.IFix (LString _)) (SLR.IFix (LString _)) = Just Refl
+    go (SLR.IFix (LVector _)) (SLR.IFix (LVector _)) = Just Refl
+    go (SLR.IFix (LMatrix _)) (SLR.IFix (LMatrix _)) = Just Refl
+    go (SLR.IFix (LArray nv)) (SLR.IFix (LArray nv')) = do
       Refl <- eqSizeNestedVec nv nv'
       Refl <- go (nestedVecHead nv) (nestedVecHead nv')
       pure Refl
-    go (TR.IFix (LIntRange _ _)) (TR.IFix (LIntRange _ _)) = Just Refl
-    go (TR.IFix (LFunction (Function _ sta _) _)) (TR.IFix (LFunction (Function _ stb _) _)) = testEquality sta stb
-    go (TR.IFix (LFunction (IdentityFunction sta) _)) (TR.IFix (LFunction (IdentityFunction stb) _)) = testEquality sta stb
-    go (TR.IFix (LDensity _ _ _)) (TR.IFix (LDensity _ _ _)) = Just Refl
-    go (TR.IFix (LUnaryOp opa ea)) (TR.IFix (LUnaryOp opb eb)) = do
+    go (SLR.IFix (LIntRange _ _)) (SLR.IFix (LIntRange _ _)) = Just Refl
+    go (SLR.IFix (LFunction (Function _ sta _) _)) (SLR.IFix (LFunction (Function _ stb _) _)) = testEquality sta stb
+    go (SLR.IFix (LFunction (IdentityFunction sta) _)) (SLR.IFix (LFunction (IdentityFunction stb) _)) = testEquality sta stb
+    go (SLR.IFix (LDensity _ _ _)) (SLR.IFix (LDensity _ _ _)) = Just Refl
+    go (SLR.IFix (LUnaryOp opa ea)) (SLR.IFix (LUnaryOp opb eb)) = do
       Refl <- testEquality opa opb
       Refl <- go ea eb
       pure Refl
-    go (TR.IFix (LBinaryOp opa lhsa rhsa)) (TR.IFix (LBinaryOp opb lhsb rhsb)) = do
+    go (SLR.IFix (LBinaryOp opa lhsa rhsa)) (SLR.IFix (LBinaryOp opb lhsb rhsb)) = do
       Refl <- testEquality opa opb
       Refl <- go lhsa lhsb
       Refl <- go rhsa rhsb
       pure Refl
-    go (TR.IFix (LCond _ ea _)) (TR.IFix (LCond _ eb _)) = do
+    go (SLR.IFix (LCond _ ea _)) (SLR.IFix (LCond _ eb _)) = do
       Refl <- go ea eb
       pure Refl
-    go (TR.IFix (LIndex sna _ ea)) (TR.IFix (LIndex snb _ eb)) = do
+    go (SLR.IFix (LIndex sna _ ea)) (SLR.IFix (LIndex snb _ eb)) = do
       let eqSNatWith :: DT.SNatI n => DT.SNat m -> Maybe (n :~: m)
           eqSNatWith sm = DT.withSNat sm DT.eqNat
           eqSNat :: DT.SNat n -> DT.SNat m -> Maybe (n :~: m)
@@ -348,31 +379,31 @@ eqLExprOf :: LExpr ta -> LExpr ta -> Bool
 eqLExprOf = go
   where
     go :: LExpr ta -> LExpr ta -> Bool
-    go (TR.IFix (LNamed na _)) (TR.IFix (LNamed nb _)) = na == nb
-    go (TR.IFix (LInt n)) (TR.IFix (LInt m)) = n == m
-    go (TR.IFix (LReal x)) (TR.IFix (LReal y)) = x == y
-    go (TR.IFix (LComplex xr xi)) (TR.IFix (LComplex yr yi)) = xr == yr && xi == yi
-    go (TR.IFix (LString sa)) (TR.IFix (LString sb)) = sa == sb
-    go (TR.IFix (LVector xs)) (TR.IFix (LVector ys)) = xs == ys
-    go (TR.IFix (LMatrix vs)) (TR.IFix (LMatrix vs')) = getAll $ mconcat $ All <$> zipWith eqVec vs vs'
-    go (TR.IFix (LArray nv)) (TR.IFix (LArray nv')) = case eqSizeNestedVec nv nv' of
+    go (SLR.IFix (LNamed na _)) (SLR.IFix (LNamed nb _)) = na == nb
+    go (SLR.IFix (LInt n)) (SLR.IFix (LInt m)) = n == m
+    go (SLR.IFix (LReal x)) (SLR.IFix (LReal y)) = x == y
+    go (SLR.IFix (LComplex xr xi)) (SLR.IFix (LComplex yr yi)) = xr == yr && xi == yi
+    go (SLR.IFix (LString sa)) (SLR.IFix (LString sb)) = sa == sb
+    go (SLR.IFix (LVector xs)) (SLR.IFix (LVector ys)) = xs == ys
+    go (SLR.IFix (LMatrix vs)) (SLR.IFix (LMatrix vs')) = getAll $ mconcat $ All <$> zipWith eqVec vs vs'
+    go (SLR.IFix (LArray nv)) (SLR.IFix (LArray nv')) = case eqSizeNestedVec nv nv' of
       Just Refl -> eqNestedVec eqLExprOf nv nv'
       Nothing -> False
-    go (TR.IFix (LIntRange mla mua)) (TR.IFix (LIntRange mlb mub)) =
+    go (SLR.IFix (LIntRange mla mua)) (SLR.IFix (LIntRange mlb mub)) =
       let cm :: Maybe (LExpr EInt) -> Maybe (LExpr EInt) -> Bool
           cm Nothing Nothing = True
           cm (Just a) (Just b) = go a b
           cm _ _ = False
       in cm mla mlb && cm mua mub
-    go (TR.IFix (LFunction (Function fna _ ata) ala)) (TR.IFix (LFunction (Function fnb _ atb) alb)) =
+    go (SLR.IFix (LFunction (Function fna _ ata) ala)) (SLR.IFix (LFunction (Function fnb _ atb) alb)) =
       let eqArgs = case testEquality ata atb of -- given lists are same
             Just Refl -> case testEquality ata atb of -- reqwritten lists are same
               Just Refl -> eqTypedLists go ala alb -- given args are same
               Nothing -> False
             Nothing -> False
       in fna == fnb && eqArgs
-    go (TR.IFix (LFunction (IdentityFunction _) _)) (TR.IFix (LFunction (IdentityFunction _) _)) = True
-    go (TR.IFix (LDensity (Density dna gta ata) _ ala)) (TR.IFix (LDensity (Density dnb gtb atb) _ alb)) =
+    go (SLR.IFix (LFunction (IdentityFunction _) _)) (SLR.IFix (LFunction (IdentityFunction _) _)) = True
+    go (SLR.IFix (LDensity (Density dna gta ata) _ ala)) (SLR.IFix (LDensity (Density dnb gtb atb) _ alb)) =
       let eqGivens = case testEquality gta gtb of
             Just Refl -> True
             Nothing -> False
@@ -382,20 +413,20 @@ eqLExprOf = go
               Nothing -> False
             Nothing -> False
       in dna == dnb && eqGivens && eqArgs
-    go (TR.IFix (LUnaryOp opa ea)) (TR.IFix (LUnaryOp opb eb)) = case testEquality opa opb of
+    go (SLR.IFix (LUnaryOp opa ea)) (SLR.IFix (LUnaryOp opb eb)) = case testEquality opa opb of
       Just Refl -> case eqLExprType ea eb of
         Just Refl -> go ea eb
         Nothing -> False
       Nothing -> False
-    go (TR.IFix (LBinaryOp opa lhsa rhsa)) (TR.IFix (LBinaryOp opb lhsb rhsb)) = case testEquality opa opb of
+    go (SLR.IFix (LBinaryOp opa lhsa rhsa)) (SLR.IFix (LBinaryOp opb lhsb rhsb)) = case testEquality opa opb of
       Just Refl -> case eqLExprType lhsa lhsb of
         Just Refl -> case eqLExprType rhsa rhsb of
           Just Refl -> go lhsa lhsb && go rhsa rhsb
           Nothing -> False
         Nothing -> False
       Nothing -> False
-    go (TR.IFix (LCond ca lhsa rhsa)) (TR.IFix (LCond cb lhsb rhsb)) = go ca cb && go lhsa lhsb && go rhsa rhsb
-    go (TR.IFix (LIndex _ iea ea)) (TR.IFix (LIndex _ ieb eb)) =
+    go (SLR.IFix (LCond ca lhsa rhsa)) (SLR.IFix (LCond cb lhsb rhsb)) = go ca cb && go lhsa lhsb && go rhsa rhsb
+    go (SLR.IFix (LIndex _ iea ea)) (SLR.IFix (LIndex _ ieb eb)) =
       go iea ieb && case eqLExprType ea eb of
                       Just Refl -> go ea eb
                       Nothing -> False
@@ -404,12 +435,13 @@ eqLExprOf = go
 -- This is either very cool or very dangerous
 -- replace each lookup with a blank thing of same type just for typechecking purposes
 uExprToSameTypeLExpr :: UExpr t -> LExpr t
-uExprToSameTypeLExpr = TR.iCata f where
-  f :: UExprF LExpr TR.~> LExpr
+uExprToSameTypeLExpr = SLR.iCata f where
+  f :: UExprF LExpr SLR.~> LExpr
   f = \case
-    UL le -> TR.IFix le
-    UNamedIndex _ -> lNamedE "" (SArray s1 SInt)
-    UNamedSize _ -> lNamedE "" SInt
+    UL le -> SLR.IFix le
+    UIndex _ -> lNamedE "" (SArray s1 SInt)
+    UIndexSize _ -> lNamedE "" SInt
+    UVarExpr _ _ le -> SLR.IFix le
 
 exprTypeIs :: UExpr t -> SType t' -> Bool
 exprTypeIs ue = lExprTypeIs (uExprToSameTypeLExpr ue)

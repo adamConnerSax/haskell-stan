@@ -35,6 +35,7 @@ import qualified Data.Type.Nat as DT
 import qualified GHC.TypeLits as TE
 import GHC.TypeLits (ErrorMessage((:<>:)))
 import qualified Text.Show
+import qualified Data.GADT.Compare as GC
 
 -- possible types of terms
 -- NB: zero dimensional array will be treated as the underlying type
@@ -400,6 +401,24 @@ instance TestEquality SType where
     pure Refl
 -}
   testEquality _ _ = Nothing
+
+instance GC.GEq SType where
+  geq SVoid SVoid = Just Refl
+  geq SString SString = Just Refl
+  geq SBool SBool = Just Refl
+  geq SInt SInt = Just Refl
+  geq SReal SReal = Just Refl
+  geq SComplex SComplex = Just Refl
+--  geq SSimplex SSimplex = Just Refl
+  geq SCVec SCVec = Just Refl
+  geq SRVec SRVec = Just Refl
+  geq SMat SMat = Just Refl
+  geq SSqMat SSqMat = Just Refl
+  geq (SArray sn sa) (SArray sm sb) = do
+    Refl <- GC.geq sa sb
+    Refl <- GC.geq sn sm
+    pure Refl
+  geq _ _ = Nothing
 
 
 {-

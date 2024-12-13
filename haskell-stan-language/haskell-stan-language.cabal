@@ -59,6 +59,7 @@ library
   build-depends: base >= 4.12 && < 5
                , array >= 0.5.4 && < 0.6
                , containers
+               , dependent-map >= 0.4 && < 0.5
                , fin >= 0.2 && < 0.4
                , foldl >= 1.4 && < 1.5
                , monadic-recursion-schemes >= 0.1.11 && < 0.2
@@ -66,6 +67,7 @@ library
                , prettyprinter >= 1.7 && < 1.8
                , recursion-schemes >= 5.1.2 && < 5.3
                , relude  >=1.0.0 && < 1.3
+               , some >= 1.0.4 && < 1.1
                , text >= 1.2 && < 2.1
                , vec >= 0.4 && < 0.6
   if flag(streamly9)

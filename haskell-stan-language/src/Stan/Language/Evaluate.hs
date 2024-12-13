@@ -21,7 +21,7 @@ where
 import Prelude hiding (Nat)
 
 import Stan.Language.Types ( Nat(Z, S), EType(EInt, EArray) )
-import Stan.Language.Expressions ( IndexKey, LExpr, LExprF, UExpr, UExprF(..) )
+import Stan.Language.Expressions ( IndexKey, VarName, LExpr, LExprF, UExpr, UExprF(..) )
 import Stan.Language.Statements
     ( IndexLookupCtxt(sizes, indexes),
       LStmt,
@@ -75,6 +75,9 @@ import qualified Prettyprinter as PP
 -}
 
 --type IndexKey = Text
+data Context = Context {
+                       }
+
 type LookupM = StateT IndexLookupCtxt (Either Text)
 
 lookupIndex :: IndexKey -> LookupM (LExpr (EArray (S Z) EInt))
@@ -93,9 +96,10 @@ lookupSize k = do
 
 toLExprAlg :: IAlgM LookupM UExprF LExpr
 toLExprAlg = \case
-  UL x -> pure $ IFix x
-  UNamedIndex ik -> lookupIndex ik
-  UNamedSize ik -> lookupSize ik
+  UL le -> pure $ IFix le
+  UIndex ik -> lookupIndex ik
+  UIndexSize ik -> lookupSize ik
+  UVarExpr _name _sType le -> pure $ IFix le
 
 doLookups :: NatM LookupM UExpr LExpr
 doLookups = iCataM toLExprAlg
@@ -161,10 +165,10 @@ doLookupsEInStatementE ctxt0 = flip evalStateT ctxt0 . doLookupsEInStatement
 
 doLookupsE :: NatM LookupM UExpr EExpr
 doLookupsE = iCataM $ \case
-  UL x -> pure $ IFix $ EL x
-  UNamedIndex ik -> lookupIndexE ik
-  UNamedSize ik -> lookupSizeE ik
-
+  UL le -> pure $ IFix $ EL le
+  UIndex ik -> lookupIndexE ik
+  UIndexSize ik -> lookupSizeE ik
+  UVarExpr _name _sType le -> pure $ IFix $ EL le
 
 eExprToIExprCode :: EExpr ~> K IExprCode
 eExprToIExprCode = iCata $ \case

@@ -22,7 +22,7 @@ module Stan.Language.Statements
   )
   where
 
-import qualified Stan.Language.Recursion as TR
+import qualified Stan.Language.Recursion as SLR
 import Stan.Language.Expressions
     ( functionE,
       intE,
@@ -30,6 +30,7 @@ import Stan.Language.Expressions
       namedSizeE,
       ExprList,
       IndexKey,
+      VarName,
       IntE,
       LExpr,
       UExpr )
@@ -43,7 +44,8 @@ import Stan.Language.Types
       GenSType(..),
       SType(SInt),
       ScalarType,
-      StanType(..) )
+      StanType(..),
+      sTypeName)
 import Stan.Language.TypedList
     ( oneTyped,
       typeListToTypedListOfTypes,
@@ -84,8 +86,10 @@ import Control.Monad.Writer.Strict as W
 
 import Prelude hiding (Nat)
 import Relude.Extra
+import qualified Data.List.NonEmpty as NE
 import qualified Data.Map.Strict as Map
-
+import Data.Type.Equality (type (:~:)(..))
+import qualified Data.Some as Some
 import qualified Data.Functor.Foldable as RS
 --import qualified Stan.ModelBuilder.Expressions as SB
 
@@ -507,20 +511,20 @@ asVector :: StanName -> ContainerOf ECVec EReal -> CodeWriter VectorE
 asVector n (InnerSliceable c) = pure c
 -}
 
-instance TR.HFunctor VarModifier where
+instance SLR.HFunctor VarModifier where
   hfmap f = \case
     VarLower x -> VarLower $ f x
     VarUpper x -> VarUpper $ f x
     VarOffset x -> VarOffset $ f x
     VarMultiplier x -> VarMultiplier $ f x
 
-instance TR.HTraversable VarModifier where
+instance SLR.HTraversable VarModifier where
   htraverse nat = \case
     VarLower x -> VarLower <$> nat x
     VarUpper x -> VarUpper <$> nat x
     VarOffset x -> VarOffset <$> nat x
     VarMultiplier x -> VarMultiplier <$> nat x
-  hmapM = TR.htraverse
+  hmapM = SLR.htraverse
 
 data StmtBlock = FunctionsStmts
                | DataStmts
@@ -585,6 +589,49 @@ type IndexArrayU = UExpr (EArray (S Z) EInt)
 type IndexArrayL = LExpr (EArray (S Z) EInt)
 type IndexSizeMap = Map IndexKey (LExpr EInt)
 type IndexArrayMap = Map IndexKey IndexArrayL
+type VarTypeMap = Map VarName (Some.Some SType)
+
+data VarNameCheck = CheckPassed | NameMissing | WrongType Text
+
+checkTypedVar :: VarName -> SType t -> VarTypeMap -> VarNameCheck
+checkTypedVar vn st m = case Map.lookup vn m of
+  Nothing -> NameMissing
+  Just sst -> if Some.mkSome st == sst then CheckPassed else WrongType $ Some.withSome sst (\prevST -> sTypeName prevST)
+
+newtype VarLookupCtxt = VarLookupCtxt (NE.NonEmpty VarTypeMap)
+
+emptyVarLookupCtxt :: VarLookupCtxt
+emptyVarLookupCtxt = VarLookupCtxt $ mempty :| []
+
+varLookupMap :: VarLookupCtxt -> VarTypeMap
+varLookupMap (VarLookupCtxt vs) = fold vs
+
+enterNewScope :: VarLookupCtxt -> VarLookupCtxt
+enterNewScope (VarLookupCtxt (gs :| ls)) = VarLookupCtxt (gs :| mempty : ls)
+
+{-
+innerScope :: VarLookupCtxt -> VarTypeMap
+innerScope (VarLookupCtxt (gs :| [])) = gs
+innerScope (VarLookupCtxt (gs :| is : _)) = is
+-}
+
+leaveScope :: VarLookupCtxt -> Maybe VarLookupCtxt
+leaveScope (VarLookupCtxt (gs :| [])) = Nothing
+leaveSCope (VarLookupCtxt (gs :| _ : os)) = VarLookupCtxt (gs :| os)
+
+insertVarType :: VarName -> SType t -> VarTypeMap -> VarTypeMap
+insertVarType vn st = Map.insert vn (Some.mkSome st)
+
+addTypedVarToInnerScope :: VarName -> SType t -> VarLookupCtxt -> VarLookupCtxt
+addTypedVarToInnerScope vn st (VarLookupCtxt (gs :| [])) = VarLookupCtxt $ insertVarType vn st gs :| []
+addTypedVarToInnerScope vn st (VarLookupCtxt (gs :| is : os)) = VarLookupCtxt $ gs :| insertVarType vn st is : os
+
+addTypedVarInScope :: VarName -> SType t -> VarLookupCtxt -> Maybe VarLookupCtxt
+addTypedVarInScope vn st ctxt = mVLC where
+  mExists = Map.lookup vn (varLookupMap ctxt)
+  mVLC = case mExists of
+    Nothing -> Just $ addTypedVarToInnerScope vn st ctxt
+    Just _ -> Nothing
 
 array_num_elements :: (SNatI n, GenSType t) => Function EInt '[EArray n t]
 array_num_elements = simpleFunction "size" {- any chance this should be num_elements? --als was "inv"?? -}
@@ -718,14 +765,14 @@ instance Functor (RS.Base (Stmt f)) => RS.Corecursive (Stmt f) where
     SBlockF bl sts -> SBlock bl sts
     SContextF mf sts -> SContext mf sts
 
-instance TR.HFunctor StmtF where
+instance SLR.HFunctor StmtF where
   hfmap nat = \case
-    SDeclareF txt st divf vms -> SDeclareF txt st (TR.hfmap nat divf) (fmap (TR.hfmap nat) vms)
-    SDeclAssignF txt st divf vms rhe -> SDeclAssignF txt st (TR.hfmap nat divf) (fmap (TR.hfmap nat) vms) (nat rhe)
+    SDeclareF txt st divf vms -> SDeclareF txt st (SLR.hfmap nat divf) (fmap (SLR.hfmap nat) vms)
+    SDeclAssignF txt st divf vms rhe -> SDeclAssignF txt st (SLR.hfmap nat divf) (fmap (SLR.hfmap nat) vms) (nat rhe)
     SAssignF lhe rhe -> SAssignF (nat lhe) (nat rhe)
     SOpAssignF op lhe rhe -> SOpAssignF op (nat lhe) (nat rhe)
     STargetF rhe -> STargetF (nat rhe)
-    SSampleF gst dis al -> SSampleF (nat gst) dis (TR.hfmap nat al)
+    SSampleF gst dis al -> SSampleF (nat gst) dis (SLR.hfmap nat al)
     SForF txt se ee body -> SForF txt (nat se) (nat ee) body
     SForEachF txt gt body -> SForEachF txt (nat gt) body
     SIfElseF x0 sf -> SIfElseF (firstF nat x0) sf
@@ -736,20 +783,20 @@ instance TR.HFunctor StmtF where
 --    SDensityF dens al body re -> SDensityF dens al body (nat re)
     SCommentF x -> SCommentF x
     SProfileF x body -> SProfileF x body
-    SPrintF args -> SPrintF (TR.hfmap nat args)
-    SRejectF args -> SRejectF (TR.hfmap nat args)
+    SPrintF args -> SPrintF (SLR.hfmap nat args)
+    SRejectF args -> SRejectF (SLR.hfmap nat args)
     SScopedF body -> SScopedF body
     SBlockF bl body -> SBlockF bl body
     SContextF mf body -> SContextF mf body
 
-instance TR.HTraversable StmtF where
+instance SLR.HTraversable StmtF where
   htraverse natM = \case
-    SDeclareF txt st indexEs vms -> SDeclareF txt st <$> TR.htraverse natM indexEs <*> traverse (TR.htraverse natM) vms
-    SDeclAssignF txt st indexEs vms rhe -> SDeclAssignF txt st <$> TR.htraverse natM indexEs <*> traverse (TR.htraverse natM) vms <*> natM rhe
+    SDeclareF txt st indexEs vms -> SDeclareF txt st <$> SLR.htraverse natM indexEs <*> traverse (SLR.htraverse natM) vms
+    SDeclAssignF txt st indexEs vms rhe -> SDeclAssignF txt st <$> SLR.htraverse natM indexEs <*> traverse (SLR.htraverse natM) vms <*> natM rhe
     SAssignF lhe rhe -> SAssignF <$> natM lhe <*> natM rhe
     SOpAssignF op lhe rhe -> SOpAssignF op <$> natM lhe <*> natM rhe
     STargetF re -> STargetF <$> natM re
-    SSampleF ste dist al -> SSampleF <$> natM ste <*> pure dist <*> TR.htraverse natM al
+    SSampleF ste dist al -> SSampleF <$> natM ste <*> pure dist <*> SLR.htraverse natM al
     SForF txt se ee body -> SForF txt <$> natM se <*> natM ee <*> pure body
     SForEachF txt at' body -> SForEachF txt <$> natM at' <*> pure body
     SIfElseF x0 sf -> SIfElseF <$> traverse (\(c, s) -> (,) <$> natM c <*> pure s) x0 <*> pure sf
@@ -760,9 +807,9 @@ instance TR.HTraversable StmtF where
 --    SDensityF dens al body re -> SDensityF dens al body <$> natM re
     SCommentF x -> pure $ SCommentF x
     SProfileF x body -> pure $ SProfileF x body
-    SPrintF args -> SPrintF <$> TR.htraverse natM args
-    SRejectF args -> SRejectF <$> TR.htraverse natM args
+    SPrintF args -> SPrintF <$> SLR.htraverse natM args
+    SRejectF args -> SRejectF <$> SLR.htraverse natM args
     SScopedF body -> pure $ SScopedF body
     SBlockF bl body -> pure $ SBlockF bl body
     SContextF mf body -> pure $ SContextF mf body
-  hmapM = TR.htraverse
+  hmapM = SLR.htraverse
