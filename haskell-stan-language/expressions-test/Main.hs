@@ -8,20 +8,20 @@ module Main where
 
 import Prelude hiding (print)
 
-import Stan.ModelBuilder.TypedExpressions.Types
-import Stan.ModelBuilder.TypedExpressions.TypedList
-import Stan.ModelBuilder.TypedExpressions.Indexing
-import Stan.ModelBuilder.TypedExpressions.Operations
-import Stan.ModelBuilder.TypedExpressions.Expressions
-import Stan.ModelBuilder.TypedExpressions.Evaluate
-import Stan.ModelBuilder.TypedExpressions.Recursion
-import Stan.ModelBuilder.TypedExpressions.Format
-import Stan.ModelBuilder.TypedExpressions.Statements
-import Stan.ModelBuilder.TypedExpressions.Functions
+import Stan.Language.Types
+import Stan.Language.TypedList
+import Stan.Language.Indexing
+import Stan.Language.Operations
+import Stan.Language.Expressions
+import Stan.Language.Evaluate
+import Stan.Language.Recursion
+import Stan.Language.Format
+import Stan.Language.Statements
+import Stan.Language.Functions
 
 import qualified Prettyprinter as PP
 import qualified Prettyprinter.Render.Text as PP
-import Stan.ModelBuilder.TypedExpressions.Program (stmtAsText, stmtAsText')
+import Stan.Language.Program (stmtAsText, stmtAsText')
 
 writeExprCode :: IndexLookupCtxt -> UExpr t -> IO ()
 writeExprCode ctxt0 ue = case flip evalStateT ctxt0 $ doLookups ue of
@@ -109,23 +109,23 @@ main = do
   writeStmtCode ctxt1 $ assign x (x `plus` (y `plus` vByKatn))
   cmnt "context added in tree"
   writeStmtCode ctxt0 $ SContext (Just $ insertIndexBinding "KIndex" lk) [assign x (x `plus` (y `plus` vByKatn))]
-  let stDeclare1 = declare "M" (matrixSpec n l [])
+  let stDeclare1 = declare "M" (matrixSpec n l)
       nStates = namedSizeE "States"
       nPredictors = namedSizeE "Predictors"
 
-      stDeclare2 = declare "A" $ arraySpec s2 (n ::: l ::: VNil) (matrixSpec nStates nPredictors [lowerM $ realE 2])
+      stDeclare2 = declare "A" $ arraySpec s2 (n ::: l ::: VNil) (addVMs [lowerM $ realE 2] $ matrixSpec nStates nPredictors )
   cmnt "Declarations"
   writeStmtCode ctxt1 stDeclare1
   writeStmtCode ctxt0 $ SContext (Just $ insertSizeBinding "Predictors" predictorsLE) [stDeclare2]
   writeStmtCode ctxt0 $ SContext (Just $ insertSizeBinding "States" statesLE . insertSizeBinding "Predictors" predictorsLE) [stDeclare2]
-  let stDeclAssign1 = declareAndAssign "M" (matrixSpec l n [upperM $ realE 8]) (namedE "q" SMat)
+  let stDeclAssign1 = declareAndAssign "M" (addVMs [upperM $ realE 8] $ matrixSpec l n) (namedE "q" SMat)
   writeStmtCode ctxt0 stDeclAssign1
-  writeStmtCode ctxt0 $ declareAndAssign "v1" (vectorSpec (intE 2) []) (vectorE [1,2])
-  writeStmtCode ctxt0 $ declareAndAssign "v2" (vectorSpec (intE 2) []) (rangeIndexE s0 (Just $ intE 2) (Just $ intE 3) v)
-  writeStmtCode ctxt0 $ declareAndAssign "A" (matrixSpec (intE 2) (intE 2) []) (matrixE [(2 ::: 3 ::: VNil), (4 ::: 5 ::: VNil)])
-  writeStmtCode ctxt0 $ declareAndAssign "B" (arraySpec s2 (intE 2 ::: intE 2 ::: VNil) $ realSpec [lowerM $ realE 0])
+  writeStmtCode ctxt0 $ declareAndAssign "v1" (vectorSpec (intE 2)) (vectorE [1,2])
+  writeStmtCode ctxt0 $ declareAndAssign "v2" (vectorSpec (intE 2)) (rangeIndexE s0 (Just $ intE 2) (Just $ intE 3) v)
+  writeStmtCode ctxt0 $ declareAndAssign "A" (matrixSpec (intE 2) (intE 2)) (matrixE [(2 ::: 3 ::: VNil), (4 ::: 5 ::: VNil)])
+  writeStmtCode ctxt0 $ declareAndAssign "B" (arraySpec s2 (intE 2 ::: intE 2 ::: VNil) $ addVMs [lowerM $ realE 0] realSpec)
     (arrayE $ NestedVec2 ((realE 2 ::: realE 3 ::: VNil) ::: (realE 4 ::: realE 5 ::: VNil) :::  VNil))
-  writeStmtCode ctxt0 $ declareAndAssign "C" (arraySpec s2 (intE 2 ::: intE 2 ::: VNil) (vectorSpec (intE 2) [lowerM $ realE 0 , multiplierM $ realE 3]))
+  writeStmtCode ctxt0 $ declareAndAssign "C" (arraySpec s2 (intE 2 ::: intE 2 ::: VNil) (addVMs [lowerM $ realE 0 , multiplierM $ realE 3] $ vectorSpec (intE 2) ))
     (arrayE $ NestedVec2 ((vectorE [1,2] ::: vectorE [3,4] ::: VNil) ::: (vectorE [4,5] ::: vectorE [5, 6] ::: VNil) :::  VNil))
   cmnt "Add to target, two ways."
   let normalDistVec = Density "normal" SCVec (SCVec ::> (SCVec ::> TypeNil))
@@ -176,10 +176,10 @@ main = do
   let ln n = namedE ("longVarName" <> show n) SReal
       dn n = namedE ("someLongIntName" <> show n) SInt
       veryLongName = "abcdefghijklmnopqrstuvwxyz"
-  writeStmtAsText 80 $ declareN $ NamedDeclSpec veryLongName $  arraySpec s4 (dn 1 ::: dn 2 ::: dn 3 ::: dn 4 ::: VNil) $ matrixSpec (dn 1) (dn 2) []
-  writeStmtAsText 40 $ declareN $ NamedDeclSpec veryLongName $  arraySpec s4 (dn 1 ::: dn 2 ::: dn 3 ::: dn 4 ::: VNil) $ matrixSpec (dn 1) (dn 2) []
-  writeStmtAsText 80 $ declareAndAssignN (NamedDeclSpec "longRealName" $ realSpec []) (foldl' plusE (ln 2) $ fmap ln [3])
-  writeStmtAsText 80 $ declareAndAssignN (NamedDeclSpec "longRealName" $ realSpec []) (foldl' plusE (ln 2) $ fmap ln [3..20])
+  writeStmtAsText 80 $ declareN $ NamedDeclSpec veryLongName $  arraySpec s4 (dn 1 ::: dn 2 ::: dn 3 ::: dn 4 ::: VNil) $ matrixSpec (dn 1) (dn 2)
+  writeStmtAsText 40 $ declareN $ NamedDeclSpec veryLongName $  arraySpec s4 (dn 1 ::: dn 2 ::: dn 3 ::: dn 4 ::: VNil) $ matrixSpec (dn 1) (dn 2)
+  writeStmtAsText 80 $ declareAndAssignN (NamedDeclSpec "longRealName" $ realSpec) (foldl' plusE (ln 2) $ fmap ln [3])
+  writeStmtAsText 80 $ declareAndAssignN (NamedDeclSpec "longRealName" $ realSpec) (foldl' plusE (ln 2) $ fmap ln [3..20])
   writeStmtAsText 80 $ ln 1 `assign` (foldl' plusE (ln 2) $ fmap ln [3..20])
   let formatS1 = for "q" (SpecificIn $ namedE "votes" SCVec)
                  $ \sie -> (sie `assign` (realE 2) :| [assign x (x `plus` y)
