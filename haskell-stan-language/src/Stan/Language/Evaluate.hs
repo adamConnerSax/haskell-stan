@@ -27,17 +27,18 @@ import Stan.Language.Statements
       LStmt,
       Stmt,
       StmtF(SContextF),
-      UStmt )
+      UStmt, LookupCtxt (..) )
 import Stan.Language.Recursion
     ( HFunctor(..),
       type (~>),
       HTraversable(..),
       NatM,
       K(..),
-      IFix(IFix),
+      IFix(IFix,unIFix),
       iCata,
+      anaM,
       iCataM,
-      IAlgM )
+      IAlgM, Fix, unFix)
 import Stan.Language.Format
     ( CodePP,
       iExprToCode,
@@ -78,18 +79,18 @@ import qualified Prettyprinter as PP
 data Context = Context {
                        }
 
-type LookupM = StateT IndexLookupCtxt (Either Text)
+type LookupM = StateT LookupCtxt (Either Text)
 
 lookupIndex :: IndexKey -> LookupM (LExpr (EArray (S Z) EInt))
 lookupIndex k = do
-  im <- gets indexes
+  im <- gets (indexes . indexCtxt)
   case Map.lookup k im of
     Just e -> pure e
     Nothing -> lift $ Left $ "lookupIndex: \"" <> k <> "\" not found in index map."
 
 lookupSize :: IndexKey -> LookupM (LExpr EInt)
 lookupSize k = do
-  sm <- gets sizes
+  sm <- gets (sizes . indexCtxt)
   case Map.lookup k sm of
     Just e -> pure e
     Nothing -> lift $ Left $ "lookupSize: \"" <> k <> "\" not found in size map."
@@ -105,20 +106,27 @@ doLookups :: NatM LookupM UExpr LExpr
 doLookups = iCataM toLExprAlg
 
 
-handleContext :: StmtF r a -> LookupM (StmtF r a)
-handleContext = \case
+updateContext :: StmtF r a -> LookupM (StmtF r a)
+updateContext = \case
   SContextF mf body -> case mf of
     Nothing -> pure $ SContextF Nothing body
     Just f -> SContextF Nothing <$> withStateT f (pure body)
   x -> pure x
 
 doLookupsInCStatement :: UStmt -> LookupM LStmt
-doLookupsInCStatement = RS.anaM (\x -> htraverse doLookups (RS.project x) >>= handleContext)
+doLookupsInCStatement = RS.anaM (\x -> htraverse doLookups (RS.project x) >>= updateContext)
 
-doLookupsInStatementE :: IndexLookupCtxt -> UStmt -> Either Text LStmt
+type UStmt' = Fix (StmtF UExpr)
+type LStmt' = Fix (StmtF LExpr)
+
+doLookupsInCStatement' :: UStmt' -> LookupM LStmt'
+doLookupsInCStatement' = anaM (\x -> htraverse doLookups (unFix x) >>= updateContext)
+
+
+doLookupsInStatementE :: LookupCtxt -> UStmt -> Either Text LStmt
 doLookupsInStatementE ctxt0 = flip evalStateT ctxt0 . doLookupsInCStatement
 
-statementToCodeE :: IndexLookupCtxt -> UStmt -> Either Text CodePP
+statementToCodeE :: LookupCtxt -> UStmt -> Either Text CodePP
 statementToCodeE ctxt0 x = doLookupsInStatementE ctxt0 x >>= stmtToCodeE
 
 data EExprF :: (EType -> Type) -> EType -> Type where
@@ -143,14 +151,14 @@ lExprToEExpr = iCata (IFix . EL)
 
 lookupIndexE :: IndexKey -> LookupM (EExpr (EArray (S Z) EInt))
 lookupIndexE k =  do
-  im <- gets indexes
+  im <- gets (indexes . indexCtxt)
   case Map.lookup k im of
     Just e -> pure $ lExprToEExpr e
     Nothing -> pure $ IFix $ EE $ "#index: " <> k <> "#"
 
 lookupSizeE :: IndexKey -> LookupM (EExpr EInt)
 lookupSizeE k =  do
-  im <- gets sizes
+  im <- gets (sizes . indexCtxt)
   case Map.lookup k im of
     Just e -> pure $ lExprToEExpr e
     Nothing -> pure $ IFix $ EE $ "#size: " <> k <> "#"
@@ -158,9 +166,9 @@ lookupSizeE k =  do
 type EStmt = Stmt EExpr
 
 doLookupsEInStatement :: UStmt -> LookupM EStmt
-doLookupsEInStatement = RS.anaM (\x -> htraverse doLookupsE (RS.project x) >>= handleContext)
+doLookupsEInStatement = RS.anaM (\x -> htraverse doLookupsE (RS.project x) >>= updateContext)
 
-doLookupsEInStatementE :: IndexLookupCtxt -> UStmt -> Either Text EStmt
+doLookupsEInStatementE :: LookupCtxt -> UStmt -> Either Text EStmt
 doLookupsEInStatementE ctxt0 = flip evalStateT ctxt0 . doLookupsEInStatement
 
 doLookupsE :: NatM LookupM UExpr EExpr
@@ -181,7 +189,7 @@ eExprToCode = K . iExprToCode . unK . eExprToIExprCode
 eStmtToCode :: EStmt -> Either Text CodePP
 eStmtToCode = RS.hylo stmtToCodeAlg (hfmap eExprToCode . RS.project)
 
-eStatementToCodeE :: IndexLookupCtxt -> UStmt -> Either Text CodePP
+eStatementToCodeE :: LookupCtxt -> UStmt -> Either Text CodePP
 eStatementToCodeE ctxt0 x = doLookupsEInStatementE ctxt0 x >>= eStmtToCode
 
 

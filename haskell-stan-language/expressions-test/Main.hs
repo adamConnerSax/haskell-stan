@@ -23,7 +23,7 @@ import qualified Prettyprinter as PP
 import qualified Prettyprinter.Render.Text as PP
 import Stan.Language.Program (stmtAsText, stmtAsText')
 
-writeExprCode :: IndexLookupCtxt -> UExpr t -> IO ()
+writeExprCode :: LookupCtxt -> UExpr t -> IO ()
 writeExprCode ctxt0 ue = case flip evalStateT ctxt0 $ doLookups ue of
     Left txt -> do
       putTextLn $ "doLookups failed with message: " <> txt
@@ -36,7 +36,7 @@ writeExprCode ctxt0 ue = case flip evalStateT ctxt0 $ doLookups ue of
       PP.putDoc $ unK $ exprToCode le
       putTextLn ""
 
-writeStmtCode :: IndexLookupCtxt -> UStmt -> IO ()
+writeStmtCode :: LookupCtxt -> UStmt -> IO ()
 writeStmtCode ctxt0 s = case statementToCodeE ctxt0 s of
     Left txt -> do
       putTextLn $ "doLookups failed with message: " <> txt
@@ -74,7 +74,7 @@ main = do
     kl = namedIndexE "KIndex"
     lk = lNamedE "K" (SArray s1 SInt)
     ue1 = x `plus` y
-    ctxt0 = IndexLookupCtxt mempty mempty
+    ctxt0 = emptyLookupCtxt --IndexLookupCtxt mempty mempty
   cmnt "Expressions"
   writeExprCode ctxt0 ue1
   let

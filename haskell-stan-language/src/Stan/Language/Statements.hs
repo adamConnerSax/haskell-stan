@@ -409,14 +409,14 @@ reject = SReject
 scoped :: Traversable f => f UStmt -> UStmt
 scoped = SScoped
 
-context :: Traversable f => (IndexLookupCtxt -> IndexLookupCtxt) -> f UStmt -> UStmt
+context :: Traversable f => (LookupCtxt -> LookupCtxt) -> f UStmt -> UStmt
 context cf = SContext (Just cf)
 
-insertIndexBinding :: IndexKey -> LExpr EIndexArray -> IndexLookupCtxt -> IndexLookupCtxt
-insertIndexBinding k ie (IndexLookupCtxt a b) = IndexLookupCtxt a (Map.insert k ie b)
+insertIndexBinding :: IndexKey -> LExpr EIndexArray -> LookupCtxt -> LookupCtxt
+insertIndexBinding k ie (LookupCtxt vlc (IndexLookupCtxt a b)) = LookupCtxt vlc $ IndexLookupCtxt a (Map.insert k ie b)
 
-insertSizeBinding :: IndexKey -> LExpr EInt -> IndexLookupCtxt -> IndexLookupCtxt
-insertSizeBinding k ie (IndexLookupCtxt a b) = IndexLookupCtxt (Map.insert k ie a) b
+insertSizeBinding :: IndexKey -> LExpr EInt -> LookupCtxt -> LookupCtxt
+insertSizeBinding k ie (LookupCtxt vlc (IndexLookupCtxt a b)) = LookupCtxt vlc $ IndexLookupCtxt (Map.insert k ie a) b
 
 data VarModifier :: (EType -> Type) -> EType -> Type where
   VarLower :: r t -> VarModifier r t
@@ -556,7 +556,7 @@ data Stmt :: (EType -> Type) -> Type where
   SReject :: TypedList r args -> Stmt r
   SScoped :: Traversable f => f (Stmt r) -> Stmt r
   SBlock :: Traversable f => StmtBlock -> f (Stmt r) -> Stmt r
-  SContext :: Traversable f => Maybe (IndexLookupCtxt -> IndexLookupCtxt) -> f (Stmt r) -> Stmt r
+  SContext :: Traversable f => Maybe (LookupCtxt -> LookupCtxt) -> f (Stmt r) -> Stmt r
 
 data StmtF :: (EType -> Type) -> Type -> Type where
   SDeclareF ::  Text -> StanType et -> DeclIndexVecF r et -> [VarModifier r (ScalarType et)] -> StmtF r a
@@ -579,7 +579,7 @@ data StmtF :: (EType -> Type) -> Type -> Type where
   SRejectF :: TypedList r args -> StmtF r a
   SScopedF :: Traversable f => f a -> StmtF r a
   SBlockF :: Traversable f => StmtBlock -> f a -> StmtF r a
-  SContextF :: Traversable f => Maybe (IndexLookupCtxt -> IndexLookupCtxt) -> f a -> StmtF r a
+  SContextF :: Traversable f => Maybe (LookupCtxt -> LookupCtxt) -> f a -> StmtF r a
 
 type instance RS.Base (Stmt f) = StmtF f
 
@@ -598,7 +598,7 @@ checkTypedVar vn st m = case Map.lookup vn m of
   Nothing -> NameMissing
   Just sst -> if Some.mkSome st == sst then CheckPassed else WrongType $ Some.withSome sst (\prevST -> sTypeName prevST)
 
-newtype VarLookupCtxt = VarLookupCtxt (NE.NonEmpty VarTypeMap)
+newtype VarLookupCtxt = VarLookupCtxt (NE.NonEmpty VarTypeMap) deriving newtype (Show)
 
 emptyVarLookupCtxt :: VarLookupCtxt
 emptyVarLookupCtxt = VarLookupCtxt $ mempty :| []
@@ -641,9 +641,17 @@ indexSize = functionE array_num_elements . oneTyped
 
 data IndexLookupCtxt = IndexLookupCtxt { sizes :: IndexSizeMap, indexes :: IndexArrayMap }
 
-emptyLookupCtxt :: IndexLookupCtxt
-emptyLookupCtxt = IndexLookupCtxt mempty mempty
+emptyIndexLookupCtxt :: IndexLookupCtxt
+emptyIndexLookupCtxt = IndexLookupCtxt mempty mempty
 
+data LookupCtxt =
+  LookupCtxt
+  { varCtxt :: VarLookupCtxt
+  , indexCtxt :: IndexLookupCtxt
+  }
+
+emptyLookupCtxt :: LookupCtxt
+emptyLookupCtxt = LookupCtxt emptyVarLookupCtxt emptyIndexLookupCtxt
 
 instance Functor (StmtF f) where
   fmap f x = case x of

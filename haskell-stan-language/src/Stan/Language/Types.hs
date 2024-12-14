@@ -36,6 +36,7 @@ import qualified GHC.TypeLits as TE
 import GHC.TypeLits (ErrorMessage((:<>:)))
 import qualified Text.Show
 import qualified Data.GADT.Compare as GC
+import qualified Data.GADT.Show as GS
 
 -- possible types of terms
 -- NB: zero dimensional array will be treated as the underlying type
@@ -226,6 +227,8 @@ sIndexArray = sIntArray
 
 instance Show (SType t) where
   show x = "SType: " <> show (sTypeToEType x)
+
+instance GS.GShow SType where gshowsPrec = GS.defaultGshowsPrec
 
 instance Eq (SType t) where
   SVoid == SVoid = True
