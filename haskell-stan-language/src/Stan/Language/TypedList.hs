@@ -160,6 +160,14 @@ zipTypedListsWith :: (forall x. a x -> b x -> c x) -> TypedList a args -> TypedL
 zipTypedListsWith _ TNil TNil = TNil
 zipTypedListsWith f (a :> as) (b :> bs) = f a b :> zipTypedListsWith f as bs
 
+-- This is fun! Fold a typed list using a function of it's held data and the coresponding STypes
+foldTypedList :: forall a b ts . AllGenTypes ts => (forall x. a x -> SType x -> b -> b) -> b -> TypedList a ts -> b
+foldTypedList f = go
+  where
+    go :: forall ts' . AllGenTypes ts' => b -> TypedList a ts' -> b
+    go b TNil = b
+    go b (a :> as) = go (f a genSType b) as
+
 --typeChangingMap :: (forall t. u t -> u (F t')) -> TypedList u as ->
 
 eqTypedLists :: forall (t ::EType -> Type) es. (forall a.t a -> t a -> Bool) -> TypedList t es -> TypedList t es -> Bool

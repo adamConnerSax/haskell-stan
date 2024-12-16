@@ -54,7 +54,7 @@ import Stan.Language.TypedList
       SameTypeList,
       SameTypedListToVecF,
       TypedList(..),
-      VecToSameTypedListF(..) )
+      VecToSameTypedListF(..), GenTypedList (..), foldTypedList, AllGenTypes )
 import Stan.Language.Indexing
     ( Vec(..),
       DeclDimension,
@@ -91,6 +91,7 @@ import qualified Data.Map.Strict as Map
 import Data.Type.Equality (type (:~:)(..))
 import qualified Data.Some as Some
 import qualified Data.Functor.Foldable as RS
+import Stan.Language.Recursion (K(..))
 --import qualified Stan.ModelBuilder.Expressions as SB
 
 type StanName = Text
@@ -285,25 +286,28 @@ data VarAndForType (t :: EType) where
 
 --intVecToLoopVFTs :: Text -> Vec.Vec n IntE -> TypeList VarAndForType
 
-for :: forall t f . (Traversable f, GenSType (ForEachSlice t))
-    => Text -> ForType t -> (UExpr (ForEachSlice t) -> f UStmt) -> UStmt
+for :: forall t . GenSType (ForEachSlice t)
+    => Text -> ForType t -> (UExpr (ForEachSlice t) -> UStmt) -> UStmt
 for loopCounter ft bodyF = case ft of
-  SpecificNumbered se' ee' -> SFor loopCounter se' ee' $ bodyF (namedE loopCounter SInt)
+  SpecificNumbered se' ee' -> SFor loopCounter se' ee'
+                           $ scoped
+                           $ context (modifyVarCtxt $ addTypedVarToInnerScope loopCounter SInt)
+                           $ [bodyF (namedE loopCounter SInt)]
   IndexedLoop ik -> SFor loopCounter (intE 1) (namedSizeE ik) $ bodyF (namedE loopCounter SInt)
   SpecificIn e -> SForEach loopCounter e $ bodyF loopCounterE
 --  IndexedIn _ e -> SForEach loopCounter e $ bodyF loopCounterE
   where
     loopCounterE = namedE loopCounter $ genSType @(ForEachSlice t)
 
-loopOver :: (Traversable f, GenSType (ForEachSlice t))
-         => UExpr t -> Text -> (UExpr (ForEachSlice t) -> f UStmt) -> UStmt
+loopOver :: GenSType (ForEachSlice t)
+         => UExpr t -> Text -> (UExpr (ForEachSlice t) -> UStmt) -> UStmt
 loopOver container loopVarName = for loopVarName (SpecificIn container)
 {-# INLINEABLE loopOver #-}
 
 ftSized :: UExpr EInt -> ForType EInt
 ftSized = SpecificNumbered (intE 1)
 
-loopSized :: Traversable f => UExpr EInt -> Text -> (UExpr EInt -> f UStmt) -> UStmt
+loopSized :: UExpr EInt -> Text -> (UExpr EInt -> UStmt) -> UStmt
 loopSized nE loopVarName = for loopVarName $ ftSized nE
 {-# INLINEABLE loopSized #-}
 
@@ -327,13 +331,12 @@ fesaProofI n = DT.withSNat n
 vftSized :: Text -> UExpr EInt -> VarAndForType EInt
 vftSized lvn = VarAndForType lvn . ftSized
 
-nestedLoops :: Traversable f
-  => TypedList VarAndForType ts -> (ExprList (ForEachSliceArgs ts) -> f UStmt) -> UStmt
+nestedLoops :: TypedList VarAndForType ts -> (ExprList (ForEachSliceArgs ts) -> UStmt) -> UStmt
 nestedLoops TNil f = scoped $ f TNil
 nestedLoops (VarAndForType vln ft :> TNil) f = for vln ft $ \e -> f (e :> TNil)
 nestedLoops (VarAndForType vln ft :> vfts) f =
   let g e es = f (e :> es) in for vln ft
-                              $ \e -> [nestedLoops vfts (g e)]
+                              $ \e -> nestedLoops vfts (g e)
 
 type IntVecVFT (n :: Nat) = TypedList VarAndForType (SameTypeList EInt n)
 
@@ -343,10 +346,10 @@ vecVFT counterPrefix v =
       g nt ie = VarAndForType (counterPrefix <> show nt) (SpecificNumbered (intE 1) ie)
   in vecToSameTypedListF g v
 
-intVecLoops :: forall m f . (VecToSameTypedListF VarAndForType EInt m, Traversable f)
+intVecLoops :: forall m . (VecToSameTypedListF VarAndForType EInt m)
             => Text
             -> Vec.Vec m IntE
-            -> (ExprList (ForEachSliceArgs (SameTypeList EInt m)) -> f UStmt)
+            -> (ExprList (ForEachSliceArgs (SameTypeList EInt m)) -> UStmt)
             -> UStmt
 intVecLoops counterPrefix v stmtF = nestedLoops (vecVFT counterPrefix v) stmtF
 
@@ -359,7 +362,7 @@ ifThen ce sTrue = SIfElse ((ce, sTrue) :| []) nullS
 ifThenElse :: NonEmpty (UExpr EBool, UStmt) -> UStmt -> UStmt
 ifThenElse = SIfElse
 
-while :: Traversable f => UExpr EBool -> f UStmt -> UStmt
+while :: UExpr EBool -> UStmt -> UStmt
 while = SWhile
 
 break :: UStmt
@@ -368,7 +371,7 @@ break = SBreak
 continue :: UStmt
 continue = SContinue
 
-function :: Traversable f => Function rt args -> TypedList (FuncArg Text) args -> (TypedList UExpr args -> (f UStmt, UExpr rt)) -> UStmt
+function :: Function rt args -> TypedList (FuncArg Text) args -> (TypedList UExpr args -> (UStmt, UExpr rt)) -> UStmt
 function fd argNames bodyF = SFunction fd argNames bodyS ret
   where
     argTypes = typeListToTypedListOfTypes $ functionArgTypes fd
@@ -397,7 +400,7 @@ simpleFunctionBody _ n retDSF bF args = let rE = namedE n st in  (declare n (ret
 comment :: NonEmpty Text -> UStmt
 comment = SComment
 
-profile :: Traversable f => Text -> f UStmt -> UStmt
+profile :: Text -> UStmt -> UStmt
 profile = SProfile
 
 print :: TypedList UExpr args -> UStmt
@@ -406,11 +409,14 @@ print = SPrint
 reject :: TypedList UExpr args -> UStmt
 reject = SReject
 
-scoped :: Traversable f => f UStmt -> UStmt
+scoped :: UStmt -> UStmt
 scoped = SScoped
 
 context :: Traversable f => (LookupCtxt -> LookupCtxt) -> f UStmt -> UStmt
 context cf = SContext (Just cf)
+
+grouped :: Traversable f => f UStmt -> UStmt
+grouped = SContext Nothing
 
 insertIndexBinding :: IndexKey -> LExpr EIndexArray -> LookupCtxt -> LookupCtxt
 insertIndexBinding k ie (LookupCtxt vlc (IndexLookupCtxt a b)) = LookupCtxt vlc $ IndexLookupCtxt a (Map.insert k ie b)
@@ -542,20 +548,20 @@ data Stmt :: (EType -> Type) -> Type where
   SOpAssign :: (ta ~ BinaryResultT op ta tb) => SBinaryOp op -> r ta -> r tb -> Stmt r
   STarget :: r EReal -> Stmt r
   SSample :: r st -> Density st args -> TypedList r args -> Stmt r
-  SFor :: Traversable f => Text -> r EInt -> r EInt -> f (Stmt r) -> Stmt r
-  SForEach :: Traversable f => Text -> r t -> f (Stmt r) -> Stmt r
+  SFor :: Text -> r EInt -> r EInt -> Stmt r -> Stmt r
+  SForEach :: Text -> r t -> Stmt r -> Stmt r
   SIfElse :: NonEmpty (r EBool, Stmt r) -> Stmt r -> Stmt r -- [(condition, ifTrue)] -> ifAllFalse
-  SWhile :: Traversable f => r EBool -> f (Stmt r) -> Stmt r
+  SWhile :: r EBool -> Stmt r -> Stmt r
   SBreak :: Stmt r
   SContinue :: Stmt r
-  SFunction :: Traversable f => Function rt args -> TypedList (FuncArg Text) args -> f (Stmt r) -> r rt -> Stmt r
+  SFunction :: Function rt args -> TypedList (FuncArg Text) args -> Stmt r -> r rt -> Stmt r
 --  SDensity :: Traversable f => Density gt args -> TypedList (FuncArg Text) (gt ': args) -> f (Stmt r) -> r EReal -> Stmt r
   SComment :: Traversable f => f Text -> Stmt r
-  SProfile :: Traversable f => Text -> f (Stmt r) -> Stmt r
+  SProfile :: Text -> Stmt r -> Stmt r
   SPrint :: TypedList r args -> Stmt r
   SReject :: TypedList r args -> Stmt r
-  SScoped :: Traversable f => f (Stmt r) -> Stmt r
-  SBlock :: Traversable f => StmtBlock -> f (Stmt r) -> Stmt r
+  SScoped :: Stmt r -> Stmt r
+  SBlock :: StmtBlock -> Stmt r -> Stmt r
   SContext :: Traversable f => Maybe (LookupCtxt -> LookupCtxt) -> f (Stmt r) -> Stmt r
 
 data StmtF :: (EType -> Type) -> Type -> Type where
@@ -565,20 +571,20 @@ data StmtF :: (EType -> Type) -> Type -> Type where
   SOpAssignF :: (ta ~ BinaryResultT op ta tb) => SBinaryOp op -> r ta -> r tb -> StmtF r a
   STargetF :: r EReal -> StmtF r a
   SSampleF :: r st -> Density st args -> TypedList r args -> StmtF r a
-  SForF :: Traversable f => Text -> r EInt -> r EInt -> f a -> StmtF r a
-  SForEachF :: Traversable f => Text -> r t -> f a -> StmtF r a
+  SForF :: Text -> r EInt -> r EInt -> a -> StmtF r a
+  SForEachF :: Text -> r t -> a -> StmtF r a
   SIfElseF :: NonEmpty (r EBool, a) -> a -> StmtF r a -- [(condition, ifTrue)] -> ifAllFalse
-  SWhileF :: Traversable f => r EBool -> f a -> StmtF r a
+  SWhileF :: r EBool -> a -> StmtF r a
   SBreakF :: StmtF r a
   SContinueF :: StmtF r a
-  SFunctionF :: Traversable f => Function rt args -> TypedList (FuncArg Text) args -> f a -> r rt -> StmtF r a
+  SFunctionF :: Function rt args -> TypedList (FuncArg Text) args -> a -> r rt -> StmtF r a
 --  SDensityF :: Traversable f => Density gt args -> TypedList (FuncArg Text) (gt ': args) -> f a -> r EReal -> StmtF r a
   SCommentF :: Traversable f => f Text -> StmtF r a
-  SProfileF :: Traversable f => Text -> f a -> StmtF r a
+  SProfileF :: Text -> a -> StmtF r a
   SPrintF :: TypedList r args -> StmtF r a
   SRejectF :: TypedList r args -> StmtF r a
-  SScopedF :: Traversable f => f a -> StmtF r a
-  SBlockF :: Traversable f => StmtBlock -> f a -> StmtF r a
+  SScopedF :: a -> StmtF r a
+  SBlockF :: StmtBlock -> a -> StmtF r a
   SContextF :: Traversable f => Maybe (LookupCtxt -> LookupCtxt) -> f a -> StmtF r a
 
 type instance RS.Base (Stmt f) = StmtF f
@@ -633,6 +639,11 @@ addTypedVarInScope vn st ctxt = mVLC where
     Nothing -> Just $ addTypedVarToInnerScope vn st ctxt
     Just _ -> Nothing
 
+addTypedVarsInScope :: AllGenTypes ts => TypedList (K VarName) ts -> VarLookupCtxt -> Maybe VarLookupCtxt
+addTypedVarsInScope typedVarNames vlc = foldTypedList f (Just vlc) typedVarNames
+  where
+    f (K vn) st mVlc = mVlc >>= addTypedVarInScope vn st
+
 array_num_elements :: (SNatI n, GenSType t) => Function EInt '[EArray n t]
 array_num_elements = simpleFunction "size" {- any chance this should be num_elements? --als was "inv"?? -}
 
@@ -668,20 +679,20 @@ instance Functor (StmtF f) where
     SOpAssignF op ft ft' -> SOpAssignF op ft ft'
     STargetF f' -> STargetF f'
     SSampleF f_st dis al -> SSampleF f_st dis al
-    SForF ctr startE endE body -> SForF ctr startE endE (f <$> body)
-    SForEachF ctr fromE body -> SForEachF ctr fromE (f <$> body)
+    SForF ctr startE endE body -> SForF ctr startE endE (f body)
+    SForEachF ctr fromE body -> SForEachF ctr fromE (f body)
     SIfElseF x1 sf -> SIfElseF (secondF f x1) (f sf)
-    SWhileF cond sfs -> SWhileF cond (f <$> sfs)
+    SWhileF cond sf -> SWhileF cond (f sf)
     SBreakF -> SBreakF
     SContinueF -> SContinueF
-    SFunctionF func al sfs re -> SFunctionF func al (f <$> sfs) re
+    SFunctionF func al sf re -> SFunctionF func al (f sf) re
 --    SDensityF dens al sfs re -> SDensityF dens al (f <$> sfs) re
     SCommentF t -> SCommentF t
-    SProfileF t stmts -> SProfileF t (f <$> stmts)
+    SProfileF t stmt -> SProfileF t (f stmt)
     SPrintF args -> SPrintF args
     SRejectF args -> SRejectF args
-    SScopedF sfs -> SScopedF $ f <$> sfs
-    SBlockF bl stmts -> SBlockF bl (f <$> stmts)
+    SScopedF sf -> SScopedF $ f sf
+    SBlockF bl stmt -> SBlockF bl (f stmt)
     SContextF mf sts -> SContextF mf $  f <$> sts
 
 instance Foldable (StmtF f) where
@@ -692,20 +703,20 @@ instance Foldable (StmtF f) where
     SOpAssignF {} -> mempty
     STargetF {} -> mempty
     SSampleF {} -> mempty
-    SForF _ _ _ body -> foldMap f body
-    SForEachF _ _ body -> foldMap f body
+    SForF _ _ _ body -> f body
+    SForEachF _ _ body -> f body
     SIfElseF ifConds sf -> foldMap (f . snd) ifConds <> f sf
-    SWhileF _ body -> foldMap f body
+    SWhileF _ body -> f body
     SBreakF -> mempty
     SContinueF -> mempty
-    SFunctionF _ _ body _ -> foldMap f body
+    SFunctionF _ _ body _ -> f body
 --    SDensityF _ _ body _ -> foldMap f body
     SCommentF _ -> mempty
-    SProfileF _ body -> foldMap f body
+    SProfileF _ body -> f body
     SPrintF {} -> mempty
     SRejectF {} -> mempty
-    SScopedF body -> foldMap f body
-    SBlockF _ body -> foldMap f body
+    SScopedF body -> f body
+    SBlockF _ body -> f body
     SContextF _ body -> foldMap f body
 
 instance Traversable (StmtF f) where
@@ -716,20 +727,20 @@ instance Traversable (StmtF f) where
     SOpAssignF op ft ft' -> pure $ SOpAssignF op ft ft'
     STargetF f -> pure $ STargetF f
     SSampleF f_st dis al -> pure $ SSampleF f_st dis al
-    SForF txt f f' sfs -> SForF txt f f' <$> traverse g sfs
-    SForEachF txt ft sfs -> SForEachF txt ft <$> traverse g sfs
+    SForF txt f f' sfs -> SForF txt f f' <$> g sfs
+    SForEachF txt ft sfs -> SForEachF txt ft <$> g sfs
     SIfElseF x0 sf -> SIfElseF <$> traverse (\(c, s) -> pure ((,) c) <*> g s) x0 <*> g sf
-    SWhileF f body -> SWhileF f <$> traverse g body
+    SWhileF f body -> SWhileF f <$> g body
     SBreakF -> pure SBreakF
     SContinueF -> pure SContinueF
-    SFunctionF func al sfs re -> SFunctionF func al <$> traverse g sfs <*> pure re
+    SFunctionF func al sfs re -> SFunctionF func al <$> g sfs <*> pure re
 --    SDensityF dens al sfs re -> SDensityF dens al <$> traverse g sfs <*> pure re
     SCommentF t -> pure $ SCommentF t
-    SProfileF t stmts -> SProfileF t <$> traverse g stmts
+    SProfileF t stmts -> SProfileF t <$> g stmts
     SPrintF args -> pure $ SPrintF args
     SRejectF args -> pure $ SRejectF args
-    SScopedF sfs -> SScopedF <$> traverse g sfs
-    SBlockF bl stmts -> SBlockF bl <$> traverse g stmts
+    SScopedF sfs -> SScopedF <$> g sfs
+    SBlockF bl stmts -> SBlockF bl <$> g stmts
     SContextF mf sfs -> SContextF mf <$> traverse g sfs
 
 instance Functor (RS.Base (Stmt f)) => RS.Recursive (Stmt f) where
