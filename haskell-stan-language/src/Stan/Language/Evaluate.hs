@@ -20,21 +20,22 @@ where
 --import qualified Stan.ModelBuilder.Expressions as SME
 import Prelude hiding (Nat)
 
-import Stan.Language.Types ( Nat(Z, S), EType(EInt, EArray) )
-import Stan.Language.Expressions ( IndexKey, VarName, LExpr, LExprF, UExpr, UExprF(..) )
+import Stan.Language.Types ( Nat(Z, S), EType(EInt, EArray), sTypeFromStanType, SType, sTypeName)
+import Stan.Language.Expressions ( IndexKey, VarName, LExpr, LExprF (..), UExpr, UExprF(..), lNamedE )
 import Stan.Language.Statements
     ( IndexLookupCtxt(sizes, indexes),
       LStmt,
       Stmt,
-      StmtF(SContextF),
-      UStmt, LookupCtxt (..) )
+      StmtF(..),
+      StmtBlock(..),
+      UStmt, LookupCtxt (..), addTypedVarToInnerScope, modifyVarCtxt, enterNewScope, VarNameCheck (..), checkTypedVar, varLookupMap )
 import Stan.Language.Recursion
     ( HFunctor(..),
       type (~>),
       HTraversable(..),
       NatM,
       K(..),
-      IFix(IFix,unIFix),
+      IFix(..),
       iCata,
       anaM,
       iCataM,
@@ -95,19 +96,36 @@ lookupSize k = do
     Just e -> pure e
     Nothing -> lift $ Left $ "lookupSize: \"" <> k <> "\" not found in size map."
 
+lookupVar :: VarName -> SType t -> LookupM (LExpr t)
+lookupVar vn st = do
+  vtm <- gets $ varLookupMap . varCtxt
+  case checkTypedVar vn st vtm of
+    CheckPassed -> pure $ lNamedE vn st
+    NameMissing -> lift $ Left $ "variable name \"" <> vn <> "\" used but not declared."
+    WrongType dt -> lift $ Left $ "variable name \"" <> vn <> "\" previously declared with type \"" <> dt <> " but used with type \"" <> sTypeName st <> "\""
+
 toLExprAlg :: IAlgM LookupM UExprF LExpr
 toLExprAlg = \case
   UL le -> pure $ IFix le
   UIndex ik -> lookupIndex ik
   UIndexSize ik -> lookupSize ik
-  UVarExpr _name _sType le -> pure $ IFix le
+  UVarExpr name sType _le -> lookupVar name sType
 
 doLookups :: NatM LookupM UExpr LExpr
 doLookups = iCataM toLExprAlg
 
-
 updateContext :: StmtF r a -> LookupM (StmtF r a)
 updateContext = \case
+  s@(SDeclareF varName stanType _ _) -> do
+    modify $ modifyVarCtxt $ addTypedVarToInnerScope varName $ sTypeFromStanType stanType
+    pure s
+  s@(SDeclAssignF varName stanType _ _ _) -> do
+    modify $ modifyVarCtxt $ addTypedVarToInnerScope varName $ sTypeFromStanType stanType
+    pure s
+  SScopedF body -> SScopedF <$> withStateT (modifyVarCtxt enterNewScope) (pure body)
+  SBlockF stBlock body -> case stBlock of
+    ModelStmts -> SBlockF stBlock <$> withStateT (modifyVarCtxt enterNewScope) (pure body)
+    _ -> pure $ SBlockF stBlock body
   SContextF mf body -> case mf of
     Nothing -> pure $ SContextF Nothing body
     Just f -> SContextF Nothing <$> withStateT f (pure body)

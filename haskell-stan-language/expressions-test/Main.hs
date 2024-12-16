@@ -75,12 +75,29 @@ main = do
     lk = lNamedE "K" (SArray s1 SInt)
     ue1 = x `plus` y
     ctxt0 = emptyLookupCtxt --IndexLookupCtxt mempty mempty
+    ctxtWithVars = modifyVarCtxt (addTypedVarToInnerScope "x" SReal
+                                  . addTypedVarToInnerScope "y" SReal
+                                  . addTypedVarToInnerScope "n" SInt
+                                  . addTypedVarToInnerScope "v" SCVec
+                                  . addTypedVarToInnerScope "KIndex" (SArray s1 SInt)
+                                  . addTypedVarToInnerScope "K" (SArray s1 SInt)
+                                ) ctxt0
   cmnt "Expressions"
+  cmnt "Next one should fail with undeclared variables"
   writeExprCode ctxt0 ue1
+  cmnt "Next one should fail with wrongly types variables"
+  flip writeExprCode ue1 $ modifyVarCtxt (addTypedVarToInnerScope "x" SInt . addTypedVarToInnerScope "y" SInt) ctxt0
+  cmnt "Next one should succeed"
+  flip writeExprCode ue1 ctxtWithVars
+
   let
     vByK = indexE s0 kl v
     vByKatn = sliceE s0 n vByK `plus` x
-    ctxt1 = insertIndexBinding "KIndex" lk ctxt0
+    ctxt1 = modifyVarCtxt (addTypedVarToInnerScope "v" SCVec
+                           . addTypedVarToInnerScope "n" SInt
+                           . addTypedVarToInnerScope "x" SReal
+                          )
+            $ insertIndexBinding "KIndex" lk ctxtWithVars
     statesLE = lNamedE "N_States" SInt
     predictorsLE = lNamedE "K_Predictors" SInt
     ctxt2 = insertSizeBinding "States" statesLE . insertSizeBinding "Predictors" predictorsLE $ ctxt0
@@ -93,33 +110,42 @@ main = do
     c = namedE "c" SInt
     a = namedE "A" (SArray s2 SMat) -- 2D array of matrices
   cmnt "Indexing"
-  writeExprCode ctxt0 $ sliceE s0 c $ sliceE s0 r m
+  let indexingCtxt = modifyVarCtxt (addTypedVarToInnerScope "M" SMat
+                           . addTypedVarToInnerScope "r" SInt
+                           . addTypedVarToInnerScope "c" SInt
+                           . addTypedVarToInnerScope "A" (SArray s2 SMat)
+                          ) ctxt0
+  writeExprCode indexingCtxt $ sliceE s0 c $ sliceE s0 r m
   let a1 = rangeIndexE s2 (Just $ intE 2) (Just $ intE 4) a
-  writeExprCode ctxt0 a1
+  writeExprCode indexingCtxt a1
   let a2 {-:: UExpr (EArray N2 ECVec)-} = sliceE s2 (intE 3) a1
-  writeExprCode ctxt0 a2
+  writeExprCode indexingCtxt a2
 --  let a4 = indexE s2 (namedE "I" (SArray s1 SInt)) a2
 --  writeExprCode ctxt0 a4
   cmnt "Assignments"
-  cmnt "simple, no context"
-  writeStmtCode ctxt0 $ assign ue1 ue1
+  cmnt "simple"
+  writeStmtCode ctxtWithVars $ assign ue1 ue1
   cmnt "missing lookup"
-  writeStmtCode ctxt0 $ assign x (x `plus` (y `plus` vByKatn))
+  writeStmtCode ctxtWithVars $ assign x (x `plus` (y `plus` vByKatn))
   cmnt "with context"
   writeStmtCode ctxt1 $ assign x (x `plus` (y `plus` vByKatn))
   cmnt "context added in tree"
-  writeStmtCode ctxt0 $ SContext (Just $ insertIndexBinding "KIndex" lk) [assign x (x `plus` (y `plus` vByKatn))]
-  let stDeclare1 = declare "M" (matrixSpec n l)
+  writeStmtCode ctxtWithVars $ SContext (Just $ insertIndexBinding "KIndex" lk) [assign x (x `plus` (y `plus` vByKatn))]
+  let declare_n = declare "n" intSpec
+      declare_l = declare "l" intSpec
+      stDeclare1 = declare "M" (matrixSpec n l)
       nStates = namedSizeE "States"
       nPredictors = namedSizeE "Predictors"
 
       stDeclare2 = declare "A" $ arraySpec s2 (n ::: l ::: VNil) (addVMs [lowerM $ realE 2] $ matrixSpec nStates nPredictors )
   cmnt "Declarations"
-  writeStmtCode ctxt1 stDeclare1
-  writeStmtCode ctxt0 $ SContext (Just $ insertSizeBinding "Predictors" predictorsLE) [stDeclare2]
-  writeStmtCode ctxt0 $ SContext (Just $ insertSizeBinding "States" statesLE . insertSizeBinding "Predictors" predictorsLE) [stDeclare2]
+  writeStmtCode ctxt0 $ SContext Nothing $ [declare_n, declare_l, stDeclare1]
+  cmnt "Next should fail missing an index"
+  writeStmtCode ctxt0 $ SContext (Just $ insertSizeBinding "Predictors" predictorsLE) [declare_n, declare_l, stDeclare2]
+  cmnt "Next should succeed"
+  writeStmtCode ctxt0 $ SContext (Just $ insertSizeBinding "States" statesLE . insertSizeBinding "Predictors" predictorsLE) [declare_n, declare_l, stDeclare2]
   let stDeclAssign1 = declareAndAssign "M" (addVMs [upperM $ realE 8] $ matrixSpec l n) (namedE "q" SMat)
-  writeStmtCode ctxt0 stDeclAssign1
+  writeStmtCode ctxt0 $ SContext Nothing  [declare_n, declare_l, stDeclAssign1]
   writeStmtCode ctxt0 $ declareAndAssign "v1" (vectorSpec (intE 2)) (vectorE [1,2])
   writeStmtCode ctxt0 $ declareAndAssign "v2" (vectorSpec (intE 2)) (rangeIndexE s0 (Just $ intE 2) (Just $ intE 3) v)
   writeStmtCode ctxt0 $ declareAndAssign "A" (matrixSpec (intE 2) (intE 2)) (matrixE [(2 ::: 3 ::: VNil), (4 ::: 5 ::: VNil)])
@@ -129,13 +155,17 @@ main = do
     (arrayE $ NestedVec2 ((vectorE [1,2] ::: vectorE [3,4] ::: VNil) ::: (vectorE [4,5] ::: vectorE [5, 6] ::: VNil) :::  VNil))
   cmnt "Add to target, two ways."
   let normalDistVec = Density "normal" SCVec (SCVec ::> (SCVec ::> TypeNil))
+      declare_m = declare "m" $ vectorSpec $ namedE "n" SInt
+      declare_sd = declare "sd" $ vectorSpec $ namedE "n" SInt
       stmtTarget1 = addToTarget $ densityE normalDistVec v (namedE "m" SCVec :> (namedE "sd" SCVec :> TNil))
-  writeStmtCode ctxt1 stmtTarget1
+  writeStmtCode ctxt1 $ SContext Nothing [declare_m, declare_sd, stmtTarget1]
   let stmtSample = sample v normalDistVec (namedE "m" SCVec :> (namedE "sd" SCVec :> TNil))
-  writeStmtCode ctxt1 stmtSample
+  writeStmtCode ctxt1 $ SContext Nothing [declare_m, declare_sd, stmtSample]
   cmnt "For loops, four ways"
-  let stmtFor1 = for "k" (SpecificNumbered (intE 1) n) (\ke -> [assign x (x `plus` (y `plus` sliceE s0 ke vByK))])
-  writeStmtCode ctxt1 stmtFor1
+  let declare_x = declare "x" realSpec
+      declare_y = declare "y" realSpec
+      stmtFor1 = for "k" (SpecificNumbered (intE 1) n) (\ke -> [assign x (x `plus` (y `plus` sliceE s0 ke vByK))])
+  writeStmtCode ctxt1 $ SContext Nothing [declare_x, declare_y, stmtFor1]
   let
     bodyF2 se = assign (sliceE s0 se $ namedE "w" SCVec) (realE 2) :| []
     stmtFor2 = for "q" (IndexedLoop "States") bodyF2

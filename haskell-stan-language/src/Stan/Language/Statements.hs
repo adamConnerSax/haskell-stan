@@ -653,6 +653,13 @@ data LookupCtxt =
 emptyLookupCtxt :: LookupCtxt
 emptyLookupCtxt = LookupCtxt emptyVarLookupCtxt emptyIndexLookupCtxt
 
+modifyVarCtxt :: (VarLookupCtxt -> VarLookupCtxt) -> LookupCtxt -> LookupCtxt
+modifyVarCtxt f (LookupCtxt vlc ilc) = LookupCtxt (f vlc) ilc
+
+modifyIndexCtxt :: (IndexLookupCtxt -> IndexLookupCtxt) -> LookupCtxt -> LookupCtxt
+modifyIndexCtxt f (LookupCtxt vlc ilc) = LookupCtxt vlc $ f ilc
+
+
 instance Functor (StmtF f) where
   fmap f x = case x of
     SDeclareF txt st divf vms -> SDeclareF txt st divf vms
