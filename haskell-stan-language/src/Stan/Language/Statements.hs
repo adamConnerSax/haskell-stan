@@ -289,10 +289,7 @@ data VarAndForType (t :: EType) where
 for :: forall t . GenSType (ForEachSlice t)
     => Text -> ForType t -> (UExpr (ForEachSlice t) -> UStmt) -> UStmt
 for loopCounter ft bodyF = case ft of
-  SpecificNumbered se' ee' -> SFor loopCounter se' ee'
-                           $ scoped
-                           $ context (modifyVarCtxt $ addTypedVarToInnerScope loopCounter SInt)
-                           $ [bodyF (namedE loopCounter SInt)]
+  SpecificNumbered se' ee' -> scoped $ SFor loopCounter se' ee' $ bodyF (namedE loopCounter SInt)
   IndexedLoop ik -> SFor loopCounter (intE 1) (namedSizeE ik) $ bodyF (namedE loopCounter SInt)
   SpecificIn e -> SForEach loopCounter e $ bodyF loopCounterE
 --  IndexedIn _ e -> SForEach loopCounter e $ bodyF loopCounterE
@@ -354,7 +351,7 @@ intVecLoops :: forall m . (VecToSameTypedListF VarAndForType EInt m)
 intVecLoops counterPrefix v stmtF = nestedLoops (vecVFT counterPrefix v) stmtF
 
 nullS :: UStmt
-nullS = SContext Nothing []
+nullS = SContext id
 
 ifThen :: UExpr EBool -> UStmt -> UStmt
 ifThen ce sTrue = SIfElse ((ce, sTrue) :| []) nullS
@@ -371,7 +368,7 @@ break = SBreak
 continue :: UStmt
 continue = SContinue
 
-function :: Function rt args -> TypedList (FuncArg Text) args -> (TypedList UExpr args -> (UStmt, UExpr rt)) -> UStmt
+function :: AllGenTypes args => Function rt args -> TypedList (FuncArg Text) args -> (TypedList UExpr args -> (UStmt, UExpr rt)) -> UStmt
 function fd argNames bodyF = SFunction fd argNames bodyS ret
   where
     argTypes = typeListToTypedListOfTypes $ functionArgTypes fd
@@ -410,16 +407,17 @@ reject :: TypedList UExpr args -> UStmt
 reject = SReject
 
 scoped :: UStmt -> UStmt
-scoped = SScoped
+scoped s = grouped Scoped [SContext (modifyVarCtxt enterNewScope), s, SContext (modifyVarCtxt leaveScope)]
 
-context :: Traversable f => (LookupCtxt -> LookupCtxt) -> f UStmt -> UStmt
-context cf = SContext (Just cf)
+context :: (LookupCtxt -> LookupCtxt) -> UStmt
+context = SContext
 
-grouped :: Traversable f => f UStmt -> UStmt
-grouped = SContext Nothing
+grouped :: Traversable f => Scoped -> f UStmt -> UStmt
+grouped = SGroup
 
 insertIndexBinding :: IndexKey -> LExpr EIndexArray -> LookupCtxt -> LookupCtxt
-insertIndexBinding k ie (LookupCtxt vlc (IndexLookupCtxt a b)) = LookupCtxt vlc $ IndexLookupCtxt a (Map.insert k ie b)
+insertIndexBinding k ie (LookupCtxt vlc (IndexLookupCtxt a b)) =
+  LookupCtxt vlc $ IndexLookupCtxt a (Map.insert k ie b)
 
 insertSizeBinding :: IndexKey -> LExpr EInt -> LookupCtxt -> LookupCtxt
 insertSizeBinding k ie (LookupCtxt vlc (IndexLookupCtxt a b)) = LookupCtxt vlc $ IndexLookupCtxt (Map.insert k ie a) b
@@ -540,6 +538,8 @@ data StmtBlock = FunctionsStmts
                | ModelStmts
                | GeneratedQuantitiesStmts
 
+data Scoped = Scoped | UnScoped deriving stock (Show, Eq)
+
 -- Statements
 data Stmt :: (EType -> Type) -> Type where
   SDeclare ::  Text -> StanType et -> DeclIndexVecF r et -> [VarModifier r (ScalarType et)] -> Stmt r
@@ -549,20 +549,21 @@ data Stmt :: (EType -> Type) -> Type where
   STarget :: r EReal -> Stmt r
   SSample :: r st -> Density st args -> TypedList r args -> Stmt r
   SFor :: Text -> r EInt -> r EInt -> Stmt r -> Stmt r
-  SForEach :: Text -> r t -> Stmt r -> Stmt r
+  SForEach :: GenSType (ForEachSlice t) => Text -> r t -> Stmt r -> Stmt r
   SIfElse :: NonEmpty (r EBool, Stmt r) -> Stmt r -> Stmt r -- [(condition, ifTrue)] -> ifAllFalse
   SWhile :: r EBool -> Stmt r -> Stmt r
   SBreak :: Stmt r
   SContinue :: Stmt r
-  SFunction :: Function rt args -> TypedList (FuncArg Text) args -> Stmt r -> r rt -> Stmt r
+  SFunction :: AllGenTypes args => Function rt args -> TypedList (FuncArg Text) args -> Stmt r -> r rt -> Stmt r
 --  SDensity :: Traversable f => Density gt args -> TypedList (FuncArg Text) (gt ': args) -> f (Stmt r) -> r EReal -> Stmt r
   SComment :: Traversable f => f Text -> Stmt r
   SProfile :: Text -> Stmt r -> Stmt r
   SPrint :: TypedList r args -> Stmt r
   SReject :: TypedList r args -> Stmt r
-  SScoped :: Stmt r -> Stmt r
+--  SScoped :: Stmt r -> Stmt r
   SBlock :: StmtBlock -> Stmt r -> Stmt r
-  SContext :: Traversable f => Maybe (LookupCtxt -> LookupCtxt) -> f (Stmt r) -> Stmt r
+  SGroup :: Traversable f => Scoped -> f (Stmt r) -> Stmt r
+  SContext :: (LookupCtxt -> LookupCtxt) -> Stmt r
 
 data StmtF :: (EType -> Type) -> Type -> Type where
   SDeclareF ::  Text -> StanType et -> DeclIndexVecF r et -> [VarModifier r (ScalarType et)] -> StmtF r a
@@ -572,20 +573,21 @@ data StmtF :: (EType -> Type) -> Type -> Type where
   STargetF :: r EReal -> StmtF r a
   SSampleF :: r st -> Density st args -> TypedList r args -> StmtF r a
   SForF :: Text -> r EInt -> r EInt -> a -> StmtF r a
-  SForEachF :: Text -> r t -> a -> StmtF r a
+  SForEachF ::  GenSType (ForEachSlice t) => Text -> r t -> a -> StmtF r a
   SIfElseF :: NonEmpty (r EBool, a) -> a -> StmtF r a -- [(condition, ifTrue)] -> ifAllFalse
   SWhileF :: r EBool -> a -> StmtF r a
   SBreakF :: StmtF r a
   SContinueF :: StmtF r a
-  SFunctionF :: Function rt args -> TypedList (FuncArg Text) args -> a -> r rt -> StmtF r a
+  SFunctionF :: AllGenTypes args => Function rt args -> TypedList (FuncArg Text) args -> a -> r rt -> StmtF r a
 --  SDensityF :: Traversable f => Density gt args -> TypedList (FuncArg Text) (gt ': args) -> f a -> r EReal -> StmtF r a
   SCommentF :: Traversable f => f Text -> StmtF r a
   SProfileF :: Text -> a -> StmtF r a
   SPrintF :: TypedList r args -> StmtF r a
   SRejectF :: TypedList r args -> StmtF r a
-  SScopedF :: a -> StmtF r a
+--  SScopedF :: a -> StmtF r a
   SBlockF :: StmtBlock -> a -> StmtF r a
-  SContextF :: Traversable f => Maybe (LookupCtxt -> LookupCtxt) -> f a -> StmtF r a
+  SGroupF :: Traversable f => Scoped -> f a -> StmtF r a
+  SContextF :: (LookupCtxt -> LookupCtxt) -> StmtF r a
 
 type instance RS.Base (Stmt f) = StmtF f
 
@@ -621,9 +623,13 @@ innerScope (VarLookupCtxt (gs :| [])) = gs
 innerScope (VarLookupCtxt (gs :| is : _)) = is
 -}
 
-leaveScope :: VarLookupCtxt -> Maybe VarLookupCtxt
-leaveScope (VarLookupCtxt (gs :| [])) = Nothing
-leaveSCope (VarLookupCtxt (gs :| _ : os)) = VarLookupCtxt (gs :| os)
+leaveScope :: VarLookupCtxt -> VarLookupCtxt
+leaveScope v@(VarLookupCtxt (_gs :| [])) = v
+leaveScope (VarLookupCtxt (gs :| _ : os)) = VarLookupCtxt (gs :| os)
+
+dropScope :: VarLookupCtxt -> VarLookupCtxt
+dropScope vs@(VarLookupCtxt (_gs :| [])) = vs
+dropScope (VarLookupCtxt (gs :| _ : os)) = VarLookupCtxt (gs :| os)
 
 insertVarType :: VarName -> SType t -> VarTypeMap -> VarTypeMap
 insertVarType vn st = Map.insert vn (Some.mkSome st)
@@ -643,6 +649,12 @@ addTypedVarsInScope :: AllGenTypes ts => TypedList (K VarName) ts -> VarLookupCt
 addTypedVarsInScope typedVarNames vlc = foldTypedList f (Just vlc) typedVarNames
   where
     f (K vn) st mVlc = mVlc >>= addTypedVarInScope vn st
+
+addTypedVarsToInnerScope :: AllGenTypes ts => TypedList (K VarName) ts -> VarLookupCtxt -> VarLookupCtxt
+addTypedVarsToInnerScope typedVarNames vlc = foldTypedList f vlc typedVarNames
+  where
+    f (K vn) = addTypedVarToInnerScope vn
+
 
 array_num_elements :: (SNatI n, GenSType t) => Function EInt '[EArray n t]
 array_num_elements = simpleFunction "size" {- any chance this should be num_elements? --als was "inv"?? -}
@@ -691,9 +703,10 @@ instance Functor (StmtF f) where
     SProfileF t stmt -> SProfileF t (f stmt)
     SPrintF args -> SPrintF args
     SRejectF args -> SRejectF args
-    SScopedF sf -> SScopedF $ f sf
+--    SScopedF sf -> SScopedF $ f sf
     SBlockF bl stmt -> SBlockF bl (f stmt)
-    SContextF mf sts -> SContextF mf $  f <$> sts
+    SGroupF s stmts -> SGroupF s  $ fmap f stmts
+    SContextF cf -> SContextF cf
 
 instance Foldable (StmtF f) where
   foldMap f = \case
@@ -715,9 +728,10 @@ instance Foldable (StmtF f) where
     SProfileF _ body -> f body
     SPrintF {} -> mempty
     SRejectF {} -> mempty
-    SScopedF body -> f body
+--    SScopedF body -> f body
+    SGroupF _ body -> foldMap f body
     SBlockF _ body -> f body
-    SContextF _ body -> foldMap f body
+    SContextF _ -> mempty
 
 instance Traversable (StmtF f) where
   traverse g = \case
@@ -739,9 +753,10 @@ instance Traversable (StmtF f) where
     SProfileF t stmts -> SProfileF t <$> g stmts
     SPrintF args -> pure $ SPrintF args
     SRejectF args -> pure $ SRejectF args
-    SScopedF sfs -> SScopedF <$> g sfs
-    SBlockF bl stmts -> SBlockF bl <$> g stmts
-    SContextF mf sfs -> SContextF mf <$> traverse g sfs
+--    SScopedF sfs -> SScopedF <$> g sfs
+    SGroupF s stmts -> SGroupF s <$> traverse g stmts
+    SBlockF bl stmt -> SBlockF bl <$> g stmt
+    SContextF f  -> pure $ SContextF f
 
 instance Functor (RS.Base (Stmt f)) => RS.Recursive (Stmt f) where
   project = \case
@@ -763,9 +778,10 @@ instance Functor (RS.Base (Stmt f)) => RS.Recursive (Stmt f) where
     SProfile t body -> SProfileF t body
     SPrint args -> SPrintF args
     SReject args -> SRejectF args
-    SScoped sts -> SScopedF sts
+--    SScoped sts -> SScopedF sts
+    SGroup s sts -> SGroupF s sts
     SBlock bl sts -> SBlockF bl sts
-    SContext mf sts -> SContextF mf sts
+    SContext mf -> SContextF mf
 
 instance Functor (RS.Base (Stmt f)) => RS.Corecursive (Stmt f) where
   embed = \case
@@ -787,9 +803,10 @@ instance Functor (RS.Base (Stmt f)) => RS.Corecursive (Stmt f) where
     SProfileF t body -> SProfile t body
     SPrintF args -> SPrint args
     SRejectF args -> SReject args
-    SScopedF sts -> SScoped sts
+--    SScopedF sts -> SScoped sts
+    SGroupF s sts -> SGroup s sts
     SBlockF bl sts -> SBlock bl sts
-    SContextF mf sts -> SContext mf sts
+    SContextF mf -> SContext mf
 
 instance SLR.HFunctor StmtF where
   hfmap nat = \case
@@ -811,9 +828,10 @@ instance SLR.HFunctor StmtF where
     SProfileF x body -> SProfileF x body
     SPrintF args -> SPrintF (SLR.hfmap nat args)
     SRejectF args -> SRejectF (SLR.hfmap nat args)
-    SScopedF body -> SScopedF body
+--    SScopedF body -> SScopedF body
+    SGroupF s body -> SGroupF s body
     SBlockF bl body -> SBlockF bl body
-    SContextF mf body -> SContextF mf body
+    SContextF mf -> SContextF mf
 
 instance SLR.HTraversable StmtF where
   htraverse natM = \case
@@ -835,7 +853,8 @@ instance SLR.HTraversable StmtF where
     SProfileF x body -> pure $ SProfileF x body
     SPrintF args -> SPrintF <$> SLR.htraverse natM args
     SRejectF args -> SRejectF <$> SLR.htraverse natM args
-    SScopedF body -> pure $ SScopedF body
+--    SScopedF body -> pure $ SScopedF body
+    SGroupF s body -> pure $ SGroupF s body
     SBlockF bl body -> pure $ SBlockF bl body
-    SContextF mf body -> pure $ SContextF mf body
+    SContextF mf -> pure $ SContextF mf
   hmapM = SLR.htraverse

@@ -45,8 +45,10 @@ writeStmtCode ctxt0 s = case statementToCodeE ctxt0 s of
         Right ec -> do
           PP.putDoc ec
           putTextLn ""
+          putTextLn ""
     Right c -> do
       PP.putDoc c
+      putTextLn ""
       putTextLn ""
 
 
@@ -129,64 +131,74 @@ main = do
   writeStmtCode ctxtWithVars $ assign x (x `plus` (y `plus` vByKatn))
   cmnt "with context"
   writeStmtCode ctxt1 $ assign x (x `plus` (y `plus` vByKatn))
-  cmnt "context added in tree"
-  writeStmtCode ctxtWithVars $ SContext (Just $ insertIndexBinding "KIndex" lk) [assign x (x `plus` (y `plus` vByKatn))]
   let declare_n = declare "n" intSpec
       declare_l = declare "l" intSpec
+      declare_q = declare "q" (matrixSpec n l)
       stDeclare1 = declare "M" (matrixSpec n l)
       nStates = namedSizeE "States"
       nPredictors = namedSizeE "Predictors"
 
       stDeclare2 = declare "A" $ arraySpec s2 (n ::: l ::: VNil) (addVMs [lowerM $ realE 2] $ matrixSpec nStates nPredictors )
   cmnt "Declarations"
-  writeStmtCode ctxt0 $ SContext Nothing $ [declare_n, declare_l, stDeclare1]
+  writeStmtCode ctxt0 $ grouped UnScoped $ [declare_n, declare_l, stDeclare1]
   cmnt "Next should fail missing an index"
-  writeStmtCode ctxt0 $ SContext (Just $ insertSizeBinding "Predictors" predictorsLE) [declare_n, declare_l, stDeclare2]
+  writeStmtCode ctxt0 $ grouped UnScoped [declare_n, declare_l, stDeclare2]
   cmnt "Next should succeed"
-  writeStmtCode ctxt0 $ SContext (Just $ insertSizeBinding "States" statesLE . insertSizeBinding "Predictors" predictorsLE) [declare_n, declare_l, stDeclare2]
+  writeStmtCode ctxt0 $ grouped UnScoped [SContext (insertSizeBinding "States" statesLE . insertSizeBinding "Predictors" predictorsLE) , declare_n, declare_l, stDeclare2]
+
   let stDeclAssign1 = declareAndAssign "M" (addVMs [upperM $ realE 8] $ matrixSpec l n) (namedE "q" SMat)
-  writeStmtCode ctxt0 $ SContext Nothing  [declare_n, declare_l, stDeclAssign1]
+  writeStmtCode ctxt0 $ grouped UnScoped  [declare_n, declare_l, declare_q, stDeclAssign1]
+
   writeStmtCode ctxt0 $ declareAndAssign "v1" (vectorSpec (intE 2)) (vectorE [1,2])
-  writeStmtCode ctxt0 $ declareAndAssign "v2" (vectorSpec (intE 2)) (rangeIndexE s0 (Just $ intE 2) (Just $ intE 3) v)
+  writeStmtCode ctxtWithVars $ declareAndAssign "v2" (vectorSpec (intE 2)) (rangeIndexE s0 (Just $ intE 2) (Just $ intE 3) v)
   writeStmtCode ctxt0 $ declareAndAssign "A" (matrixSpec (intE 2) (intE 2)) (matrixE [(2 ::: 3 ::: VNil), (4 ::: 5 ::: VNil)])
   writeStmtCode ctxt0 $ declareAndAssign "B" (arraySpec s2 (intE 2 ::: intE 2 ::: VNil) $ addVMs [lowerM $ realE 0] realSpec)
     (arrayE $ NestedVec2 ((realE 2 ::: realE 3 ::: VNil) ::: (realE 4 ::: realE 5 ::: VNil) :::  VNil))
+
   writeStmtCode ctxt0 $ declareAndAssign "C" (arraySpec s2 (intE 2 ::: intE 2 ::: VNil) (addVMs [lowerM $ realE 0 , multiplierM $ realE 3] $ vectorSpec (intE 2) ))
     (arrayE $ NestedVec2 ((vectorE [1,2] ::: vectorE [3,4] ::: VNil) ::: (vectorE [4,5] ::: vectorE [5, 6] ::: VNil) :::  VNil))
+
   cmnt "Add to target, two ways."
   let normalDistVec = Density "normal" SCVec (SCVec ::> (SCVec ::> TypeNil))
       declare_m = declare "m" $ vectorSpec $ namedE "n" SInt
       declare_sd = declare "sd" $ vectorSpec $ namedE "n" SInt
       stmtTarget1 = addToTarget $ densityE normalDistVec v (namedE "m" SCVec :> (namedE "sd" SCVec :> TNil))
-  writeStmtCode ctxt1 $ SContext Nothing [declare_m, declare_sd, stmtTarget1]
+  writeStmtCode ctxt1 $ grouped UnScoped [declare_m, declare_sd, stmtTarget1]
   let stmtSample = sample v normalDistVec (namedE "m" SCVec :> (namedE "sd" SCVec :> TNil))
-  writeStmtCode ctxt1 $ SContext Nothing [declare_m, declare_sd, stmtSample]
-  cmnt "For loops, four ways"
+  writeStmtCode ctxt1 $ grouped UnScoped [declare_m, declare_sd, stmtSample]
+
+  cmnt "For loops, three ways"
   let declare_x = declare "x" realSpec
       declare_y = declare "y" realSpec
-      stmtFor1 = for "k" (SpecificNumbered (intE 1) n) (\ke -> [assign x (x `plus` (y `plus` sliceE s0 ke vByK))])
-  writeStmtCode ctxt1 $ SContext Nothing [declare_x, declare_y, stmtFor1]
+      stmtFor1 = for "k" (SpecificNumbered (intE 1) n) (\ke -> assign x (x `plus` (y `plus` sliceE s0 ke vByK)))
+  writeStmtCode ctxt1 $ grouped UnScoped [declare_x, declare_y, declare_n, stmtFor1]
   let
-    bodyF2 se = assign (sliceE s0 se $ namedE "w" SCVec) (realE 2) :| []
+    bodyF2 se = assign (sliceE s0 se $ namedE "w" SCVec) (realE 2)
     stmtFor2 = for "q" (IndexedLoop "States") bodyF2
-  writeStmtCode ctxt2 stmtFor2
-  let stmtFor3 = for "yl" (SpecificIn $ namedE "ys" SCVec) (\ye -> [assign x (x `plus` ye)])
-  writeStmtCode ctxt0 stmtFor3
+  writeStmtCode ctxt2 $ grouped UnScoped [declare "w" $ vectorSpec nStates, stmtFor2]
+  let stmtFor3 = for "yl" (SpecificIn $ namedE "ys" SCVec) (\ye -> assign x (x `plus` ye))
+  writeStmtCode ctxt0 $ grouped UnScoped [declare_x, declare_y, declare_n, declare "ys" $ vectorSpec n, stmtFor3]
+  cmnt "Check loop scoping"
+  cmnt "Using loop counter before loop (should fail)"
+  writeStmtCode ctxt1 $ grouped UnScoped [declare_x, declare_y, declare_n, namedE "k" SInt `assign` intE 1, stmtFor1]
+  cmnt "Using loop counter after loop (should fail)"
+  writeStmtCode ctxt1 $ grouped UnScoped [declare_x, declare_y, declare_n, stmtFor1, namedE "k" SInt `assign` intE 1]
+  {-
   cmnt "Conditionals"
   let
     eq = boolOpE SEq
     stmtIf1 = ifThenElse ((l `eq` n, assign ue1 ue1) :| []) (assign x (x `plus` y))
   writeStmtCode ctxt1 stmtIf1
   cmnt "While loops"
-  let stmtWhile = while (l `eq` n) (assign ue1 ue1 :| [assign x (x `plus` y), SBreak])
+  let stmtWhile = while (l `eq` n) (grouped $ assign ue1 ue1 :| [assign x (x `plus` y), SBreak])
   writeStmtCode ctxt1 stmtWhile
   cmnt "Functions"
   let
     euclideanDistance :: Function EReal [ECVec, ECVec, EArray N1 EInt]
     euclideanDistance = Function "eDist" SReal (SCVec ::> SCVec ::> SArray s1 SInt ::> TypeNil)
     eDistArgList = Arg "x1" :> Arg "x2" :> DataArg "m" :> TNil
-    eDistBody :: ExprList [ECVec, ECVec, EArray N1 EInt] -> (NonEmpty UStmt, UExpr EReal)
-    eDistBody (x1 :> x2 :> _ :> TNil) = (one $ rv `assign` (tr (x1 `eMinus` x2) `times` (x1 `eMinus` x2)), rv)
+    eDistBody :: ExprList [ECVec, ECVec, EArray N1 EInt] -> (UStmt, UExpr EReal)
+    eDistBody (x1 :> x2 :> _ :> TNil) = (rv `assign` (tr (x1 `eMinus` x2) `times` (x1 `eMinus` x2)), rv)
       where rv = namedE "r" SReal
     funcStmt = function euclideanDistance eDistArgList eDistBody
   writeStmtCode ctxt0 funcStmt
@@ -212,16 +224,16 @@ main = do
   writeStmtAsText 80 $ declareAndAssignN (NamedDeclSpec "longRealName" $ realSpec) (foldl' plusE (ln 2) $ fmap ln [3..20])
   writeStmtAsText 80 $ ln 1 `assign` (foldl' plusE (ln 2) $ fmap ln [3..20])
   let formatS1 = for "q" (SpecificIn $ namedE "votes" SCVec)
-                 $ \sie -> (sie `assign` (realE 2) :| [assign x (x `plus` y)
-                                                      , stmtWhile
-                                                      , ln 1 `assign` (foldl' plusE (ln 2) $ fmap ln [3..20])])
+                 $ \sie -> grouped $ (sie `assign` (realE 2) :| [assign x (x `plus` y)
+                                                                , stmtWhile
+                                                                , ln 1 `assign` (foldl' plusE (ln 2) $ fmap ln [3..20])])
   writeStmtAsText 80 formatS1
   let
     f :: Function EReal [ECVec, ECVec, EArray N1 EInt, EInt, EInt]
     f = simpleFunction "f"
     fArgList = Arg "x1" :> Arg "x2" :> DataArg "m" :> Arg "ThisIsALongName" :> Arg "AsIsThisNameAlsoLong" :> TNil
-    fBody :: ExprList [ECVec, ECVec, EArray N1 EInt, EInt, EInt] -> (NonEmpty UStmt, UExpr EReal)
-    fBody (x1 :> x2 :> _ :> _ :> _ :> TNil) = (one $ rv `assign` (tr (x1 `eMinus` x2) `times` (x1 `eMinus` x2)), rv)
+    fBody :: ExprList [ECVec, ECVec, EArray N1 EInt, EInt, EInt] -> (UStmt, UExpr EReal)
+    fBody (x1 :> x2 :> _ :> _ :> _ :> TNil) = (rv `assign` (tr (x1 `eMinus` x2) `times` (x1 `eMinus` x2)), rv)
       where rv = namedE "r" SReal
     funcStmt = function f fArgList fBody
   writeStmtAsText 80 funcStmt
@@ -230,3 +242,4 @@ main = do
     d = simpleDensity "d"
     dStmt = target $ densityE d x (v :> v :> (namedE "indexArray" sIntArray) :> dn 1 :> dn 2 :> dn 3 :> dn 4 :> TNil)
   writeStmtAsText 80 dStmt
+-}
