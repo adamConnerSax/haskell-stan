@@ -369,7 +369,7 @@ continue :: UStmt
 continue = SContinue
 
 function :: AllGenTypes args => Function rt args -> TypedList (FuncArg Text) args -> (TypedList UExpr args -> (UStmt, UExpr rt)) -> UStmt
-function fd argNames bodyF = SFunction fd argNames bodyS ret
+function fd argNames bodyF = scoped $ SFunction fd argNames $ grouped [bodyS, SReturn ret]
   where
     argTypes = typeListToTypedListOfTypes $ functionArgTypes fd
     argExprs = zipTypedListsWith (namedE . funcArgName) argNames argTypes
@@ -407,7 +407,7 @@ reject :: TypedList UExpr args -> UStmt
 reject = SReject
 
 scoped :: UStmt -> UStmt
-scoped s = grouped [SContext (modifyVarCtxt enterNewScope), s, SContext (modifyVarCtxt leaveScope)]
+scoped s = SGroup Scoping [SContext (modifyVarCtxt enterNewScope), s , SContext (modifyVarCtxt leaveScope)]
 
 context :: (LookupCtxt -> LookupCtxt) -> UStmt
 context = SContext
@@ -417,7 +417,6 @@ grouped = SGroup UnBracketed
 
 groupedWithBrackets :: Traversable f => f UStmt -> UStmt
 groupedWithBrackets = SGroup Bracketed
-
 
 insertIndexBinding :: IndexKey -> LExpr EIndexArray -> LookupCtxt -> LookupCtxt
 insertIndexBinding k ie (LookupCtxt vlc (IndexLookupCtxt a b)) =
@@ -542,7 +541,7 @@ data StmtBlock = FunctionsStmts
                | ModelStmts
                | GeneratedQuantitiesStmts
 
-data Bracketed = Bracketed | UnBracketed deriving stock (Show, Eq)
+data GroupType = Bracketed | UnBracketed | Scoping deriving stock (Show, Eq)
 
 -- Statements
 data Stmt :: (EType -> Type) -> Type where
@@ -558,15 +557,14 @@ data Stmt :: (EType -> Type) -> Type where
   SWhile :: r EBool -> Stmt r -> Stmt r
   SBreak :: Stmt r
   SContinue :: Stmt r
-  SFunction :: AllGenTypes args => Function rt args -> TypedList (FuncArg Text) args -> Stmt r -> r rt -> Stmt r
---  SDensity :: Traversable f => Density gt args -> TypedList (FuncArg Text) (gt ': args) -> f (Stmt r) -> r EReal -> Stmt r
+  SFunction :: AllGenTypes args => Function rt args -> TypedList (FuncArg Text) args -> Stmt r -> Stmt r
+  SReturn :: r rt -> Stmt r
   SComment :: Traversable f => f Text -> Stmt r
   SProfile :: Text -> Stmt r -> Stmt r
   SPrint :: TypedList r args -> Stmt r
   SReject :: TypedList r args -> Stmt r
---  SScoped :: Stmt r -> Stmt r
   SBlock :: StmtBlock -> Stmt r -> Stmt r
-  SGroup :: Traversable f => Bracketed -> f (Stmt r) -> Stmt r
+  SGroup :: Traversable f => GroupType -> f (Stmt r) -> Stmt r
   SContext :: (LookupCtxt -> LookupCtxt) -> Stmt r
 
 data StmtF :: (EType -> Type) -> Type -> Type where
@@ -582,15 +580,14 @@ data StmtF :: (EType -> Type) -> Type -> Type where
   SWhileF :: r EBool -> a -> StmtF r a
   SBreakF :: StmtF r a
   SContinueF :: StmtF r a
-  SFunctionF :: AllGenTypes args => Function rt args -> TypedList (FuncArg Text) args -> a -> r rt -> StmtF r a
---  SDensityF :: Traversable f => Density gt args -> TypedList (FuncArg Text) (gt ': args) -> f a -> r EReal -> StmtF r a
+  SFunctionF :: AllGenTypes args => Function rt args -> TypedList (FuncArg Text) args -> a -> StmtF r a
+  SReturnF :: r t -> StmtF r a
   SCommentF :: Traversable f => f Text -> StmtF r a
   SProfileF :: Text -> a -> StmtF r a
   SPrintF :: TypedList r args -> StmtF r a
   SRejectF :: TypedList r args -> StmtF r a
---  SScopedF :: a -> StmtF r a
   SBlockF :: StmtBlock -> a -> StmtF r a
-  SGroupF :: Traversable f => Bracketed -> f a -> StmtF r a
+  SGroupF :: Traversable f => GroupType -> f a -> StmtF r a
   SContextF :: (LookupCtxt -> LookupCtxt) -> StmtF r a
 
 type instance RS.Base (Stmt f) = StmtF f
@@ -630,10 +627,6 @@ innerScope (VarLookupCtxt (gs :| is : _)) = is
 leaveScope :: VarLookupCtxt -> VarLookupCtxt
 leaveScope v@(VarLookupCtxt (_gs :| [])) = v
 leaveScope (VarLookupCtxt (gs :| _ : os)) = VarLookupCtxt (gs :| os)
-
-dropScope :: VarLookupCtxt -> VarLookupCtxt
-dropScope vs@(VarLookupCtxt (_gs :| [])) = vs
-dropScope (VarLookupCtxt (gs :| _ : os)) = VarLookupCtxt (gs :| os)
 
 insertVarType :: VarName -> SType t -> VarTypeMap -> VarTypeMap
 insertVarType vn st = Map.insert vn (Some.mkSome st)
@@ -701,13 +694,12 @@ instance Functor (StmtF f) where
     SWhileF cond sf -> SWhileF cond (f sf)
     SBreakF -> SBreakF
     SContinueF -> SContinueF
-    SFunctionF func al sf re -> SFunctionF func al (f sf) re
---    SDensityF dens al sfs re -> SDensityF dens al (f <$> sfs) re
+    SFunctionF func al sf -> SFunctionF func al (f sf)
+    SReturnF re -> SReturnF re
     SCommentF t -> SCommentF t
     SProfileF t stmt -> SProfileF t (f stmt)
     SPrintF args -> SPrintF args
     SRejectF args -> SRejectF args
---    SScopedF sf -> SScopedF $ f sf
     SBlockF bl stmt -> SBlockF bl (f stmt)
     SGroupF s stmts -> SGroupF s  $ fmap f stmts
     SContextF cf -> SContextF cf
@@ -726,13 +718,12 @@ instance Foldable (StmtF f) where
     SWhileF _ body -> f body
     SBreakF -> mempty
     SContinueF -> mempty
-    SFunctionF _ _ body _ -> f body
---    SDensityF _ _ body _ -> foldMap f body
+    SFunctionF _ _ body -> f body
+    SReturnF _ -> mempty
     SCommentF _ -> mempty
     SProfileF _ body -> f body
     SPrintF {} -> mempty
     SRejectF {} -> mempty
---    SScopedF body -> f body
     SGroupF _ body -> foldMap f body
     SBlockF _ body -> f body
     SContextF _ -> mempty
@@ -751,13 +742,12 @@ instance Traversable (StmtF f) where
     SWhileF f body -> SWhileF f <$> g body
     SBreakF -> pure SBreakF
     SContinueF -> pure SContinueF
-    SFunctionF func al sfs re -> SFunctionF func al <$> g sfs <*> pure re
---    SDensityF dens al sfs re -> SDensityF dens al <$> traverse g sfs <*> pure re
+    SFunctionF func al sfs -> SFunctionF func al <$> g sfs
+    SReturnF re -> pure $ SReturnF re
     SCommentF t -> pure $ SCommentF t
     SProfileF t stmts -> SProfileF t <$> g stmts
     SPrintF args -> pure $ SPrintF args
     SRejectF args -> pure $ SRejectF args
---    SScopedF sfs -> SScopedF <$> g sfs
     SGroupF s stmts -> SGroupF s <$> traverse g stmts
     SBlockF bl stmt -> SBlockF bl <$> g stmt
     SContextF f  -> pure $ SContextF f
@@ -776,13 +766,12 @@ instance Functor (RS.Base (Stmt f)) => RS.Recursive (Stmt f) where
     SWhile f sts -> SWhileF f sts
     SBreak -> SBreakF
     SContinue -> SContinueF
-    SFunction func al sts re -> SFunctionF func al sts re
---    SDensity dens al sts re -> SDensityF dens al sts re
+    SFunction func al sts -> SFunctionF func al sts
+    SReturn re -> SReturnF re
     SComment t -> SCommentF t
     SProfile t body -> SProfileF t body
     SPrint args -> SPrintF args
     SReject args -> SRejectF args
---    SScoped sts -> SScopedF sts
     SGroup s sts -> SGroupF s sts
     SBlock bl sts -> SBlockF bl sts
     SContext mf -> SContextF mf
@@ -801,13 +790,12 @@ instance Functor (RS.Base (Stmt f)) => RS.Corecursive (Stmt f) where
     SWhileF f sts -> SWhile f sts
     SBreakF -> SBreak
     SContinueF -> SContinue
-    SFunctionF func al sts re -> SFunction func al sts re
---    SDensityF dens al sts re -> SDensity dens al sts re
+    SFunctionF func al sts -> SFunction func al sts
+    SReturnF re -> SReturn re
     SCommentF t -> SComment t
     SProfileF t body -> SProfile t body
     SPrintF args -> SPrint args
     SRejectF args -> SReject args
---    SScopedF sts -> SScoped sts
     SGroupF s sts -> SGroup s sts
     SBlockF bl sts -> SBlock bl sts
     SContextF mf -> SContext mf
@@ -826,13 +814,12 @@ instance SLR.HFunctor StmtF where
     SWhileF g body -> SWhileF (nat g) body
     SBreakF -> SBreakF
     SContinueF -> SContinueF
-    SFunctionF func al body re -> SFunctionF func al body (nat re)
---    SDensityF dens al body re -> SDensityF dens al body (nat re)
+    SFunctionF func al body -> SFunctionF func al body
+    SReturnF re -> SReturnF (nat re)
     SCommentF x -> SCommentF x
     SProfileF x body -> SProfileF x body
     SPrintF args -> SPrintF (SLR.hfmap nat args)
     SRejectF args -> SRejectF (SLR.hfmap nat args)
---    SScopedF body -> SScopedF body
     SGroupF s body -> SGroupF s body
     SBlockF bl body -> SBlockF bl body
     SContextF mf -> SContextF mf
@@ -851,13 +838,12 @@ instance SLR.HTraversable StmtF where
     SWhileF cond body -> SWhileF <$> natM cond <*> pure body
     SBreakF -> pure SBreakF
     SContinueF -> pure SContinueF
-    SFunctionF func al body re -> SFunctionF func al body <$> natM re
---    SDensityF dens al body re -> SDensityF dens al body <$> natM re
+    SFunctionF func al body -> pure $ SFunctionF func al body
+    SReturnF re -> SReturnF <$> natM re
     SCommentF x -> pure $ SCommentF x
     SProfileF x body -> pure $ SProfileF x body
     SPrintF args -> SPrintF <$> SLR.htraverse natM args
     SRejectF args -> SRejectF <$> SLR.htraverse natM args
---    SScopedF body -> pure $ SScopedF body
     SGroupF s body -> pure $ SGroupF s body
     SBlockF bl body -> pure $ SBlockF bl body
     SContextF mf -> pure $ SContextF mf

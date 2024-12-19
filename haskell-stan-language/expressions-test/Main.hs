@@ -193,17 +193,19 @@ main = do
   cmnt "While loops"
   let stmtWhile = while (l `eq` n) (grouped $ assign ue1 ue1 :| [assign x (x `plus` y), SBreak])
   writeStmtCode ctxt1 $ grouped [declare_l, stmtWhile]
-{-
+
   cmnt "Functions"
   let
     euclideanDistance :: Function EReal [ECVec, ECVec, EArray N1 EInt]
     euclideanDistance = Function "eDist" SReal (SCVec ::> SCVec ::> SArray s1 SInt ::> TypeNil)
-    eDistArgList = Arg "x1" :> Arg "x2" :> DataArg "m" :> TNil
+    eDistArgList = Arg "fa1" :> Arg "fa2" :> DataArg "fa3" :> TNil
     eDistBody :: ExprList [ECVec, ECVec, EArray N1 EInt] -> (UStmt, UExpr EReal)
-    eDistBody (x1 :> x2 :> _ :> TNil) = (rv `assign` (tr (x1 `eMinus` x2) `times` (x1 `eMinus` x2)), rv)
-      where rv = namedE "r" SReal
+    eDistBody (x1 :> x2 :> _ :> TNil) = first grouped $ writerL $ do
+      r <- declareRHSW "r" realSpec $ tr (x1 `eMinus` x2) `times` (x1 `eMinus` x2)
+      pure r
     funcStmt = function euclideanDistance eDistArgList eDistBody
   writeStmtCode ctxt0 funcStmt
+{-
   cmnt "print/reject"
   writeStmtCode ctxt0 $ print (stringE "example" :> l :> TNil)
   writeStmtCode ctxt0 $ reject (m :> stringE "or" :> r :> TNil)

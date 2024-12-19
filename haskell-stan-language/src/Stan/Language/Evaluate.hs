@@ -35,7 +35,7 @@ import Stan.Language.Statements
       UStmt, LookupCtxt (..), VarLookupCtxt, addTypedVarToInnerScope, addTypedVarsToInnerScope,
       addTypedVarsInScope,
       grouped, context,
-      modifyVarCtxt, enterNewScope, dropScope, VarNameCheck (..), checkTypedVar, varLookupMap )
+      modifyVarCtxt, enterNewScope, VarNameCheck (..), checkTypedVar, varLookupMap )
 import Stan.Language.Recursion
     ( HFunctor(..),
       type (~>),
@@ -109,7 +109,8 @@ lookupVar vn st = do
   vtm <- gets $ varLookupMap . varCtxt
   case checkTypedVar vn st vtm of
     CheckPassed -> pure $ lNamedE vn st
-    NameMissing -> lift $ Left $ "variable name \"" <> vn <> "\" used but not declared."
+    NameMissing -> do
+      lift $ Left $ "variable name \"" <> vn <> "\" used but not declared."
     WrongType dt -> lift $ Left $ "variable name \"" <> vn <> "\" previously declared with type \"" <> dt <> " but used with type \"" <> sTypeName st <> "\""
 
 toLExprAlg :: IAlgM LookupM UExprF LExpr
@@ -139,11 +140,15 @@ ucAddArgsToFunctionBodyScope fArgs = do
     Nothing -> lift $ Left "Error adding function arguments to function body scope"
     Just newVC -> modify (modifyVarCtxt $ const newVC)
 
+ucAddReturnToFunctionBodyScope :: UExpr t -> LookupM ()
+ucAddReturnToFunctionBodyScope ue = case unIFix ue of
+  UL (LNamed vn st) -> modify $ modifyVarCtxt $ addTypedVarToInnerScope vn st
+  _ -> pure ()
 
 contextualLookup :: UStmt -> LookupM (RS.Base LStmt UStmt)
 contextualLookup x = do
-  lsf <- htraverse doLookups (RS.project x)
   updateContextA x
+  lsf <- htraverse doLookups (RS.project x)
   pure lsf
 
 doLookupsInCStatement :: UStmt -> LookupM LStmt
@@ -151,13 +156,16 @@ doLookupsInCStatement = RS.anaM contextualLookup --(\x -> htraverse doLookups (R
 
 --contextualLookupF :: (LookupCtxt -> UStmt) -> RS.Base LStmt (LookupCtxt -> UStmt)
 --contextualLookupF f =
+
 updateContextA :: UStmt -> LookupM ()--StmtF r a)
 updateContextA = \case
   SDeclare varName stanType _ _ -> ucDeclare varName stanType
   SDeclAssign varName stanType _ _ _ -> ucDeclare varName stanType
   SFor loopCounter _ _ _ -> ucAddIntCounterToLoopBodyScope loopCounter
   SForEach loopCounter ce _ -> ucAddTypedCounterToLoopBodyScope loopCounter ce
-  SFunction _ typedArgs _ _  -> ucAddArgsToFunctionBodyScope typedArgs
+  SFunction _ typedArgs _  -> do
+    ucAddArgsToFunctionBodyScope typedArgs
+--    ucAddReturnToFunctionBodyScope re
 --  SBlockF stBlock body -> case stBlock of
 --    ModelStmts -> modify (modifyVarCtxt enterNewScope)
 --    _ -> pure ()
@@ -223,7 +231,9 @@ lookupVarE vn st = do
   vtm <- gets $ varLookupMap . varCtxt
   case checkTypedVar vn st vtm of
     CheckPassed -> pure $ lExprToEExpr $ lNamedE vn st
-    NameMissing -> pure $ IFix $ EE $ "#undeclared: " <> vn <> "#"
+    NameMissing -> do
+      vc <- gets varCtxt
+      pure $ IFix $ EE $ "#undeclared: " <> vn <> "# (varCtxt=" <> show vc  <> ")"
     WrongType dt -> pure $ IFix $ EE $ "#badType \"" <> vn <> "#"
 
 type EStmt = Stmt EExpr

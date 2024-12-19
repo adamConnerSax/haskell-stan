@@ -83,16 +83,16 @@ stmtToCodeAlg = \case
                                          (unK lhs)
                                          "~"
                                          (PP.pretty dn <> PP.parens (csArgList al) <> PP.semi)
-  SForF txt fe te body -> (\b -> "for" <+> PP.parens (PP.pretty txt <+> "in" <+> unK fe <> PP.colon <> unK te) <+> bracketLoopCode b) <$> body
+  SForF txt fe te body -> (\b -> "for" <+> PP.parens (PP.pretty txt <+> "in" <+> unK fe <> PP.colon <> unK te) <+> bracketCode (PP.group b)) <$> body
   SForEachF txt e body -> (\b -> "foreach" <+> PP.parens (PP.pretty txt <+> "in" <+> unK e) <+> bracketLoopCode b) <$> body
   SIfElseF condAndIfTrueL allFalse -> ifElseCode condAndIfTrueL allFalse
   SWhileF if' body -> (\b -> "while" <+> PP.parens (unK if') <+> bracketLoopCode b) <$> body
   SBreakF -> Right $ "break" <> PP.semi
   SContinueF -> Right $ "continue" <> PP.semi
-  SFunctionF (Function fname rt ats) al body re ->
-    (\b -> functionArg rt <+> PP.pretty fname <> functionArgs ats al
-      <+> bracketBlock [b, "return" <+> unK re <> PP.semi]) <$> body
-  SFunctionF (IdentityFunction _) _ _ _ -> Left "Attempt to *declare* Identity function!"
+  SFunctionF (Function fname rt ats) al body ->
+    (\b -> functionArg rt <+> PP.pretty fname <> functionArgs ats al <+> bracketCode b) <$> body
+  SFunctionF (IdentityFunction _) _ _  -> Left "Attempt to *declare* Identity function!"
+  SReturnF re -> Right $ "return" <+> unK re <> PP.semi
   SCommentF cs -> case toList cs of
     [] -> Right mempty
     [c] -> Right $ "//" <+> PP.pretty c
@@ -103,6 +103,7 @@ stmtToCodeAlg = \case
   SGroupF bracketed body -> case bracketed of
     UnBracketed -> blockCode <$> sequence body
     Bracketed -> bracketBlock <$> sequence body
+    Scoping -> PP.hcat . toList <$> sequence body
 
   SBlockF bl body -> (\b -> PP.pretty (stmtBlockHeader bl) <+> bracketCode b) <$> body
   SContextF _f  -> Right mempty
@@ -192,7 +193,7 @@ ifElseCode condAndCodeNE c = do
       condCodeNE = condCode conds `appendToNE` ["else"]
   ifTrueCodes <- sequenceA (ifTrueCodeEs `appendToNE` [c])
   let codeNE = NE.zipWith (<+>) condCodeNE (fmap (PP.group . bracketBlock . pure @[]) ifTrueCodes)
-  return $ blockCode' codeNE
+  pure $ blockCode' codeNE
 
 data OpType = RangeOp | BOp BinaryOp
 
