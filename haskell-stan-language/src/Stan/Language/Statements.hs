@@ -290,8 +290,8 @@ for :: forall t . GenSType (ForEachSlice t)
     => Text -> ForType t -> (UExpr (ForEachSlice t) -> UStmt) -> UStmt
 for loopCounter ft bodyF = case ft of
   SpecificNumbered se' ee' -> scoped $ SFor loopCounter se' ee' $ bodyF (namedE loopCounter SInt)
-  IndexedLoop ik -> SFor loopCounter (intE 1) (namedSizeE ik) $ bodyF (namedE loopCounter SInt)
-  SpecificIn e -> SForEach loopCounter e $ bodyF loopCounterE
+  IndexedLoop ik -> scoped $ SFor loopCounter (intE 1) (namedSizeE ik) $ bodyF (namedE loopCounter SInt)
+  SpecificIn e -> scoped $ SForEach loopCounter e $ bodyF loopCounterE
 --  IndexedIn _ e -> SForEach loopCounter e $ bodyF loopCounterE
   where
     loopCounterE = namedE loopCounter $ genSType @(ForEachSlice t)
@@ -407,13 +407,17 @@ reject :: TypedList UExpr args -> UStmt
 reject = SReject
 
 scoped :: UStmt -> UStmt
-scoped s = grouped Scoped [SContext (modifyVarCtxt enterNewScope), s, SContext (modifyVarCtxt leaveScope)]
+scoped s = grouped [SContext (modifyVarCtxt enterNewScope), s, SContext (modifyVarCtxt leaveScope)]
 
 context :: (LookupCtxt -> LookupCtxt) -> UStmt
 context = SContext
 
-grouped :: Traversable f => Scoped -> f UStmt -> UStmt
-grouped = SGroup
+grouped :: Traversable f => f UStmt -> UStmt
+grouped = SGroup UnBracketed
+
+groupedWithBrackets :: Traversable f => f UStmt -> UStmt
+groupedWithBrackets = SGroup Bracketed
+
 
 insertIndexBinding :: IndexKey -> LExpr EIndexArray -> LookupCtxt -> LookupCtxt
 insertIndexBinding k ie (LookupCtxt vlc (IndexLookupCtxt a b)) =
@@ -538,7 +542,7 @@ data StmtBlock = FunctionsStmts
                | ModelStmts
                | GeneratedQuantitiesStmts
 
-data Scoped = Scoped | UnScoped deriving stock (Show, Eq)
+data Bracketed = Bracketed | UnBracketed deriving stock (Show, Eq)
 
 -- Statements
 data Stmt :: (EType -> Type) -> Type where
@@ -562,7 +566,7 @@ data Stmt :: (EType -> Type) -> Type where
   SReject :: TypedList r args -> Stmt r
 --  SScoped :: Stmt r -> Stmt r
   SBlock :: StmtBlock -> Stmt r -> Stmt r
-  SGroup :: Traversable f => Scoped -> f (Stmt r) -> Stmt r
+  SGroup :: Traversable f => Bracketed -> f (Stmt r) -> Stmt r
   SContext :: (LookupCtxt -> LookupCtxt) -> Stmt r
 
 data StmtF :: (EType -> Type) -> Type -> Type where
@@ -586,7 +590,7 @@ data StmtF :: (EType -> Type) -> Type -> Type where
   SRejectF :: TypedList r args -> StmtF r a
 --  SScopedF :: a -> StmtF r a
   SBlockF :: StmtBlock -> a -> StmtF r a
-  SGroupF :: Traversable f => Scoped -> f a -> StmtF r a
+  SGroupF :: Traversable f => Bracketed -> f a -> StmtF r a
   SContextF :: (LookupCtxt -> LookupCtxt) -> StmtF r a
 
 type instance RS.Base (Stmt f) = StmtF f

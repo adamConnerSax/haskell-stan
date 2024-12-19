@@ -76,7 +76,7 @@ programHasPPBlock p = not $ null (unStanProgram p Array.! SBPosteriorPrediction)
 
 -- this is...precarious.  No way to check that we are using all of the array
 programToStmt :: GeneratedQuantities -> StanProgram -> SLS.UStmt
-programToStmt gq p = SLS.SGroup SLS.UnScoped fullProgramStmt
+programToStmt gq p = SLS.SGroup SLS.UnBracketed fullProgramStmt
   where
     stmtsArray = unStanProgram p
     fullProgramStmt  =
@@ -87,31 +87,31 @@ programToStmt gq p = SLS.SGroup SLS.UnScoped fullProgramStmt
           ss5 = ss4 ++ [modelStmt]
           ss6 = ss5 ++ maybe [] pure gqStmtM
       in s :| ss6
-    functionsStmtM = let x = stmtsArray ! SBFunctions in if null x then Nothing else Just (SLS.SBlock SLS.FunctionsStmts $ SLS.grouped SLS.UnScoped x)
+    functionsStmtM = let x = stmtsArray ! SBFunctions in if null x then Nothing else Just (SLS.SBlock SLS.FunctionsStmts $ SLS.grouped x)
     dataStmt =
         let d = stmtsArray ! SBData
             gqd = SLS.comment ("For Generated Quantities" :| []) : stmtsArray ! SBDataGQ
-         in SLS.SBlock SLS.DataStmts $ SLS.grouped SLS.UnScoped (d ++ if gq `elem` [NeitherLL_PP, All] then gqd else [])
+         in SLS.SBlock SLS.DataStmts $ SLS.grouped (d ++ if gq `elem` [NeitherLL_PP, All] then gqd else [])
     tDataStmtM =
       let
         x = stmtsArray ! SBTransformedData
         xGQ = if  not (null $ stmtsArray ! SBTransformedDataGQ)
               then SLS.comment ("For Generated Quantities" :| []) : stmtsArray ! SBTransformedDataGQ
               else stmtsArray ! SBTransformedDataGQ
-      in if null x && null xGQ then Nothing else Just (SLS.SBlock SLS.TDataStmts $ SLS.grouped SLS.UnScoped $ x ++ if gq `elem` [NeitherLL_PP, All] then xGQ else [])
-    paramsStmt = SLS.SBlock SLS.ParametersStmts $ SLS.grouped SLS.UnScoped $ stmtsArray ! SBParameters
-    tParamsStmtM = let x = stmtsArray ! SBTransformedParameters in if null x then Nothing else Just (SLS.SBlock SLS.TParametersStmts $ SLS.grouped SLS.UnScoped x)
-    modelStmt = SLS.SBlock SLS.ModelStmts $ SLS.grouped SLS.UnScoped $ stmtsArray ! SBModel
+      in if null x && null xGQ then Nothing else Just (SLS.SBlock SLS.TDataStmts $ SLS.grouped $ x ++ if gq `elem` [NeitherLL_PP, All] then xGQ else [])
+    paramsStmt = SLS.SBlock SLS.ParametersStmts $ SLS.grouped $ stmtsArray ! SBParameters
+    tParamsStmtM = let x = stmtsArray ! SBTransformedParameters in if null x then Nothing else Just (SLS.SBlock SLS.TParametersStmts $ SLS.grouped x)
+    modelStmt = SLS.SBlock SLS.ModelStmts $ SLS.grouped $ stmtsArray ! SBModel
     gqStmtM =
         let gqs = stmtsArray ! SBGeneratedQuantities
             lls = stmtsArray ! SBLogLikelihood
             pps = stmtsArray ! SBPosteriorPrediction
          in case gq of
                 NoGQ -> Nothing
-                NeitherLL_PP -> Just $ SLS.SBlock SLS.GeneratedQuantitiesStmts $ SLS.grouped SLS.UnScoped gqs
-                OnlyLL -> Just $ SLS.SBlock SLS.GeneratedQuantitiesStmts $ SLS.grouped SLS.UnScoped lls
-                OnlyPP -> Just $ SLS.SBlock SLS.GeneratedQuantitiesStmts $ SLS.grouped SLS.UnScoped pps
-                All -> Just $ SLS.SBlock SLS.GeneratedQuantitiesStmts $ SLS.grouped SLS.UnScoped $ gqs ++ lls ++ pps
+                NeitherLL_PP -> Just $ SLS.SBlock SLS.GeneratedQuantitiesStmts $ SLS.grouped gqs
+                OnlyLL -> Just $ SLS.SBlock SLS.GeneratedQuantitiesStmts $ SLS.grouped lls
+                OnlyPP -> Just $ SLS.SBlock SLS.GeneratedQuantitiesStmts $ SLS.grouped pps
+                All -> Just $ SLS.SBlock SLS.GeneratedQuantitiesStmts $ SLS.grouped $ gqs ++ lls ++ pps
 
 
 -- check if the type of statement is allowed in the block then, if so, provide the modification function

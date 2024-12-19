@@ -83,58 +83,33 @@ stmtToCodeAlg = \case
                                          (unK lhs)
                                          "~"
                                          (PP.pretty dn <> PP.parens (csArgList al) <> PP.semi)
-  SForF txt fe te body -> (\b -> "for" <+> PP.parens (PP.pretty txt <+> "in" <+> unK fe <> PP.colon <> unK te) <+> b) <$> body
-  SForEachF txt e body -> (\b -> "foreach" <+> PP.parens (PP.pretty txt <+> "in" <+> unK e) <+> b) <$> body
+  SForF txt fe te body -> (\b -> "for" <+> PP.parens (PP.pretty txt <+> "in" <+> unK fe <> PP.colon <> unK te) <+> bracketLoopCode b) <$> body
+  SForEachF txt e body -> (\b -> "foreach" <+> PP.parens (PP.pretty txt <+> "in" <+> unK e) <+> bracketLoopCode b) <$> body
   SIfElseF condAndIfTrueL allFalse -> ifElseCode condAndIfTrueL allFalse
-  SWhileF if' body -> (\b -> "while" <+> PP.parens (unK if') <+> b) <$> body
+  SWhileF if' body -> (\b -> "while" <+> PP.parens (unK if') <+> bracketLoopCode b) <$> body
   SBreakF -> Right $ "break" <> PP.semi
   SContinueF -> Right $ "continue" <> PP.semi
   SFunctionF (Function fname rt ats) al body re ->
     (\b -> functionArg rt <+> PP.pretty fname <> functionArgs ats al
       <+> bracketBlock [b, "return" <+> unK re <> PP.semi]) <$> body
   SFunctionF (IdentityFunction _) _ _ _ -> Left "Attempt to *declare* Identity function!"
-{-  SDensityF (Density dname gt ats) al body re ->
-    (\b -> PP.pretty (sTypeName SReal) <+> PP.pretty dname <> functionArgs (gt ::> ats) al
-           <+> bracketBlock (b `appendAsList` ["return" <+> unK re <> PP.semi])) <$> sequence body -}
   SCommentF cs -> case toList cs of
     [] -> Right mempty
     [c] -> Right $ "//" <+> PP.pretty c
     csList -> Right $ "{*" <> PP.line <> PP.indent 2 (PP.vsep $ PP.pretty <$> csList) <> PP.line <> "*}"
-  SProfileF t body -> (\b -> "profile" <> PP.parens (PP.dquotes $ PP.pretty t) <+> b) <$> body
+  SProfileF t body -> (\b -> "profile" <> PP.parens (PP.dquotes $ PP.pretty t) <+> bracketCode b) <$> body
   SPrintF al -> Right $ "print" <+> PP.parens (csArgList al) <> PP.semi
   SRejectF al -> Right $ "reject" <+> PP.parens (csArgList al) <> PP.semi
---  SScopedF body -> body
---  SBlockF bl body -> maybe (Right mempty) (fmap (\x -> PP.pretty (stmtBlockHeader bl) <+> bracketBlock x) . sequenceA) $ nonEmpty $ toList body
-  SGroupF scoped body -> case scoped of
-    Scoped -> bracketBlock <$> sequence body
-    UnScoped -> blockCode <$> sequence body
+  SGroupF bracketed body -> case bracketed of
+    UnBracketed -> blockCode <$> sequence body
+    Bracketed -> bracketBlock <$> sequence body
 
   SBlockF bl body -> (\b -> PP.pretty (stmtBlockHeader bl) <+> bracketCode b) <$> body
-  SContextF f  -> Right mempty
-{-    case mf of
-    Just _ -> Left "stmtToCodeAlg: Impossible! SContext with a change function remaining!"
-    Nothing -> blockCode <$> sequence body
--}
+  SContextF _f  -> Right mempty
+
 indexCodeL :: [CodePP] -> CodePP
 indexCodeL [] = ""
 indexCodeL x = PP.brackets $ PP.hsep $ PP.punctuate "," x
-
-{-
-snatPlus1 :: DT.SNat n -> DT.SNat (DT.Plus n DT.Nat1)
-snatPlus1 sn = case sn of
-  DT.SZ -> DT.snat @DT.Nat1
-  DT.SS ->
-
-snatSum :: DT.SNat n1 -> DT.SNat n2 -> DT.SNat (DT.Plus n1 n2)
-snatSum sn1 x = case sn1 of
-  DT.SZ -> x
-  DT.SS -> snatSum DT.snat x
--}
-
---snatSum :: DT.SNat n1 -> DT.SNat n2 -> DT.Nat
-
-
---sta1 -> NatSum
 
 stanDeclHead :: forall t . StanType t -> [CodePP] -> [VarModifier (K CodePP) (ScalarType t)] -> CodePP
 stanDeclHead st il vms = case st of
@@ -166,6 +141,9 @@ bracketCode :: CodePP -> CodePP
 bracketCode c = PP.flatAlt
                 (PP.lbrace <> PP.hardline <> PP.indent 2 c <> PP.hardline <> PP.rbrace <> PP.space) -- otherwise
                 (PP.lbrace <+> c <+> PP.rbrace <> PP.space) -- if grouped and fits on one line
+
+bracketLoopCode :: CodePP -> CodePP
+bracketLoopCode = bracketCode . PP.group
 
 addSemi :: CodePP -> CodePP
 addSemi c = c <> PP.semi

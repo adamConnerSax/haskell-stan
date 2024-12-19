@@ -140,14 +140,14 @@ main = do
 
       stDeclare2 = declare "A" $ arraySpec s2 (n ::: l ::: VNil) (addVMs [lowerM $ realE 2] $ matrixSpec nStates nPredictors )
   cmnt "Declarations"
-  writeStmtCode ctxt0 $ grouped UnScoped $ [declare_n, declare_l, stDeclare1]
+  writeStmtCode ctxt0 $ grouped  $ [declare_n, declare_l, stDeclare1]
   cmnt "Next should fail missing an index"
-  writeStmtCode ctxt0 $ grouped UnScoped [declare_n, declare_l, stDeclare2]
+  writeStmtCode ctxt0 $ grouped  [declare_n, declare_l, stDeclare2]
   cmnt "Next should succeed"
-  writeStmtCode ctxt0 $ grouped UnScoped [SContext (insertSizeBinding "States" statesLE . insertSizeBinding "Predictors" predictorsLE) , declare_n, declare_l, stDeclare2]
+  writeStmtCode ctxt0 $ grouped  [SContext (insertSizeBinding "States" statesLE . insertSizeBinding "Predictors" predictorsLE) , declare_n, declare_l, stDeclare2]
 
   let stDeclAssign1 = declareAndAssign "M" (addVMs [upperM $ realE 8] $ matrixSpec l n) (namedE "q" SMat)
-  writeStmtCode ctxt0 $ grouped UnScoped  [declare_n, declare_l, declare_q, stDeclAssign1]
+  writeStmtCode ctxt0 $ grouped   [declare_n, declare_l, declare_q, stDeclAssign1]
 
   writeStmtCode ctxt0 $ declareAndAssign "v1" (vectorSpec (intE 2)) (vectorE [1,2])
   writeStmtCode ctxtWithVars $ declareAndAssign "v2" (vectorSpec (intE 2)) (rangeIndexE s0 (Just $ intE 2) (Just $ intE 3) v)
@@ -163,35 +163,37 @@ main = do
       declare_m = declare "m" $ vectorSpec $ namedE "n" SInt
       declare_sd = declare "sd" $ vectorSpec $ namedE "n" SInt
       stmtTarget1 = addToTarget $ densityE normalDistVec v (namedE "m" SCVec :> (namedE "sd" SCVec :> TNil))
-  writeStmtCode ctxt1 $ grouped UnScoped [declare_m, declare_sd, stmtTarget1]
+  writeStmtCode ctxt1 $ grouped  [declare_m, declare_sd, stmtTarget1]
   let stmtSample = sample v normalDistVec (namedE "m" SCVec :> (namedE "sd" SCVec :> TNil))
-  writeStmtCode ctxt1 $ grouped UnScoped [declare_m, declare_sd, stmtSample]
+  writeStmtCode ctxt1 $ grouped  [declare_m, declare_sd, stmtSample]
 
   cmnt "For loops, three ways"
   let declare_x = declare "x" realSpec
       declare_y = declare "y" realSpec
       stmtFor1 = for "k" (SpecificNumbered (intE 1) n) (\ke -> assign x (x `plus` (y `plus` sliceE s0 ke vByK)))
-  writeStmtCode ctxt1 $ grouped UnScoped [declare_x, declare_y, declare_n, stmtFor1]
+  writeStmtCode ctxt1 $ grouped  [declare_x, declare_y, declare_n, stmtFor1]
   let
     bodyF2 se = assign (sliceE s0 se $ namedE "w" SCVec) (realE 2)
     stmtFor2 = for "q" (IndexedLoop "States") bodyF2
-  writeStmtCode ctxt2 $ grouped UnScoped [declare "w" $ vectorSpec nStates, stmtFor2]
+  writeStmtCode ctxt2 $ grouped  [declare "w" $ vectorSpec nStates, stmtFor2]
   let stmtFor3 = for "yl" (SpecificIn $ namedE "ys" SCVec) (\ye -> assign x (x `plus` ye))
-  writeStmtCode ctxt0 $ grouped UnScoped [declare_x, declare_y, declare_n, declare "ys" $ vectorSpec n, stmtFor3]
+  writeStmtCode ctxt0 $ grouped  [declare_x, declare_y, declare_n, declare "ys" $ vectorSpec n, stmtFor3]
   cmnt "Check loop scoping"
   cmnt "Using loop counter before loop (should fail)"
-  writeStmtCode ctxt1 $ grouped UnScoped [declare_x, declare_y, declare_n, namedE "k" SInt `assign` intE 1, stmtFor1]
+  writeStmtCode ctxt1 $ grouped  [declare_x, declare_y, declare_n, namedE "k" SInt `assign` intE 1, stmtFor1]
   cmnt "Using loop counter after loop (should fail)"
-  writeStmtCode ctxt1 $ grouped UnScoped [declare_x, declare_y, declare_n, stmtFor1, namedE "k" SInt `assign` intE 1]
-  {-
+  writeStmtCode ctxt1 $ grouped  [declare_x, declare_y, declare_n, stmtFor1, namedE "k" SInt `assign` intE 1]
+
   cmnt "Conditionals"
   let
     eq = boolOpE SEq
     stmtIf1 = ifThenElse ((l `eq` n, assign ue1 ue1) :| []) (assign x (x `plus` y))
-  writeStmtCode ctxt1 stmtIf1
+  writeStmtCode ctxt1 $ grouped [declare_l, stmtIf1]
+
   cmnt "While loops"
   let stmtWhile = while (l `eq` n) (grouped $ assign ue1 ue1 :| [assign x (x `plus` y), SBreak])
-  writeStmtCode ctxt1 stmtWhile
+  writeStmtCode ctxt1 $ grouped [declare_l, stmtWhile]
+{-
   cmnt "Functions"
   let
     euclideanDistance :: Function EReal [ECVec, ECVec, EArray N1 EInt]

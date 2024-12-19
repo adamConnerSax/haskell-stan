@@ -139,48 +139,18 @@ ucAddArgsToFunctionBodyScope fArgs = do
     Nothing -> lift $ Left "Error adding function arguments to function body scope"
     Just newVC -> modify (modifyVarCtxt $ const newVC)
 
-addToFollowingContext :: UStmt -> LookupM ()--StmtF r a)
-addToFollowingContext = \case
-  SDeclare varName stanType _ _ -> ucDeclare varName stanType
-  SDeclAssign varName stanType _ _ _ -> ucDeclare varName stanType
-  _ -> pure ()
 
-addToFollowingContextA :: RS.Base UStmt LStmt -> LookupM ()--StmtF r a)
-addToFollowingContextA = \case
-  SDeclareF varName stanType _ _ -> ucDeclare varName stanType
-  SDeclAssignF varName stanType _ _ _ -> ucDeclare varName stanType
-  _ -> pure ()
+contextualLookup :: UStmt -> LookupM (RS.Base LStmt UStmt)
+contextualLookup x = do
+  lsf <- htraverse doLookups (RS.project x)
+  updateContextA x
+  pure lsf
 
-addToLookupContext :: UStmt -> LookupM (UStmt, LookupCtxt)
-addToLookupContext us = do
-  oc <- get
-  case us of
-    SFor loopCounter _ _ _ -> ucAddIntCounterToLoopBodyScope loopCounter
-    SForEach loopCounter ce _ -> ucAddTypedCounterToLoopBodyScope loopCounter ce
-    SFunction _ typedArgs _ _  -> ucAddArgsToFunctionBodyScope typedArgs
---    SScoped _ -> modify (modifyVarCtxt enterNewScope)
-    SBlock stBlock body -> case stBlock of
-      ModelStmts -> modify (modifyVarCtxt enterNewScope)
-      _ -> pure ()
-    SContext f -> modify f
-    _ -> pure ()
-  pure (us, oc)
+doLookupsInCStatement :: UStmt -> LookupM LStmt
+doLookupsInCStatement = RS.anaM contextualLookup --(\x -> htraverse doLookups (RS.project x) >>= postContext)
 
-addToLookupContextA :: RS.Base UStmt LStmt -> LookupM (RS.Base UStmt LStmt, LookupCtxt)
-addToLookupContextA us = do
-  oc <- get
-  case us of
-    SForF loopCounter _ _ _ -> ucAddIntCounterToLoopBodyScope loopCounter
-    SForEachF loopCounter ce _ -> ucAddTypedCounterToLoopBodyScope loopCounter ce
-    SFunctionF _ typedArgs _ _  -> ucAddArgsToFunctionBodyScope typedArgs
---    SScopedF _ -> modify (modifyVarCtxt enterNewScope)
-    SBlockF stBlock body -> case stBlock of
-      ModelStmts -> modify (modifyVarCtxt enterNewScope)
-      _ -> pure ()
-    SContextF f -> modify f
-    _ -> pure ()
-  pure (us, oc)
-
+--contextualLookupF :: (LookupCtxt -> UStmt) -> RS.Base LStmt (LookupCtxt -> UStmt)
+--contextualLookupF f =
 updateContextA :: UStmt -> LookupM ()--StmtF r a)
 updateContextA = \case
   SDeclare varName stanType _ _ -> ucDeclare varName stanType
@@ -194,57 +164,12 @@ updateContextA = \case
   SContext f -> modify f
   _ -> pure ()
 
-contextualLookup :: UStmt -> LookupM (RS.Base LStmt UStmt)
-contextualLookup x = do
-  lsf <- htraverse doLookups (RS.project x)
-  updateContextA x
-  pure lsf
-
---contextualLookupF :: (LookupCtxt -> UStmt) -> RS.Base LStmt (LookupCtxt -> UStmt)
---contextualLookupF f =
-
-
-contextualLookupA :: forall r a .  RS.Base UStmt LStmt -> LookupM LStmt --LStmt -> LookupM (RS.Base LStmt LStmt)
-contextualLookupA x = do
-  (x', oc) <- addToLookupContextA x
-  lsf <- htraverse doLookups x'
---  put oc
-  addToFollowingContextA x'
-  pure $ RS.embed lsf
-
 ucAddTypedCounterToLoopBodyScopeF :: forall t r . GenSType (ForEachSlice t) => VarName -> r t -> LookupCtxt -> LookupCtxt
 ucAddTypedCounterToLoopBodyScopeF vn _ce = modifyVarCtxt $ addTypedVarToInnerScope vn (genSType @(ForEachSlice t))
 
 ucAddArgsToFunctionBodyScopeF :: AllGenTypes args => TypedArgNames args -> LookupCtxt -> LookupCtxt
 ucAddArgsToFunctionBodyScopeF fArgs = modifyVarCtxt $ addTypedVarsToInnerScope (hfmap (K . funcArgName) fArgs) . enterNewScope
 
-modifyLC :: RS.Base UStmt a -> LookupCtxt -> LookupCtxt
-modifyLC x = case x of
-  SDeclareF varName stanType _ _ -> modifyVarCtxt  $ addTypedVarToInnerScope varName $ sTypeFromStanType stanType
-  SDeclAssignF varName stanType _ _ _ ->  modifyVarCtxt $ addTypedVarToInnerScope varName $ sTypeFromStanType stanType
-  SForF loopCounter _ _ _ -> modifyVarCtxt $ addTypedVarToInnerScope loopCounter SInt
-  SForEachF loopCounter ce _ -> ucAddTypedCounterToLoopBodyScopeF loopCounter ce
-  SFunctionF _ typedArgs _ _ -> ucAddArgsToFunctionBodyScopeF typedArgs
---  SScopedF _ -> modifyVarCtxt enterNewScope
-  SBlockF stBlock _ -> case stBlock of
-    ModelStmts -> modifyVarCtxt enterNewScope
-    _ -> id
-  SContextF f -> f
-
-{-
-contextualLookupAF :: RS.Base UStmt (ReaderM LStmt) -> ReaderM LStmt --LStmt -> LookupM (RS.Base LStmt LStmt)
-contextualLookupAF x lc = do
-  where g :: UExpr -> ReaderM LExpr
-        g ue = doLookups ue
-        lsf = htraverse doLookupsR
--}
-
-
---contextualLookupA ::  RS.Base UStmt LStmt -> LookupM LStmt
---contextualLookupA x =
-
-doLookupsInCStatement :: UStmt -> LookupM LStmt
-doLookupsInCStatement = RS.anaM contextualLookup --(\x -> htraverse doLookups (RS.project x) >>= postContext)
 
 type UStmt' = Fix (StmtF UExpr)
 type LStmt' = Fix (StmtF LExpr)
@@ -303,16 +228,15 @@ lookupVarE vn st = do
 
 type EStmt = Stmt EExpr
 
-contextualLookupE :: forall r a . UStmt -> LookupM (RS.Base EStmt UStmt)
-contextualLookupE x = do
-  (x', oc) <- addToLookupContext x
-  lsf <- htraverse doLookupsE (RS.project x')
-  put oc
-  addToFollowingContext x'
+contextualLookupAE :: UStmt -> LookupM (RS.Base EStmt UStmt)
+contextualLookupAE x = do
+  lsf <- htraverse doLookupsE (RS.project x)
+  updateContextA x
   pure lsf
 
+
 doLookupsEInStatement :: UStmt -> LookupM EStmt
-doLookupsEInStatement = RS.anaM contextualLookupE --(\x -> htraverse doLookupsE (RS.project x) >>= updateContext)
+doLookupsEInStatement = RS.anaM contextualLookupAE --(\x -> htraverse doLookupsE (RS.project x) >>= updateContext)
 
 doLookupsEInStatementE :: LookupCtxt -> UStmt -> Either Text EStmt
 doLookupsEInStatementE ctxt0 = flip evalStateT ctxt0 . doLookupsEInStatement
@@ -338,7 +262,81 @@ eStmtToCode = RS.hylo stmtToCodeAlg (hfmap eExprToCode . RS.project)
 eStatementToCodeE :: LookupCtxt -> UStmt -> Either Text CodePP
 eStatementToCodeE ctxt0 x = doLookupsEInStatementE ctxt0 x >>= eStmtToCode
 
+{-
+contextualLookupE :: forall r a . UStmt -> LookupM (RS.Base EStmt UStmt)
+contextualLookupE x = do
+  (x', oc) <- addToLookupContext x
+  lsf <- htraverse doLookupsE (RS.project x')
+  put oc
+  addToFollowingContext x'
+  pure lsf
 
+
+contextualLookupA :: forall r a .  RS.Base UStmt LStmt -> LookupM LStmt --LStmt -> LookupM (RS.Base LStmt LStmt)
+contextualLookupA x = do
+  (x', oc) <- addToLookupContextA x
+  lsf <- htraverse doLookups x'
+--  put oc
+  addToFollowingContextA x'
+  pure $ RS.embed lsf
+
+modifyLC :: RS.Base UStmt a -> LookupCtxt -> LookupCtxt
+modifyLC x = case x of
+  SDeclareF varName stanType _ _ -> modifyVarCtxt  $ addTypedVarToInnerScope varName $ sTypeFromStanType stanType
+  SDeclAssignF varName stanType _ _ _ ->  modifyVarCtxt $ addTypedVarToInnerScope varName $ sTypeFromStanType stanType
+  SForF loopCounter _ _ _ -> modifyVarCtxt $ addTypedVarToInnerScope loopCounter SInt
+  SForEachF loopCounter ce _ -> ucAddTypedCounterToLoopBodyScopeF loopCounter ce
+  SFunctionF _ typedArgs _ _ -> ucAddArgsToFunctionBodyScopeF typedArgs
+--  SScopedF _ -> modifyVarCtxt enterNewScope
+  SBlockF stBlock _ -> case stBlock of
+    ModelStmts -> modifyVarCtxt enterNewScope
+    _ -> id
+  SContextF f -> f
+
+addToFollowingContext :: UStmt -> LookupM ()--StmtF r a)
+addToFollowingContext = \case
+  SDeclare varName stanType _ _ -> ucDeclare varName stanType
+  SDeclAssign varName stanType _ _ _ -> ucDeclare varName stanType
+  _ -> pure ()
+
+addToFollowingContextA :: RS.Base UStmt LStmt -> LookupM ()--StmtF r a)
+addToFollowingContextA = \case
+  SDeclareF varName stanType _ _ -> ucDeclare varName stanType
+  SDeclAssignF varName stanType _ _ _ -> ucDeclare varName stanType
+  _ -> pure ()
+
+addToLookupContext :: UStmt -> LookupM (UStmt, LookupCtxt)
+addToLookupContext us = do
+  oc <- get
+  case us of
+    SFor loopCounter _ _ _ -> ucAddIntCounterToLoopBodyScope loopCounter
+    SForEach loopCounter ce _ -> ucAddTypedCounterToLoopBodyScope loopCounter ce
+    SFunction _ typedArgs _ _  -> ucAddArgsToFunctionBodyScope typedArgs
+--    SScoped _ -> modify (modifyVarCtxt enterNewScope)
+    SBlock stBlock body -> case stBlock of
+      ModelStmts -> modify (modifyVarCtxt enterNewScope)
+      _ -> pure ()
+    SContext f -> modify f
+    _ -> pure ()
+  pure (us, oc)
+
+addToLookupContextA :: RS.Base UStmt LStmt -> LookupM (RS.Base UStmt LStmt, LookupCtxt)
+addToLookupContextA us = do
+  oc <- get
+  case us of
+    SForF loopCounter _ _ _ -> ucAddIntCounterToLoopBodyScope loopCounter
+    SForEachF loopCounter ce _ -> ucAddTypedCounterToLoopBodyScope loopCounter ce
+    SFunctionF _ typedArgs _ _  -> ucAddArgsToFunctionBodyScope typedArgs
+--    SScopedF _ -> modify (modifyVarCtxt enterNewScope)
+    SBlockF stBlock body -> case stBlock of
+      ModelStmts -> modify (modifyVarCtxt enterNewScope)
+      _ -> pure ()
+    SContextF f -> modify f
+    _ -> pure ()
+  pure (us, oc)
+
+
+-}
 {-
 g :: NatM LookupM UExpr EExpr --UExpr t -> LookupM (EExpr t)
 g = \case
