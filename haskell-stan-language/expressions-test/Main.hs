@@ -205,45 +205,55 @@ main = do
       pure r
     funcStmt = function euclideanDistance eDistArgList eDistBody
   writeStmtCode ctxt0 funcStmt
-{-
-  cmnt "print/reject"
-  writeStmtCode ctxt0 $ print (stringE "example" :> l :> TNil)
+
+  cmnt "print/reject/multi-line comments"
+  writeStmtCode ctxt0 $ grouped [declare_l, print (stringE "example" :> l :> TNil)]
   writeStmtCode ctxt0 $ reject (m :> stringE "or" :> r :> TNil)
   writeStmtCode ctxt0 $ comment ("Multiline comments" :| ["are formatted differently!"])
+
 -- parentheses
   cmnt "Parentheses"
-  traverse_ (writeStmtAsText 80) $ [x `assign` op1 x (op2 y x) | op1 <- [plus, minus, times, divide], op2 <- [plus, minus, times, divide] ]
+  writeStmtAsText 80 $ grouped $ [declare_x, declare_y] <> [x `assign` op1 x (op2 y x) | op1 <- [plus, minus, times, divide], op2 <- [plus, minus, times, divide] ]
+
   let b1 = namedE "b1" SBool
       b2 = namedE "b2" SBool
       and = boolOpE SAnd
       or = boolOpE SOr
-  traverse_ (writeStmtAsText 80) $ [ifThenElse ((b1 `op1` (b2 `op2` b2), (x `assign` y)) :| []) (y `assign` x) | op1 <- [and, or], op2 <- [and, or] ]
+  writeStmtCode (modifyVarCtxt (addTypedVarToInnerScope "b1" SBool
+                                . addTypedVarToInnerScope "b2" SBool) ctxt0)
+    $ grouped $ [declare_x, declare_y]
+    <> [ifThenElse ((b1 `op1` (b2 `op2` b2), (x `assign` y)) :| []) (y `assign` x) | op1 <- [and, or], op2 <- [and, or] ]
+
   writeStmtAsText 80 $ comment (one $ "Formatting...")
   let ln n = namedE ("longVarName" <> show n) SReal
       dn n = namedE ("someLongIntName" <> show n) SInt
+      rdecl n = declare ("longVarName" <> show n) realSpec
+      idecl n = declare ("someLongIntName" <> show n) intSpec
+
       veryLongName = "abcdefghijklmnopqrstuvwxyz"
-  writeStmtAsText 80 $ declareN $ NamedDeclSpec veryLongName $  arraySpec s4 (dn 1 ::: dn 2 ::: dn 3 ::: dn 4 ::: VNil) $ matrixSpec (dn 1) (dn 2)
-  writeStmtAsText 40 $ declareN $ NamedDeclSpec veryLongName $  arraySpec s4 (dn 1 ::: dn 2 ::: dn 3 ::: dn 4 ::: VNil) $ matrixSpec (dn 1) (dn 2)
-  writeStmtAsText 80 $ declareAndAssignN (NamedDeclSpec "longRealName" $ realSpec) (foldl' plusE (ln 2) $ fmap ln [3])
-  writeStmtAsText 80 $ declareAndAssignN (NamedDeclSpec "longRealName" $ realSpec) (foldl' plusE (ln 2) $ fmap ln [3..20])
-  writeStmtAsText 80 $ ln 1 `assign` (foldl' plusE (ln 2) $ fmap ln [3..20])
+  writeStmtAsText 80 $ grouped $ fmap idecl [1..4] <> [declareN $ NamedDeclSpec veryLongName $  arraySpec s4 (dn 1 ::: dn 2 ::: dn 3 ::: dn 4 ::: VNil) $ matrixSpec (dn 1) (dn 2)]
+  writeStmtAsText 40 $ grouped $ fmap idecl [1..4] <> [declareN $ NamedDeclSpec veryLongName $  arraySpec s4 (dn 1 ::: dn 2 ::: dn 3 ::: dn 4 ::: VNil) $ matrixSpec (dn 1) (dn 2)]
+  writeStmtAsText 80 $ grouped $ fmap rdecl [2,3] <> [declareAndAssignN (NamedDeclSpec "longRealName" $ realSpec) (foldl' plusE (ln 2) $ fmap ln [3])]
+  writeStmtAsText 80 $ grouped $ fmap rdecl [2..20] <> [declareAndAssignN (NamedDeclSpec "longRealName" $ realSpec) (foldl' plusE (ln 2) $ fmap ln [3..20])]
+  writeStmtAsText 80 $ grouped $ fmap rdecl [1..20] <> [ln 1 `assign` (foldl' plusE (ln 2) $ fmap ln [3..20])]
+
   let formatS1 = for "q" (SpecificIn $ namedE "votes" SCVec)
                  $ \sie -> grouped $ (sie `assign` (realE 2) :| [assign x (x `plus` y)
                                                                 , stmtWhile
                                                                 , ln 1 `assign` (foldl' plusE (ln 2) $ fmap ln [3..20])])
-  writeStmtAsText 80 formatS1
+  writeStmtAsText 80 $ grouped $ fmap rdecl [1..20] <> [declare_x, declare_y, declare_n, declare_l, declare "votes" $ vectorSpec $ intE 3, formatS1]
+
   let
     f :: Function EReal [ECVec, ECVec, EArray N1 EInt, EInt, EInt]
     f = simpleFunction "f"
     fArgList = Arg "x1" :> Arg "x2" :> DataArg "m" :> Arg "ThisIsALongName" :> Arg "AsIsThisNameAlsoLong" :> TNil
     fBody :: ExprList [ECVec, ECVec, EArray N1 EInt, EInt, EInt] -> (UStmt, UExpr EReal)
-    fBody (x1 :> x2 :> _ :> _ :> _ :> TNil) = (rv `assign` (tr (x1 `eMinus` x2) `times` (x1 `eMinus` x2)), rv)
-      where rv = namedE "r" SReal
+    fBody (x1 :> x2 :> _ :> _ :> _ :> TNil) = first grouped $ writerL $ declareRHSW "r" realSpec $ (tr (x1 `eMinus` x2) `times` (x1 `eMinus` x2))
     funcStmt = function f fArgList fBody
   writeStmtAsText 80 funcStmt
+
   let
     d :: Density EReal [ECVec, ECVec, EArray N1 EInt, EInt, EInt, EInt, EInt]
     d = simpleDensity "d"
     dStmt = target $ densityE d x (v :> v :> (namedE "indexArray" sIntArray) :> dn 1 :> dn 2 :> dn 3 :> dn 4 :> TNil)
-  writeStmtAsText 80 dStmt
--}
+  writeStmtAsText 100 $ grouped $ fmap idecl [1..4] <> [declare_x, declare "v" $ vectorSpec $ intE 3, declare "indexArray" $ intArraySpec $ intE 3] <> [dStmt]

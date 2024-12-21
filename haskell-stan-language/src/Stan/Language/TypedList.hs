@@ -11,16 +11,17 @@
 {-# LANGUAGE TypeOperators #-}
 --{-# LANGUAGE TypeSynonymInstances #-}
 {-# LANGUAGE UndecidableInstances #-}
-{-# OPTIONS_GHC -fwarn-incomplete-patterns #-}
-{-# OPTIONS_GHC -Wno-unrecognised-pragmas #-}
-{-# HLINT ignore "Use camelCase" #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE FlexibleContexts #-}
+{-# OPTIONS_GHC -fwarn-incomplete-patterns #-}
+{-# OPTIONS_GHC -Wno-unrecognised-pragmas #-}
+{-# HLINT ignore "Use camelCase" #-}
 
 module Stan.Language.TypedList
   (
     module Stan.Language.TypedList
+  , module Stan.Language.Types
   )
   where
 
@@ -32,25 +33,9 @@ import Data.Type.Equality ((:~:)(Refl), TestEquality(testEquality))
 import qualified Data.Vec.Lazy as Vec
 import qualified Data.Type.Nat as DT
 
--- singleton for a list of arguments
-data TypeList :: [EType] -> Type where
-  TypeNil :: TypeList '[]
-  (::>) :: SType et -> TypeList ets -> TypeList (et ': ets)
-
-infixr 2 ::>
-
 type family MapTypeList (f :: EType -> EType) (tl :: [EType]) :: [EType] where
   MapTypeList _ '[] = '[]
   MapTypeList f (et ': ets) = f et ': MapTypeList f ets
-
-
-instance TestEquality TypeList where
-  testEquality TypeNil TypeNil = Just Refl
-  testEquality (sta ::> as) (stb ::> bs) = do
-    Refl <- testEquality sta stb
-    Refl <- testEquality as bs
-    pure Refl
-  testEquality _ _ = Nothing
 
 eqTypeList :: TypeList es -> TypeList es' -> Bool
 eqTypeList = go
@@ -118,13 +103,6 @@ type family TypeListLength (tl :: TypeList qs) :: DT.Nat where
 --typeListLengthIsTListLength :: TListLength es :~: TypeListLength (TypeList es)
 --typeListLengthIsTListLength = Refl
 
--- list of arguments.  Parameterized by an expression type and the list of arguments
-data TypedList ::  (EType -> Type) -> [EType] -> Type where
-  TNil :: TypedList f '[]
-  (:>) :: f et -> TypedList f ets -> TypedList f (et ': ets)
-
-infixr 2 :>
-
 type family TypedListLength (tl :: TypedList f es) :: DT.Nat where
   TypedListLength TNil = DT.Z
   TypedListLength (a :> as) = DT.S (TypedListLength as)
@@ -133,16 +111,6 @@ typedListLength :: TypedList f es -> DT.Nat
 typedListLength TNil = DT.Z
 typedListLength (_ :> as) = DT.S (typedListLength as)
 
-instance HFunctor TypedList where
-  hfmap nat = \case
-    TNil -> TNil
-    (:>) g al -> nat g :> hfmap nat al
-
-instance HTraversable TypedList where
-  htraverse natM = \case
-    TNil -> pure TNil
-    (:>) aet al -> (:>) <$> natM aet <*> htraverse natM al
-  hmapM = htraverse
 
 type family (as :: [k]) ++ (bs :: [k]) :: [k] where
   '[] ++ bs = bs

@@ -31,12 +31,15 @@ import Data.Type.Equality ((:~:)(Refl), TestEquality(testEquality))
 import Data.Type.Nat (Nat(..), SNat(..))
 import Data.Type.Bool
 import qualified Data.Type.Nat as DT
+import Stan.Language.Recursion
 
 import qualified GHC.TypeLits as TE
 import GHC.TypeLits (ErrorMessage((:<>:)))
 import qualified Text.Show
 import qualified Data.GADT.Compare as GC
 import qualified Data.GADT.Show as GS
+
+
 
 -- possible types of terms
 -- NB: zero dimensional array will be treated as the underlying type
@@ -53,8 +56,44 @@ data EType where
   EMat :: EType
   ESqMat :: EType
   EArray :: Nat -> EType -> EType
+  ETuple :: [EType] -> EType
 --  (::->) :: EType -> EType -> EType
   deriving stock (Eq, Ord, Show)
+
+-- singleton for a list of arguments
+data TypeList :: [EType] -> Type where
+  TypeNil :: TypeList '[]
+  (::>) :: SType et -> TypeList ets -> TypeList (et ': ets)
+
+infixr 2 ::>
+
+instance TestEquality TypeList where
+  testEquality TypeNil TypeNil = Just Refl
+  testEquality (sta ::> as) (stb ::> bs) = do
+    Refl <- testEquality sta stb
+    Refl <- testEquality as bs
+    pure Refl
+  testEquality _ _ = Nothing
+
+
+-- list of arguments.  Parameterized by an expression type and the list of arguments
+data TypedList ::  (EType -> Type) -> [EType] -> Type where
+  TNil :: TypedList f '[]
+  (:>) :: f et -> TypedList f ets -> TypedList f (et ': ets)
+
+infixr 2 :>
+
+instance HFunctor TypedList where
+  hfmap nat = \case
+    TNil -> TNil
+    (:>) g al -> nat g :> hfmap nat al
+
+instance HTraversable TypedList where
+  htraverse natM = \case
+    TNil -> pure TNil
+    (:>) aet al -> (:>) <$> natM aet <*> htraverse natM al
+  hmapM = htraverse
+
 
 type family ZeroDArray (e :: EType) :: EType where
   ZeroDArray (EArray (S n) _) =  TE.TypeError (TE.Text "ZeroDArray: " :<>: TE.ShowType n :<>: TE.Text " is not a zero dimensional array")
@@ -95,6 +134,9 @@ type ERealArray = EArray (S Z) EReal
 
 type EComplexArray :: EType
 type EComplexArray = EArray (S Z) EComplex
+
+--type E2Tuple :: EType -> EType -> EType
+--type E2Tuple t1 t2 = ETuple [t1, t2]
 
 data Dict c where
   Dict :: c => Dict c
@@ -195,6 +237,7 @@ data SType :: EType -> Type where
   SMat :: SType EMat
   SSqMat :: SType ESqMat
   SArray :: SNat n -> SType t -> SType (EArray n t)
+  STuple :: TypedList SType ts -> SType (ETuple ts)
 --  (:->) :: SType t -> SType t' -> SType (t ::-> t')
 
 class GenSType (e :: EType) where
