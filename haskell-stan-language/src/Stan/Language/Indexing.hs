@@ -69,6 +69,12 @@ s4 :: SNat (S (S (S (S Z)))) = DT.SS
 -- popRandom v = (a, vL DT.++ vR)
 --  where (vL, a ::: vR) = DT.split v :: (Vec n a, Vec (S m) a)
 
+type family IndexedTuple (n :: Nat) (e :: EType) :: EType where
+  IndexedTuple _ (ETuple '[]) = TE.TypeError (TE.Text "Cannot index a 0-tuple. Did you index an n-tuple at a position > n?")
+  IndexedTuple Z (ETuple '[e] ) = e
+  IndexedTuple Z (ETuple (e ': _)) = e
+  IndexedTuple (S n) (ETuple (e ': es)) = IndexedTuple n (ETuple es)
+
 data DiffHolder = PosDiff Nat | Same | NegDiff Nat
 
 type family Diff (n :: Nat) (m :: Nat) :: DiffHolder where
@@ -81,23 +87,24 @@ type family DeclDimension (e :: EType) :: Nat where
   DeclDimension EInt = Z
   DeclDimension EReal = Z
   DeclDimension EComplex = Z
---  DeclDimension ESimplex = S Z
   DeclDimension ECVec = S Z
   DeclDimension ERVec = S Z
   DeclDimension EMat = S (S Z)
   DeclDimension ESqMat = S Z
   DeclDimension (EArray n t) = n `DT.Plus` DeclDimension t
+  DeclDimension a = Z --
+  TE.TypeError (TE.Text "DeclDimension: " TE.:<>: TE.ShowType a TE.:<>: TE.Text " has no well-defined idea of declared dimension")
 
 type family Dimension (e :: EType) :: Nat where
   Dimension EInt = Z
   Dimension EReal = Z
   Dimension EComplex = Z
---  Dimension ESimplex = S Z
   Dimension ECVec = S Z
   Dimension ERVec = S Z
   Dimension EMat = S (S Z)
   Dimension ESqMat = S (S Z)
   Dimension (EArray n t) = n `DT.Plus` Dimension t
+  Dimension a = TE.TypeError (TE.Text "Dimension: " TE.:<>: TE.ShowType a TE.:<>: TE.Text " has no well-defined idea of dimension")
 
 type family ApplyDiffToEType (n :: DiffHolder) (e :: EType) :: EType where
   ApplyDiffToEType _ (EArray Z t) = TE.TypeError (TE.Text "Attempt to slice a zero-dimensional array.  Which means you had a zero dimensional array?")

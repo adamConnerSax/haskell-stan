@@ -100,6 +100,8 @@ type family BoolResultT (bo :: BoolOp) (a :: EType) (b :: EType) :: EType where
   BoolResultT BLEq EString EString = EBool
   BoolResultT BGT EString EString = EBool
   BoolResultT BGEq EString EString = EBool
+  BoolResultT BEq (ETuple _) (ETuple _) = EBool
+  BoolResultT BNEq (ETuple _) (ETuple _) = EBool
   BoolResultT BEq a b = IfNumbers a b EBool (TE.TypeError (TE.ShowType a :<>: TE.Text " and " :<>: TE.ShowType b :<>: TE.Text " cannot be compared." ))
   BoolResultT BNEq a b = IfNumbers a b EBool (TE.TypeError (TE.ShowType a :<>: TE.Text " and " :<>: TE.ShowType b :<>: TE.Text " cannot be compared." ))
   BoolResultT BLT a b = IfNumbers a b EBool (TE.TypeError (TE.ShowType a :<>: TE.Text " and " :<>: TE.ShowType b :<>: TE.Text " cannot be compared." ))

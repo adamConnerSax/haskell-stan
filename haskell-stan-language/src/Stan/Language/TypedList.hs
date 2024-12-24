@@ -37,39 +37,10 @@ type family MapTypeList (f :: EType -> EType) (tl :: [EType]) :: [EType] where
   MapTypeList _ '[] = '[]
   MapTypeList f (et ': ets) = f et ': MapTypeList f ets
 
-eqTypeList :: TypeList es -> TypeList es' -> Bool
-eqTypeList = go
-  where
-    go :: TypeList es -> TypeList es' -> Bool
-    go TypeNil TypeNil = True
-    go (sta ::> as) (stb ::> bs) = case testEquality sta stb of
-      Just Refl -> go as bs
-      Nothing -> False
-    go _ _ = False
-
-typesToList ::  (forall t.SType t -> a) -> TypeList args -> [a]
-typesToList _ TypeNil = []
-typesToList f (st ::> ats) = f st : typesToList f ats
-
-typeListToTypedListOfTypes :: TypeList args -> TypedList SType args
-typeListToTypedListOfTypes TypeNil = TNil
-typeListToTypedListOfTypes (st ::> atl) = st :> typeListToTypedListOfTypes atl
 
 oneType :: SType et -> TypeList '[et]
 oneType st = st ::> TypeNil
 
-class GenTypeList (ts :: [EType]) where
-  genTypeList :: TypeList ts
-
-instance GenTypeList '[] where
-  genTypeList = TypeNil
-
-instance (GenSType t, GenTypeList ts) => GenTypeList (t ': ts)  where
-  genTypeList = genSType @t ::> genTypeList @ts
-
-type family AllGenTypes (ts :: [EType]) :: Constraint where
-  AllGenTypes '[] = ()
-  AllGenTypes (t ': ts) = (GenSType t, AllGenTypes ts)
 
 type family LastType (k :: [EType]) :: EType where
   LastType '[] = EVoid
@@ -128,27 +99,8 @@ zipTypedListsWith :: (forall x. a x -> b x -> c x) -> TypedList a args -> TypedL
 zipTypedListsWith _ TNil TNil = TNil
 zipTypedListsWith f (a :> as) (b :> bs) = f a b :> zipTypedListsWith f as bs
 
--- This is fun! Fold a typed list using a function of it's held data and the coresponding STypes
-foldTypedList :: forall a b ts . AllGenTypes ts => (forall x. a x -> SType x -> b -> b) -> b -> TypedList a ts -> b
-foldTypedList f = go
-  where
-    go :: forall ts' . AllGenTypes ts' => b -> TypedList a ts' -> b
-    go b TNil = b
-    go b (a :> as) = go (f a genSType b) as
-
---typeChangingMap :: (forall t. u t -> u (F t')) -> TypedList u as ->
-
 eqTypedLists :: forall (t ::EType -> Type) es. (forall a.t a -> t a -> Bool) -> TypedList t es -> TypedList t es -> Bool
 eqTypedLists f a b = getAll $ mconcat $ All <$> typedKToList (zipTypedListsWith (\x y -> K $ f x y) a b)
-
-{-
-eqArgLists :: forall (t ::EType -> Type) es es'. (forall a.t a -> t a -> Bool) -> ArgList t es -> ArgList t es' -> Bool
-eqArgLists f = go
-  where
-    go :: ArgList t ls -> ArgList t ls' -> Bool
-    go ArgNil ArgNil = True
-    go (x :> xs) (y :> ys) = f x y && go xs ys
--}
 
 typedKToList :: TypedList (K a) ts -> [a]
 typedKToList TNil = []
@@ -161,21 +113,10 @@ typeListToSTypeList :: TypeList args -> TypedList SType args
 typeListToSTypeList TypeNil = TNil
 typeListToSTypeList (st ::> atl) = st :> typeListToSTypeList atl
 
-typedSTypeListToTypeList :: TypedList SType args -> TypeList args
-typedSTypeListToTypeList TNil = TypeNil
-typedSTypeListToTypeList (st :> xs) = st ::> typedSTypeListToTypeList xs
 
 applyTypedListFunctionToTypeList :: (forall u.TypedList u args -> TypedList u args') -> TypeList args -> TypeList args'
 applyTypedListFunctionToTypeList f = typedSTypeListToTypeList . f . typeListToSTypeList
 
-class GenTypedList (ts :: [EType]) where
-  genTypedList :: TypedList SType ts
-
-instance GenTypedList '[] where
-  genTypedList = TNil
-
-instance (GenSType t, GenTypedList ts) => GenTypedList (t ': ts)  where
-  genTypedList = genSType @t :> genTypedList @ts
 
 type family SameTypeList (e :: EType) (n :: DT.Nat) :: [EType] where
   SameTypeList _ DT.Z = '[]

@@ -124,6 +124,12 @@ main = do
   writeExprCode indexingCtxt a2
 --  let a4 = indexE s2 (namedE "I" (SArray s1 SInt)) a2
 --  writeExprCode ctxt0 a4
+  cmnt "Tuples"
+  let tplExpr = tupleE (intE 2 :> realE 2.2 :> TNil)
+      indexedTplExpr = indexTuple s0 tplExpr
+  writeExprCode ctxt0 tplExpr
+  writeExprCode ctxt0 indexedTplExpr
+
   cmnt "Assignments"
   cmnt "simple"
   writeStmtCode ctxtWithVars $ assign ue1 ue1
@@ -133,6 +139,7 @@ main = do
   writeStmtCode ctxt1 $ assign x (x `plus` (y `plus` vByKatn))
   let declare_n = declare "n" intSpec
       declare_l = declare "l" intSpec
+      declare_x = declare "x" realSpec
       declare_q = declare "q" (matrixSpec n l)
       stDeclare1 = declare "M" (matrixSpec n l)
       nStates = namedSizeE "States"
@@ -157,7 +164,9 @@ main = do
 
   writeStmtCode ctxt0 $ declareAndAssign "C" (arraySpec s2 (intE 2 ::: intE 2 ::: VNil) (addVMs [lowerM $ realE 0 , multiplierM $ realE 3] $ vectorSpec (intE 2) ))
     (arrayE $ NestedVec2 ((vectorE [1,2] ::: vectorE [3,4] ::: VNil) ::: (vectorE [4,5] ::: vectorE [5, 6] ::: VNil) :::  VNil))
-
+  cmnt "Tuples"
+  writeStmtCode ctxt0 $ grouped [declare_n, declare_x
+                                , declareAndAssign "t" (tuple2Spec StanInt StanReal) $ tupleE (n :> x :> TNil)]
   cmnt "Add to target, two ways."
   let normalDistVec = Density "normal" SCVec (SCVec ::> (SCVec ::> TypeNil))
       declare_m = declare "m" $ vectorSpec $ namedE "n" SInt

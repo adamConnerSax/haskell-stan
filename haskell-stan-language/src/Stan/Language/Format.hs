@@ -290,6 +290,7 @@ exprToDocAlg = K . \case
   LMatrix ms -> Bare $ unNestedToCode PP.brackets [length ms] $ PP.pretty <$> concatMap DT.toList ms--PP.brackets $ PP.pretty $ T.intercalate "," $ fmap (T.intercalate "," . fmap show . DT.toList) ms
   LArray nv -> Bare $ nestedVecToCode nv
   LIntRange leM ueM -> Oped RangeOp $ maybe mempty (unK . f) leM <> PP.colon <> maybe mempty (unK . f) ueM
+  LTuple tls -> Bare $ PP.parens $ csArgList $ hfmap f tls
   LFunction (Function fn _ _) al -> Bare $ PP.pretty fn <> PP.parens (csArgList $ hfmap f al)
   LFunction (IdentityFunction _) (arg :> TNil) -> Bare $ unK $ f arg
   LDensity (Density dn _ _) k al -> Bare $ PP.pretty dn <> PP.parens (formatDensityArgs (unK (f k) : typedKToList (hfmap f al)))
@@ -298,6 +299,7 @@ exprToDocAlg = K . \case
   LCond ce te fe -> Bare $ PP.group $ PP.nest 1 $ unK (f ce) <> PP.softline <> "?" <+> unK (f te) <> PP.softline <> PP.colon <+> unK (f fe)
   LSlice sn ie e -> sliced sn ie e
   LIndex sn ie e -> indexed sn ie e
+  LIndexedTuple sn e -> Bare $ unK (f e) <> "." <> show (DT.snatToNat sn + 1)
   where
     f :: K IExprCode ~> K CodePP
     f = K . iExprToCode . unK

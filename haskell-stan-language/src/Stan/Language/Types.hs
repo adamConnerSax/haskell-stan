@@ -39,10 +39,13 @@ import qualified Text.Show
 import qualified Data.GADT.Compare as GC
 import qualified Data.GADT.Show as GS
 
+import qualified Data.Text as Text
 
 
 -- possible types of terms
 -- NB: zero dimensional array will be treated as the underlying type
+-- NB: Stan does not allow 0- or 1-Tuples. We'll enforce that in the declSpec and
+-- explicit construction functions
 data EType where
   EVoid :: EType
   EString :: EType
@@ -50,7 +53,6 @@ data EType where
   EInt :: EType
   EReal :: EType
   EComplex :: EType
---  ESimplex :: EType
   ECVec :: EType
   ERVec :: EType
   EMat :: EType
@@ -67,6 +69,33 @@ data TypeList :: [EType] -> Type where
 
 infixr 2 ::>
 
+typeListToETypeList :: TypeList ts -> [EType]
+typeListToETypeList TypeNil = []
+typeListToETypeList (st ::> sts) = sTypeToEType st : typeListToETypeList sts
+
+class GenTypeList (ts :: [EType]) where
+  genTypeList :: TypeList ts
+
+instance GenTypeList '[] where
+  genTypeList = TypeNil
+
+instance (GenSType t, GenTypeList ts) => GenTypeList (t ': ts)  where
+  genTypeList = genSType @t ::> genTypeList @ts
+
+type family AllGenTypes (ts :: [EType]) :: Constraint where
+  AllGenTypes '[] = ()
+  AllGenTypes (t ': ts) = (GenSType t, AllGenTypes ts)
+
+eqTypeList :: TypeList es -> TypeList es' -> Bool
+eqTypeList = go
+  where
+    go :: TypeList es -> TypeList es' -> Bool
+    go TypeNil TypeNil = True
+    go (sta ::> as) (stb ::> bs) = case testEquality sta stb of
+      Just Refl -> go as bs
+      Nothing -> False
+    go _ _ = False
+
 instance TestEquality TypeList where
   testEquality TypeNil TypeNil = Just Refl
   testEquality (sta ::> as) (stb ::> bs) = do
@@ -75,6 +104,17 @@ instance TestEquality TypeList where
     pure Refl
   testEquality _ _ = Nothing
 
+typesToList ::  (forall t.SType t -> a) -> TypeList args -> [a]
+typesToList _ TypeNil = []
+typesToList f (st ::> ats) = f st : typesToList f ats
+
+typeListToTypedListOfTypes :: TypeList args -> TypedList SType args
+typeListToTypedListOfTypes TypeNil = TNil
+typeListToTypedListOfTypes (st ::> atl) = st :> typeListToTypedListOfTypes atl
+
+typedSTypeListToTypeList :: TypedList SType args -> TypeList args
+typedSTypeListToTypeList TNil = TypeNil
+typedSTypeListToTypeList (st :> xs) = st ::> typedSTypeListToTypeList xs
 
 -- list of arguments.  Parameterized by an expression type and the list of arguments
 data TypedList ::  (EType -> Type) -> [EType] -> Type where
@@ -82,6 +122,18 @@ data TypedList ::  (EType -> Type) -> [EType] -> Type where
   (:>) :: f et -> TypedList f ets -> TypedList f (et ': ets)
 
 infixr 2 :>
+
+--type family IfSameTypedList (tl1 :: TypedList a ts1) (tl2 :: TypedList a ts2) (c :: k) (d :: k) :: k where
+--  IfSameTypedList TNil TNil c _ = c
+--  IFSameTypedList (a ': as) (b ': bs) c d =
+
+instance TestEquality a => TestEquality (TypedList a) where
+  testEquality TNil TNil = Just Refl
+  testEquality (sta :> as) (stb :> bs) = do
+    Refl <- testEquality sta stb
+    Refl <- testEquality as bs
+    pure Refl
+  testEquality _ _ = Nothing
 
 instance HFunctor TypedList where
   hfmap nat = \case
@@ -93,6 +145,35 @@ instance HTraversable TypedList where
     TNil -> pure TNil
     (:>) aet al -> (:>) <$> natM aet <*> htraverse natM al
   hmapM = htraverse
+
+class GenTypedList (ts :: [EType]) where
+  genTypedList :: TypedList SType ts
+
+instance GenTypedList '[] where
+  genTypedList :: TypedList SType '[]
+  genTypedList = TNil
+
+instance (GenSType t, GenTypedList ts) => GenTypedList (t ': ts)  where
+  genTypedList = genSType @t :> genTypedList @ts
+
+-- This is fun! Fold a typed list using a function of it's held data and the coresponding STypes
+foldTypedList :: forall a b ts . AllGenTypes ts
+              => (forall x. a x -> SType x -> b -> b)
+              -> b
+              -> TypedList a ts
+              -> b
+foldTypedList f = go
+  where
+    go :: forall ts' . AllGenTypes ts' => b -> TypedList a ts' -> b
+    go b TNil = b
+    go b (a :> as) = go (f a genSType b) as
+
+foldTypedList' :: forall a b ts . (forall x. a x -> b -> b) -> b -> TypedList a ts -> b
+foldTypedList' f = go
+  where
+    go :: forall ts' . b -> TypedList a ts' -> b
+    go b TNil = b
+    go b (a :> as) = go (f a b) as
 
 
 type family ZeroDArray (e :: EType) :: EType where
@@ -109,13 +190,12 @@ instance GenEType EBool where genEType = EBool
 instance GenEType EInt where genEType = EInt
 instance GenEType EReal where genEType = EReal
 instance GenEType EComplex where genEType = EComplex
---instance GenEType ESimplex where genEType = ESimplex
 instance GenEType ECVec where genEType = ECVec
 instance GenEType ERVec where genEType = ERVec
 instance GenEType EMat where genEType = EMat
 instance GenEType ESqMat where genEType = ESqMat
 instance (DT.SNatI n, GenEType t) => GenEType (EArray n t) where genEType = EArray (DT.snatToNat $ DT.snat @n) (genEType @t)
-
+instance GenTypedList ts => GenEType (ETuple ts) where genEType = ETuple $ typeListToETypeList $ typedSTypeListToTypeList $ genTypedList @ts
 
 type EArray1 :: EType -> EType
 type EArray1 t = EArray (S Z) t
@@ -135,22 +215,17 @@ type ERealArray = EArray (S Z) EReal
 type EComplexArray :: EType
 type EComplexArray = EArray (S Z) EComplex
 
---type E2Tuple :: EType -> EType -> EType
---type E2Tuple t1 t2 = ETuple [t1, t2]
+type E2Tuple :: EType -> EType -> EType
+type E2Tuple t1 t2 = ETuple [t1, t2]
+
+type E3Tuple :: EType -> EType -> EType -> EType
+type E3Tuple t1 t2 t3 = ETuple [t1, t2, t3]
 
 data Dict c where
   Dict :: c => Dict c
 
-
 -- A mechanism to limit the types we can use in functions via a constraint
 type TypeOneOf et ets = TypeOneOf' et ets (TypeMember et ets)
-
-{-
-type family TypeOneOfB (et :: EType) (ets :: [EType]) :: Bool where
-  TypeOneOfB _ '[] = False
-  TypeOneOfB et (et ': t) = True
-  TypeOneOfB et (h ': t) = TypeOneOfB et t
--}
 
 type family TypeOneOf' (et :: EType) (ets :: [EType]) (mem :: Bool) :: Constraint where
   TypeOneOf' et ets 'True = ()
@@ -166,19 +241,6 @@ type family TypeSubset (ets1 :: [EType]) (ets2 :: [EType]) :: Bool where
   TypeSubset (t ': ts) ts' = TypeMember t ts' && TypeSubset ts ts'
 
 
-
-{-
-type family OrArrayOfB (et :: EType) (t :: EType) :: Bool where
-  OrArrayOfB a a = True
-  OrArrayOfB a (EArray1 a) = True
-  OrArrayOfB EReal SCVec = True
-  OrArrayOfB _ _ = False
-
-type family ScalarOrArrayOf' (a :: EType) (b :: EType) (mem :: Bool) :: Constraint where
-  ScalarOrArrayOf' a b 'True = '[]
-  ScalarOrArrayOf a b 'False = TE.TypeError (TE.ShowType a :<>: TE.Text " is not a scalar or array of " :<>: TE.ShowType b)
--}
-
 type family IfNumber (et :: EType) (a :: k) (b :: k) :: k where
   IfNumber EInt a _ = a
   IfNumber EReal a _ = a
@@ -189,7 +251,6 @@ type family IfRealNumber (et :: EType) (a :: k) (b :: k) :: k where
   IfRealNumber EInt a _ = a
   IfRealNumber EReal a _ = a
   IfRealNumber _ _ b = b
-
 
 type family IfNumbers (a :: EType) (b :: EType) (c :: k) (d :: k) where
   IfNumbers a b c d = IfNumber a (IfNumber b c d) d
@@ -207,15 +268,19 @@ type family Promoted (a :: EType) (b :: EType) :: EType where
 --Stan's modifiers (e.g. "<lower=2>" apply to the internal type in an array.)
 type family ScalarType (et :: EType) :: EType where
   ScalarType (EArray _ t) = ScalarType t
---  ScalarType ESimplex = EReal
   ScalarType ECVec = EReal
   ScalarType ERVec = EReal
   ScalarType EMat = EReal
   ScalarType ESqMat = EReal
-  ScalarType a = a
+  ScalarType EReal = EReal
+  ScalarType EInt = EInt
+  ScalarType EComplex = EComplex
+  ScalarType (ETuple '[]) = TE.TypeError (TE.Text "ScalarType: 0-Tuple has no scalar type and is not allowed!")
+  ScalarType (ETuple '[e]) = TE.TypeError (TE.Text "ScalarType: 1-Tuple is not allowed!")
+  ScalarType (ETuple es) = TE.TypeError (TE.Text "ScalarType: n-Tuple has no scalar type!")
+  ScalarType a = TE.TypeError (TE.Text "ScalarType: " TE.:<>: TE.ShowType a TE.:<>: TE.Text " has no scalar type")
 
 type family IsContainer (t :: EType) :: Constraint where
---  IsContainer ESimplex = ()
   IsContainer ECVec = ()
   IsContainer ERVec = ()
   IsContainer EMat = ()
@@ -231,7 +296,6 @@ data SType :: EType -> Type where
   SInt :: SType EInt
   SReal :: SType EReal
   SComplex :: SType EComplex
---  SSimplex :: SType ESimplex
   SCVec :: SType ECVec
   SRVec :: SType ERVec
   SMat :: SType EMat
@@ -239,6 +303,9 @@ data SType :: EType -> Type where
   SArray :: SNat n -> SType t -> SType (EArray n t)
   STuple :: TypedList SType ts -> SType (ETuple ts)
 --  (:->) :: SType t -> SType t' -> SType (t ::-> t')
+
+--extendTuple :: SType t -> SType (ETuple ts) -> SType (ETuple (t ': ts))
+--extendTuple st (STuple tl) = STuple (st :> tl)
 
 class GenSType (e :: EType) where
   genSType :: SType e
@@ -249,12 +316,12 @@ instance GenSType EBool where genSType = SBool
 instance GenSType EInt where genSType = SInt
 instance GenSType EReal where genSType = SReal
 instance GenSType EComplex where genSType = SComplex
---instance GenSType ESimplex where genSType = SSimplex
 instance GenSType ECVec where genSType = SCVec
 instance GenSType ERVec where genSType = SRVec
 instance GenSType EMat where genSType = SMat
 instance GenSType ESqMat where genSType = SSqMat
 instance (DT.SNatI n, GenSType t) => GenSType (EArray n t) where genSType = SArray DT.snat (genSType @t)
+instance (GenTypedList ts, AllGenTypes ts) => GenSType (ETuple ts) where genSType = STuple $ genTypedList @ts
 --instance (GenSType ta, GenSType tb) => GenSType (ta ::-> tb) where genSType = genSType @ta :-> genSType @tb
 
 type SArray1 t = SType (EArray (S Z) t)
@@ -267,6 +334,11 @@ sIntArray = SArray SS SInt
 sIndexArray :: SType EIndexArray
 sIndexArray = sIntArray
 
+s2Tuple :: SType t1 -> SType t2 -> SType (ETuple [t1,t2])
+s2Tuple s1 s2 = STuple (s1 :> s2 :> TNil)
+
+s3Tuple :: SType t1 -> SType t2 -> SType t3 -> SType (ETuple [t1, t2, t3])
+s3Tuple s1 s2 s3 = STuple (s1 :> s2 :> s3 :> TNil)
 
 instance Show (SType t) where
   show x = "SType: " <> show (sTypeToEType x)
@@ -280,12 +352,12 @@ instance Eq (SType t) where
   SInt == SInt = True
   SReal == SReal = True
   SComplex == SComplex = True
---  SSimplex == SSimplex = True
   SCVec == SCVec = True
   SRVec == SRVec = True
   SMat == SMat = True
   SSqMat == SSqMat = True
   SArray n st == SArray n' st' = (DT.snatToNat n == DT.snatToNat n') && (st == st')
+  STuple ts == STuple ts' = typedSTypeListToTypeList ts `eqTypeList` typedSTypeListToTypeList ts'
 --  sa :-> sb == sa' :-> sb' = (sa == sa') && (sb == sb')
 
 
@@ -297,7 +369,6 @@ sTypeToEType = \case
   SInt -> EInt
   SReal -> EReal
   SComplex -> EComplex
---  SSimplex -> ESimplex
   SCVec -> ECVec
   SRVec -> ERVec
   SMat -> EMat
@@ -305,6 +376,7 @@ sTypeToEType = \case
   SArray sn st -> case DT.snatToNat sn of
     Z -> sTypeToEType st
     S n -> EArray (S n) $ sTypeToEType st
+  STuple ts -> ETuple $ typeListToETypeList $ typedSTypeListToTypeList ts
 --  sa :-> sb -> sTypeToEType sa ::-> sTypeToEType sb
 
 withSType :: forall r . EType -> (forall t. SType t -> r) -> r
@@ -314,7 +386,6 @@ withSType EBool k = k SBool
 withSType EInt k = k SInt
 withSType EReal k = k SReal
 withSType EComplex k = k SComplex
---withSType ESimplex k = k SSimplex
 withSType ERVec k = k SRVec
 withSType ECVec k = k SCVec
 withSType EMat k = k SMat
@@ -322,8 +393,17 @@ withSType ESqMat k = k SSqMat
 withSType (EArray n t) k = DT.reify n f
   where
     f :: forall n. DT.SNatI n => Proxy n -> r
-    f _ = withSType t $ \st -> k (SArray (DT.snat @n)  st)
+    f _ = withSType t $ \st -> k (SArray (DT.snat @n) st)
+withSType (ETuple []) k = k (STuple TNil)
+withSType (ETuple (et : ets)) k =
+  withSType et
+  $ \ste -> withSType (ETuple ets)
+            $ \case
+                (STuple sts) -> k (STuple $ ste :> sts)
+                _ -> error "withSType (ETuple es): Impossible case!"
 --withSType (a ::-> b) k = withSType a $ \sa -> withSType b $ \sb -> k (sa :-> sb)
+
+
 
 sTypeName :: SType t -> Text
 sTypeName = \case
@@ -333,18 +413,15 @@ sTypeName = \case
   SInt -> "int"
   SReal -> "real"
   SComplex -> "complex"
---  SSimplex -> "simplex"
   SCVec -> "vector"
   SRVec -> "row_vector"
   SMat -> "matrix"
   SSqMat -> "matrix"
   SArray _ _ -> "array" --FIXME
+  STuple ts -> "(" <> Text.intercalate ", " (reverse (foldTypedList' (\st tl -> sTypeName st : tl) [] ts)) <> ")"
 --  (:->) _ _ -> "funcApply"
 
 data StanType :: EType -> Type where
---  StanVoid :: StanType EVoid
---  StanString :: StanType EString
---  StanBool :: StanType EBool
   StanInt :: StanType EInt
   StanReal :: StanType EReal
   StanComplex :: StanType EComplex
@@ -361,12 +438,19 @@ data StanType :: EType -> Type where
   StanCholeskyFactorCorr :: StanType ESqMat
   StanCovMatrix :: StanType ESqMat
   StanCholeskyFactorCov :: StanType ESqMat
+  StanTuple :: TypedList StanType ts -> StanType (ETuple ts)
 
 stanIntArray :: StanType (EArray1 EInt)
 stanIntArray = StanArray SS StanInt
 
 stanIndexArray :: StanType EIndexArray
 stanIndexArray = stanIntArray
+
+stan2Tuple :: StanType e1 -> StanType e2 -> StanType (ETuple [e1, e2])
+stan2Tuple st1 st2 = StanTuple (st1 :> st2 :> TNil)
+
+stan3Tuple :: StanType e1 -> StanType e2 -> StanType e3 -> StanType (ETuple [e1, e2, e3])
+stan3Tuple st1 st2 st3 = StanTuple (st1 :> st2 :> st3 :> TNil)
 
 stanTypeName :: StanType t -> Text
 stanTypeName = \case
@@ -386,6 +470,9 @@ stanTypeName = \case
   StanCholeskyFactorCorr -> "cholesky_factor_corr"
   StanCovMatrix -> "cov_matrix"
   StanCholeskyFactorCov -> "cholesky_factor_cov"
+  StanTuple ts -> "tuple("
+                  <> Text.intercalate ", " (reverse (foldTypedList' (\st ts' -> stanTypeName st : ts') [] ts))
+                  <> ")"
 
 eTypeFromStanType :: StanType t -> EType
 eTypeFromStanType = \case
@@ -405,6 +492,7 @@ eTypeFromStanType = \case
   StanCholeskyFactorCorr -> ESqMat
   StanCovMatrix -> ESqMat
   StanCholeskyFactorCov -> ESqMat
+  StanTuple sts -> ETuple $ reverse $ foldTypedList' (\st ets -> eTypeFromStanType st : ets) [] sts
 
 sTypeFromStanType :: StanType t -> SType t
 sTypeFromStanType = \case
@@ -424,6 +512,7 @@ sTypeFromStanType = \case
   StanCholeskyFactorCorr -> SSqMat
   StanCovMatrix -> SSqMat
   StanCholeskyFactorCov -> SSqMat
+  StanTuple ts -> STuple $ hfmap sTypeFromStanType ts
 
 instance TestEquality SType where
   testEquality SVoid SVoid = Just Refl
@@ -432,7 +521,6 @@ instance TestEquality SType where
   testEquality SInt SInt = Just Refl
   testEquality SReal SReal = Just Refl
   testEquality SComplex SComplex = Just Refl
---  testEquality SSimplex SSimplex = Just Refl
   testEquality SCVec SCVec = Just Refl
   testEquality SRVec SRVec = Just Refl
   testEquality SMat SMat = Just Refl
@@ -446,6 +534,11 @@ instance TestEquality SType where
     Refl <- testEquality sb sb'
     pure Refl
 -}
+  testEquality (STuple TNil) (STuple TNil) = pure Refl
+  testEquality (STuple (a :> as)) (STuple (b :> bs)) = do
+    Refl <- testEquality a b
+    Refl <- testEquality (STuple as) (STuple bs)
+    pure Refl
   testEquality _ _ = Nothing
 
 instance GC.GEq SType where
@@ -455,7 +548,6 @@ instance GC.GEq SType where
   geq SInt SInt = Just Refl
   geq SReal SReal = Just Refl
   geq SComplex SComplex = Just Refl
---  geq SSimplex SSimplex = Just Refl
   geq SCVec SCVec = Just Refl
   geq SRVec SRVec = Just Refl
   geq SMat SMat = Just Refl
@@ -463,6 +555,10 @@ instance GC.GEq SType where
   geq (SArray sn sa) (SArray sm sb) = do
     Refl <- GC.geq sa sb
     Refl <- GC.geq sn sm
+    pure Refl
+  geq  (STuple (a :> as)) (STuple (b :> bs)) = do
+    Refl <- testEquality a b
+    Refl <- testEquality (STuple as) (STuple bs)
     pure Refl
   geq _ _ = Nothing
 

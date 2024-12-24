@@ -39,13 +39,12 @@ import Stan.Language.Types
       Nat(..),
       SNat,
       EIndexArray,
-      EType(EInt, EBool, EArray, ESqMat, EMat, ERVec, ECVec, EComplex,
-            EReal),
+      EType(..),
       GenSType(..),
       SType(SInt),
       ScalarType,
       StanType(..),
-      sTypeName)
+      sTypeName, TypeList)
 import Stan.Language.TypedList
     ( oneTyped,
       typeListToTypedListOfTypes,
@@ -105,6 +104,7 @@ data DeclSpec t where
   DeclSpec :: StanType t -> Vec (DeclDimension t) (UExpr EInt) -> [VarModifier UExpr (ScalarType t)] -> DeclSpec t
   ArraySpec :: (forall f. VecToTListC f n, forall f.TListToVecC f n, GenTypeList (SameTypeList EInt n))
     => SNat (DT.S n) -> Vec (DT.S n) (UExpr EInt) -> DeclSpec t -> DeclSpec (EArray (DT.S n) t)
+  TupleSpec :: TypedList StanType ts -> DeclSpec (ETuple ts)
 
 data NamedDeclSpec t = NamedDeclSpec StanName (DeclSpec t)
 
@@ -117,24 +117,29 @@ decl (NamedDeclSpec _ ds) = ds
 declType :: DeclSpec t -> StanType t
 declType (DeclSpec st _ _) = st
 declType (ArraySpec n _ ds) = StanArray n (declType ds)
+declType (TupleSpec ts) = StanTuple ts
 
 declDims :: DeclSpec t -> Vec (DeclDimension t) (UExpr EInt)
 declDims (DeclSpec _ dims _) = dims
 declDims (ArraySpec _ dims ds) = dims Vec.++ declDims ds
+declDims (TupleSpec _) = VNil
 
 declVMS :: DeclSpec t -> [VarModifier UExpr (ScalarType t)]
 declVMS (DeclSpec _ _ vms) = vms
 declVMS (ArraySpec _ _ ids) = declVMS ids
+declVMS (TupleSpec _) = []
 
 replaceDeclVMs :: [VarModifier UExpr (ScalarType t)] -> DeclSpec t -> DeclSpec t
 replaceDeclVMs vms = \case
   DeclSpec st vdims _-> DeclSpec st vdims vms
   ArraySpec n arrDims ds -> ArraySpec n arrDims (replaceDeclVMs vms ds)
+  TupleSpec sts -> TupleSpec sts
 
 addVMs :: [VarModifier UExpr (ScalarType t)] -> DeclSpec t -> DeclSpec t
 addVMs vms' = \case
   DeclSpec st vdims vms -> DeclSpec st vdims (vms <> vms')
   ArraySpec n arrDims ds -> ArraySpec n arrDims (addVMs vms' ds)
+  TupleSpec sts -> TupleSpec sts
 
 intSpec :: DeclSpec EInt
 intSpec = DeclSpec StanInt VNil []
@@ -202,6 +207,12 @@ indexArraySpec se = arraySpec s1 (se ::: VNil) (addVMs [lowerM $ intE 1] intSpec
 countArraySpec :: UExpr EInt -> DeclSpec EIndexArray
 countArraySpec se = arraySpec s1 (se ::: VNil) (addVMs [lowerM $ intE 0] intSpec)
 
+tuple2Spec :: StanType t1 -> StanType t2 -> DeclSpec (ETuple [t1, t2])
+tuple2Spec st1 st2 = TupleSpec (st1 :> st2 :> TNil)
+
+tuple3Spec :: StanType t1 -> StanType t2 -> StanType t3 -> DeclSpec (ETuple [t1, t2, t3])
+tuple3Spec st1 st2 st3 = TupleSpec (st1 :> st2 :> st3 :> TNil)
+
 
 -- functions for ease of use and exporting.  Monomorphised to UStmt, etc.
 declare' :: Text -> StanType t -> Vec (DeclDimension t) (UExpr EInt) -> [VarModifier UExpr (ScalarType t)] -> UStmt
@@ -210,6 +221,7 @@ declare' vn vt iDecls = SDeclare vn vt (DeclIndexVecF iDecls)
 declare :: Text -> DeclSpec t -> UStmt
 declare vn (DeclSpec st indices vms) = declare' vn st indices vms
 declare vn ds@(ArraySpec _ arrDims ids) = declare' vn (declType ds) (arrDims Vec.++ declDims ids) $ declVMS ids
+declare vn (TupleSpec sts) = declare' vn (StanTuple sts) VNil []
 
 declareN :: NamedDeclSpec t -> UStmt
 declareN (NamedDeclSpec n ds) = declare n ds
@@ -220,6 +232,7 @@ declareAndAssign' vn vt iDecls vms = SDeclAssign vn vt (DeclIndexVecF iDecls) vm
 declareAndAssign :: Text -> DeclSpec t -> UExpr t -> UStmt
 declareAndAssign vn (DeclSpec vt indices vms) = declareAndAssign' vn vt indices vms
 declareAndAssign vn ads@(ArraySpec _ arrDims ids) = declareAndAssign' vn (declType ads) (arrDims Vec.++ declDims ids) $ declVMS ids
+declareAndAssign vn (TupleSpec sts) = declareAndAssign' vn (StanTuple sts) VNil []
 
 declareAndAssignN :: NamedDeclSpec t -> UExpr t -> UStmt
 declareAndAssignN (NamedDeclSpec vn ds) = declareAndAssign vn ds
