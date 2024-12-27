@@ -24,7 +24,6 @@ module Stan.Language.Format
 
 import Stan.Language.Recursion
 import Stan.Language.Types
-import Stan.Language.TypedList
 import Stan.Language.Indexing
 import Stan.Language.Operations
 import Stan.Language.Functions
@@ -37,8 +36,8 @@ import qualified Data.Foldable as Foldable
 import qualified Data.IntMap.Strict as IM
 import qualified Data.List as List
 import qualified Data.List.NonEmpty as NE
-import qualified Data.Vec.Lazy as DT
-import qualified Data.Type.Nat as DT
+import qualified Data.Vec.Lazy as Vec
+import qualified Data.Type.Nat as DTN
 --import Data.Type.Equality (type (~))
 import qualified Data.Text as T
 
@@ -68,11 +67,11 @@ preferOpBreak prefix op rhs = PP.flatAlt
 stmtToCodeAlg :: StmtF (K CodePP) (Either Text CodePP) -> Either Text CodePP
 stmtToCodeAlg = \case
   SDeclareF txt st divf vms -> Right $ lineLayout
-                               $ stanDeclHead st (unK <$> DT.toList (unDeclIndexVecF divf)) vms <> PP.softline
+                               $ stanDeclHead st (unK <$> Vec.toList (unDeclIndexVecF divf)) vms <> PP.softline
                                <> PP.pretty txt <> PP.semi
   SDeclAssignF txt st divf vms rhs -> Right $ lineLayout
                                       $ preferOpBreak
-                                      (stanDeclHead st (unK <$> DT.toList (unDeclIndexVecF divf)) vms <+> PP.pretty txt)
+                                      (stanDeclHead st (unK <$> Vec.toList (unDeclIndexVecF divf)) vms <+> PP.pretty txt)
                                       PP.equals
                                       (unK rhs <> PP.semi)
   SAssignF lhs rhs -> Right $ lineLayout $ preferOpBreak (unK lhs) PP.equals (unK rhs <> PP.semi)
@@ -114,7 +113,7 @@ indexCodeL x = PP.brackets $ PP.hsep $ PP.punctuate "," x
 
 stanDeclHead :: forall t . StanType t -> [CodePP] -> [VarModifier (K CodePP) (ScalarType t)] -> CodePP
 stanDeclHead st il vms = case st of
-  StanArray sn arrayType -> arrayDeclHead (fromIntegral $ DT.snatToNatural sn) arrayType
+  StanArray sn arrayType -> arrayDeclHead (fromIntegral $ DTN.snatToNatural sn) arrayType
   StanSqMatrix -> PP.pretty (stanTypeName st) <> varModifiersToCode vms <> indexCodeL (il <> il) -- otherwise we only get one index
   _ -> PP.pretty (stanTypeName st) <> varModifiersToCode vms <> indexCodeL il
   where
@@ -129,7 +128,7 @@ stanDeclHead st il vms = case st of
       else PP.langle <> (PP.hsep $ PP.punctuate  (PP.comma <> PP.space) $ fmap vmToCode varModifierList) <> PP.rangle
     arrayDeclHead :: (ScalarType t ~ ScalarType t') => Int -> StanType t' -> CodePP
     arrayDeclHead ad declArrayType = case declArrayType of
-      StanArray innerDeclArrayDim innerDeclArrayType -> arrayDeclHead (ad + (fromIntegral $ DT.snatToNatural innerDeclArrayDim)) innerDeclArrayType
+      StanArray innerDeclArrayDim innerDeclArrayType -> arrayDeclHead (ad + (fromIntegral $ DTN.snatToNatural innerDeclArrayDim)) innerDeclArrayType
       _ -> let (adl, sdl) = List.splitAt ad il
            in "array" <> indexCodeL adl <+> stanDeclHead declArrayType sdl vms
 
@@ -164,16 +163,16 @@ appendAsList fa as = toList fa ++ as
 
 functionArg :: SType t -> CodePP
 functionArg st =  handleType st where
-  arrayIndices :: SNat n -> CodePP
+  arrayIndices :: DTN.SNat n -> CodePP
   arrayIndices sn = if n == 0 then mempty else PP.brackets (mconcat $ List.replicate (n-1) PP.comma)
-    where n = fromIntegral $ DT.snatToNatural sn
+    where n = fromIntegral $ DTN.snatToNatural sn
 
   handleType :: SType t -> CodePP
   handleType st' = case st' of
     SArray sn arrayType -> "array" <> arrayIndices sn <+> handleType arrayType
     _ -> PP.pretty $ sTypeName st'
 
-functionArgs:: TypeList args -> TypedList (FuncArg Text) args -> CodePP
+functionArgs:: STypeList args -> TypedList (FuncArg Text) args -> CodePP
 functionArgs argTypes argNames = PP.parens $ formatFunctionArgs argCodeList
   where
     handleFA c = \case
@@ -181,7 +180,7 @@ functionArgs argTypes argNames = PP.parens $ formatFunctionArgs argCodeList
       DataArg a -> "data" <+> c <+> PP.pretty a
 
     f st fa = K $ handleFA (functionArg st) fa
-    argCodeList = typedKToList $ zipTypedListsWith f (typeListToSTypeList argTypes) argNames
+    argCodeList = typedKToList $ zipTypedListsWith f argTypes argNames
 
 -- This might be wrong after switch from NE to
 ifElseCode :: NonEmpty (K CodePP EBool, Either Text CodePP) -> Either Text CodePP -> Either Text CodePP
@@ -287,7 +286,7 @@ exprToDocAlg = K . \case
   LComplex x y -> Bare $ PP.parens $ PP.pretty x <+> "+" <+> "i" <> PP.pretty y -- (x + iy))
   LString t -> Bare $ PP.dquotes $ PP.pretty t
   LVector xs -> Bare $ PP.brackets $ PP.pretty $ T.intercalate ", " (show <$> xs)
-  LMatrix ms -> Bare $ unNestedToCode PP.brackets [length ms] $ PP.pretty <$> concatMap DT.toList ms--PP.brackets $ PP.pretty $ T.intercalate "," $ fmap (T.intercalate "," . fmap show . DT.toList) ms
+  LMatrix ms -> Bare $ unNestedToCode PP.brackets [length ms] $ PP.pretty <$> concatMap Vec.toList ms--PP.brackets $ PP.pretty $ T.intercalate "," $ fmap (T.intercalate "," . fmap show . DT.toList) ms
   LArray nv -> Bare $ nestedVecToCode nv
   LIntRange leM ueM -> Oped RangeOp $ maybe mempty (unK . f) leM <> PP.colon <> maybe mempty (unK . f) ueM
   LTuple tls -> Bare $ PP.parens $ csArgList $ hfmap f tls
@@ -299,7 +298,7 @@ exprToDocAlg = K . \case
   LCond ce te fe -> Bare $ PP.group $ PP.nest 1 $ unK (f ce) <> PP.softline <> "?" <+> unK (f te) <> PP.softline <> PP.colon <+> unK (f fe)
   LSlice sn ie e -> sliced sn ie e
   LIndex sn ie e -> indexed sn ie e
-  LIndexedTuple sn e -> Bare $ unK (f e) <> "." <> show (DT.snatToNat sn + 1)
+  LIndexedTuple sn e -> Bare $ unK (f e) <> "." <> show (DTN.snatToNat sn + 1)
   where
     f :: K IExprCode ~> K CodePP
     f = K . iExprToCode . unK
@@ -321,25 +320,25 @@ exprToDocAlg = K . \case
     parenthesizeOped x = case unK x of
        Oped bop doc -> K $ Oped bop $ PP.parens doc
        y -> K y
-    addSlice :: SNat n -> K IExprCode EInt -> K IExprCode d -> [Int] -> IM.IntMap IExprCode -> ([Int], IM.IntMap IExprCode)
+    addSlice :: DTN.SNat n -> K IExprCode EInt -> K IExprCode d -> [Int] -> IM.IntMap IExprCode -> ([Int], IM.IntMap IExprCode)
     addSlice sn kei _ si im = (si', im')
       where
-        newIndex :: Int = fromIntegral $ DT.snatToNatural sn
+        newIndex :: Int = fromIntegral $ DTN.snatToNatural sn
         origIndex = let g n = if n `elem` si then g (n + 1) else n in g newIndex -- find the correct index in the original
         si' = origIndex : si
         im' = IM.alter (Just . maybe (unK kei) (sliced s0 kei . K)) origIndex im
-    sliced :: SNat n -> K IExprCode EInt -> K IExprCode t -> IExprCode
+    sliced :: DTN.SNat n -> K IExprCode EInt -> K IExprCode t -> IExprCode
     sliced sn kei ke = case unK ke of
       Bare c -> let (si, im) = addSlice sn kei ke [] IM.empty in Indexed c si im
       Oped _ c -> let (si, im) = addSlice sn kei ke [] IM.empty in Indexed (PP.parens c) si im
       Indexed c si im -> let (si', im') = addSlice sn kei ke si im in Indexed c si' im'
-    addIndex :: SNat n -> K IExprCode (EArray (S Z) EInt) -> K IExprCode d -> [Int] -> IM.IntMap IExprCode -> IM.IntMap IExprCode
+    addIndex :: DTN.SNat n -> K IExprCode (EArray (DTN.S DTN.Z) EInt) -> K IExprCode d -> [Int] -> IM.IntMap IExprCode -> IM.IntMap IExprCode
     addIndex sn kre _ke si im = im'
       where
-        newIndex :: Int = fromIntegral $ DT.snatToNatural sn
+        newIndex :: Int = fromIntegral $ DTN.snatToNatural sn
         origIndex = let g n = if n `elem` si then g (n + 1) else n in g newIndex
         im' = IM.alter (Just . maybe (unK kre) (indexed s0 kre . K)) origIndex im
-    indexed :: SNat n -> K IExprCode (EArray (S Z) EInt) -> K IExprCode t -> IExprCode
+    indexed :: DTN.SNat n -> K IExprCode (EArray (DTN.S DTN.Z) EInt) -> K IExprCode t -> IExprCode
     indexed sn kei ke = case unK ke of
       Bare c -> Indexed c [] $ addIndex sn kei ke [] IM.empty
       Oped _ c -> Indexed (PP.parens c) [] $ addIndex sn kei ke [] IM.empty

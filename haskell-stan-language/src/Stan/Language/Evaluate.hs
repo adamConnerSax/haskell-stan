@@ -21,8 +21,7 @@ where
 --import qualified Stan.ModelBuilder.Expressions as SME
 import Prelude hiding (Nat)
 
-import Stan.Language.Types ( Nat(Z, S), EType(EInt, EArray), StanType, sTypeFromStanType, SType(..), GenSType(..), sTypeName)
-import Stan.Language.TypedList (AllGenTypes)
+import Stan.Language.Types ( EType(EInt, EArray), StanType, sTypeFromStanType, SType(..), GenSType(..), AllGenSTypes(..), sTypeName)
 import Stan.Language.Expressions ( IndexKey, VarName, LExpr, LExprF (..), UExpr, UExprF(..), lNamedE )
 import Stan.Language.Functions (TypedArgNames, funcArgName)
 import Stan.Language.Statements
@@ -57,7 +56,7 @@ import Stan.Language.Format
 
 import qualified Data.Functor.Foldable.Monadic as RS
 import qualified Data.Functor.Foldable as RS
-
+import Data.Type.Nat (Nat(S, Z))
 --import Control.Monad.State.Strict (withStateT)
 
 import qualified Data.Map.Strict as Map
@@ -132,7 +131,7 @@ ucAddIntCounterToLoopBodyScope vn = modify $ modifyVarCtxt $ addTypedVarToInnerS
 ucAddTypedCounterToLoopBodyScope :: forall t r a . GenSType (ForEachSlice t) => VarName -> r t -> LookupM ()
 ucAddTypedCounterToLoopBodyScope vn _ce = modify $ modifyVarCtxt $ addTypedVarToInnerScope vn (genSType @(ForEachSlice t))
 
-ucAddArgsToFunctionBodyScope :: AllGenTypes args => TypedArgNames args -> LookupM ()
+ucAddArgsToFunctionBodyScope :: AllGenSTypes args => TypedArgNames args -> LookupM ()
 ucAddArgsToFunctionBodyScope fArgs = do
   vc <- gets varCtxt
   let newVCM = addTypedVarsInScope (hfmap (K . funcArgName) fArgs) $ enterNewScope vc
@@ -175,7 +174,7 @@ updateContextA = \case
 ucAddTypedCounterToLoopBodyScopeF :: forall t r . GenSType (ForEachSlice t) => VarName -> r t -> LookupCtxt -> LookupCtxt
 ucAddTypedCounterToLoopBodyScopeF vn _ce = modifyVarCtxt $ addTypedVarToInnerScope vn (genSType @(ForEachSlice t))
 
-ucAddArgsToFunctionBodyScopeF :: AllGenTypes args => TypedArgNames args -> LookupCtxt -> LookupCtxt
+ucAddArgsToFunctionBodyScopeF :: AllGenSTypes args => TypedArgNames args -> LookupCtxt -> LookupCtxt
 ucAddArgsToFunctionBodyScopeF fArgs = modifyVarCtxt $ addTypedVarsToInnerScope (hfmap (K . funcArgName) fArgs) . enterNewScope
 
 
