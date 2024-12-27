@@ -27,8 +27,8 @@ import Stan.Language.Types
       EIndexArray,
       EType(ESqMat, ERVec, EInt, EBool, EArray, EMat, ECVec, EString,
             EComplex, EReal, ETuple),
-      SType(SInt, SArray), E2Tuple,
-      TypedList(TNil, (:>)),
+      SType(SInt, SArray),
+      TypedList,
       eqTypedLists
     )
 import Stan.Language.Indexing

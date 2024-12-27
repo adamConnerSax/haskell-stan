@@ -75,11 +75,10 @@ import Stan.Language.Functions
       funcArgName,
       functionArgTypes,
       simpleFunction )
---import Stan.Language.StanFunctions
 
 import qualified Data.Vec.Lazy as Vec
 import qualified Data.Type.Nat as DT
-import Data.Type.Nat (Nat(Z,S), SNat (SZ, SS), SNatI)
+import Data.Type.Nat (Nat(Z,S), SNat, SNatI)
 import Data.Type.Equality (type (:~:)(..), gcastWith)
 import Control.Monad.Writer.Strict as W
 
@@ -87,11 +86,9 @@ import Prelude hiding (Nat)
 import Relude.Extra
 import qualified Data.List.NonEmpty as NE
 import qualified Data.Map.Strict as Map
-import Data.Type.Equality (type (:~:)(..))
 import qualified Data.Some as Some
 import qualified Data.Functor.Foldable as RS
 import Stan.Language.Recursion (K(..))
---import qualified Stan.ModelBuilder.Expressions as SB
 
 type StanName = Text
 

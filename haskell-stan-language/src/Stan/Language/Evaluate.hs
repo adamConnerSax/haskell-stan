@@ -21,7 +21,7 @@ where
 --import qualified Stan.ModelBuilder.Expressions as SME
 import Prelude hiding (Nat)
 
-import Stan.Language.Types ( EType(EInt, EArray), StanType, sTypeFromStanType, SType(..), GenSType(..), AllGenSTypes(..), sTypeName)
+import Stan.Language.Types ( EType(EInt, EArray), StanType, sTypeFromStanType, SType(..), GenSType(..), AllGenSTypes, sTypeName)
 import Stan.Language.Expressions ( IndexKey, VarName, LExpr, LExprF (..), UExpr, UExprF(..), lNamedE )
 import Stan.Language.Functions (TypedArgNames, funcArgName)
 import Stan.Language.Statements
@@ -29,11 +29,9 @@ import Stan.Language.Statements
       LStmt,
       Stmt(..),
       StmtF(..),
-      StmtBlock(..),
       ForEachSlice,
-      UStmt, LookupCtxt (..), VarLookupCtxt, addTypedVarToInnerScope, addTypedVarsToInnerScope,
+      UStmt, LookupCtxt (..), addTypedVarToInnerScope, addTypedVarsToInnerScope,
       addTypedVarsInScope,
-      grouped, context,
       modifyVarCtxt, enterNewScope, VarNameCheck (..), checkTypedVar, varLookupMap )
 import Stan.Language.Recursion
     ( HFunctor(..),
@@ -43,9 +41,8 @@ import Stan.Language.Recursion
       K(..),
       IFix(..),
       iCata,
-      anaM,
       iCataM,
-      IAlgM, Fix, unFix)
+      IAlgM, Fix)
 import Stan.Language.Format
     ( CodePP,
       iExprToCode,
@@ -128,7 +125,7 @@ ucDeclare varName stanType = modify $ modifyVarCtxt $ addTypedVarToInnerScope va
 ucAddIntCounterToLoopBodyScope :: VarName -> LookupM ()
 ucAddIntCounterToLoopBodyScope vn = modify $ modifyVarCtxt $ addTypedVarToInnerScope vn SInt
 
-ucAddTypedCounterToLoopBodyScope :: forall t r a . GenSType (ForEachSlice t) => VarName -> r t -> LookupM ()
+ucAddTypedCounterToLoopBodyScope :: forall t r . GenSType (ForEachSlice t) => VarName -> r t -> LookupM ()
 ucAddTypedCounterToLoopBodyScope vn _ce = modify $ modifyVarCtxt $ addTypedVarToInnerScope vn (genSType @(ForEachSlice t))
 
 ucAddArgsToFunctionBodyScope :: AllGenSTypes args => TypedArgNames args -> LookupM ()
@@ -233,7 +230,7 @@ lookupVarE vn st = do
     NameMissing -> do
       vc <- gets varCtxt
       pure $ IFix $ EE $ "#undeclared: " <> vn <> "# (varCtxt=" <> show vc  <> ")"
-    WrongType dt -> pure $ IFix $ EE $ "#badType \"" <> vn <> "#"
+    WrongType _dt -> pure $ IFix $ EE $ "#badType \"" <> vn <> "#"
 
 type EStmt = Stmt EExpr
 

@@ -9,7 +9,6 @@ module Main where
 import Prelude hiding (print)
 
 import Stan.Language.Types
-import Stan.Language.TypedList
 import Stan.Language.Indexing
 import Stan.Language.Operations
 import Stan.Language.Expressions
@@ -168,7 +167,7 @@ main = do
   writeStmtCode ctxt0 $ grouped [declare_n, declare_x
                                 , declareAndAssign "t" (tuple2Spec StanInt StanReal) $ tupleE (n :> x :> TNil)]
   cmnt "Add to target, two ways."
-  let normalDistVec = Density "normal" SCVec (SCVec ::> (SCVec ::> TypeNil))
+  let normalDistVec = Density "normal" SCVec (SCVec :> (SCVec :> TNil))
       declare_m = declare "m" $ vectorSpec $ namedE "n" SInt
       declare_sd = declare "sd" $ vectorSpec $ namedE "n" SInt
       stmtTarget1 = addToTarget $ densityE normalDistVec v (namedE "m" SCVec :> (namedE "sd" SCVec :> TNil))
@@ -206,7 +205,7 @@ main = do
   cmnt "Functions"
   let
     euclideanDistance :: Function EReal [ECVec, ECVec, EArray N1 EInt]
-    euclideanDistance = Function "eDist" SReal (SCVec ::> SCVec ::> SArray s1 SInt ::> TypeNil)
+    euclideanDistance = Function "eDist" SReal (SCVec :> SCVec :> SArray s1 SInt :> TNil)
     eDistArgList = Arg "fa1" :> Arg "fa2" :> DataArg "fa3" :> TNil
     eDistBody :: ExprList [ECVec, ECVec, EArray N1 EInt] -> (UStmt, UExpr EReal)
     eDistBody (x1 :> x2 :> _ :> TNil) = first grouped $ writerL $ do

@@ -25,19 +25,12 @@ module Stan.Language.Types.EType
 
 import Prelude hiding (Nat)
 
-import Data.Type.Equality ((:~:)(Refl), TestEquality(testEquality))
-import Data.Type.Nat (Nat(..), SNat(..))
+--import Data.Type.Equality ((:~:)(Refl), TestEquality(testEquality))
+import Data.Type.Nat (Nat(..))
 import Data.Type.Bool
-import qualified Data.Type.Nat as DT
-import Stan.Language.Recursion
 
 import qualified GHC.TypeLits as TE
 import GHC.TypeLits (ErrorMessage((:<>:)))
-import qualified Text.Show
-import qualified Data.GADT.Compare as GC
-import qualified Data.GADT.Show as GS
-
-import qualified Data.Text as Text
 
 -- possible types of terms
 -- NB: zero dimensional array will be treated as the underlying type

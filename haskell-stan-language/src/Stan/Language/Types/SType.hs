@@ -30,12 +30,7 @@ import qualified Stan.Language.Types.TypedList as SLTT
 
 import Data.Type.Equality ((:~:)(Refl), TestEquality(testEquality))
 import Data.Type.Nat (Nat(..), SNat(..))
-import Data.Type.Bool
 import qualified Data.Type.Nat as DT
-import Stan.Language.Recursion
-
-import qualified GHC.TypeLits as TE
-import GHC.TypeLits (ErrorMessage((:<>:)))
 import qualified Text.Show
 import qualified Data.GADT.Compare as GC
 import qualified Data.GADT.Show as GS

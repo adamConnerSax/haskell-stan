@@ -94,7 +94,7 @@ library
                , Stan.Language.Types.ETypeList
                , Stan.Language.Types.TypedList
                , Stan.Language.Types.SType
-               ,
+               , Stan.Language.Types.StanType
 
   hs-source-dirs:   src
 

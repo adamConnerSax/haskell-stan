@@ -2,14 +2,11 @@
 {-# LANGUAGE ConstraintKinds #-}
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE GADTs #-}
-{-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE PolyKinds #-}
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE ScopedTypeVariables #-}
-{-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE TypeOperators #-}
---{-# LANGUAGE TypeSynonymInstances #-}
 {-# LANGUAGE UndecidableInstances #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE FlexibleInstances #-}
@@ -25,11 +22,8 @@ module Stan.Language.Types.ETypeList
   where
 
 import qualified Stan.Language.Types.EType as SLTE
-import qualified Stan.Language.Recursion as SLR
 
 import Prelude hiding (Nat)
-import Data.Type.Equality ((:~:)(Refl), TestEquality(testEquality))
-import qualified Data.Vec.Lazy as Vec
 import qualified Data.Type.Nat as DT
 
 type family MapTypeList (f :: SLTE.EType -> SLTE.EType) (tl :: [SLTE.EType]) :: [SLTE.EType] where
