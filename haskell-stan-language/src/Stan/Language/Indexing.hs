@@ -17,17 +17,18 @@
 module Stan.Language.Indexing
   ( module Stan.Language.Indexing,
     Fin (..),
-    Vec (..),
+    Vec (..)
   )
 where
 
 import Data.Fin (Fin (..))
-import qualified Data.Type.Nat as DT
+import Data.Type.Nat (Nat(..), SNat(..))
+import qualified Data.Type.Nat as DTN
 import Data.Vec.Lazy (Vec (..))
-import qualified Data.Vec.Lazy as DT
+import qualified Data.Vec.Lazy as DVL
 import qualified GHC.TypeLits as TE
 import qualified Stan.Language.Recursion as TR
-import Stan.Language.Types
+import qualified Stan.Language.Types as SLT
 import Prelude hiding (Nat)
 import Data.Type.Equality ((:~:)(Refl), TestEquality(testEquality))
 import Type.Reflection (typeRep)
@@ -55,25 +56,25 @@ type N2 = S (S Z)
 type N3 :: Nat
 type N3 = S (S (S Z))
 
-s0 :: SNat Z = DT.SZ
+s0 :: SNat Z = SZ
 
-s1 :: SNat (S Z) = DT.SS
+s1 :: SNat (S Z) = SS
 
-s2 :: SNat (S (S Z)) = DT.SS
+s2 :: SNat (S (S Z)) = SS
 
-s3 :: SNat (S (S (S Z))) = DT.SS
+s3 :: SNat (S (S (S Z))) = SS
 
-s4 :: SNat (S (S (S (S Z)))) = DT.SS
+s4 :: SNat (S (S (S (S Z)))) = SS
 
 -- popRandom :: forall n m a. (DT.SNatI n, DT.SNatI m) => Vec (DT.Plus n (S m)) a -> (a, Vec (DT.Plus n m) a)
 -- popRandom v = (a, vL DT.++ vR)
 --  where (vL, a ::: vR) = DT.split v :: (Vec n a, Vec (S m) a)
 
-type family IndexedTuple (n :: Nat) (e :: EType) :: EType where
-  IndexedTuple _ (ETuple '[]) = TE.TypeError (TE.Text "Cannot index a 0-tuple. Did you index an n-tuple at a position > n?")
-  IndexedTuple Z (ETuple '[e] ) = e
-  IndexedTuple Z (ETuple (e ': _)) = e
-  IndexedTuple (S n) (ETuple (e ': es)) = IndexedTuple n (ETuple es)
+type family IndexedTuple (n :: Nat) (e :: SLT.EType) :: SLT.EType where
+  IndexedTuple _ (SLT.ETuple '[]) = TE.TypeError (TE.Text "Cannot index a 0-tuple. Did you index an n-tuple at a position > n?")
+  IndexedTuple Z (SLT.ETuple '[e] ) = e
+  IndexedTuple Z (SLT.ETuple (e ': _)) = e
+  IndexedTuple (S n) (SLT.ETuple (e ': es)) = IndexedTuple n (SLT.ETuple es)
 
 data DiffHolder = PosDiff Nat | Same | NegDiff Nat
 
@@ -83,60 +84,59 @@ type family Diff (n :: Nat) (m :: Nat) :: DiffHolder where
   Diff Z (S n) = NegDiff (S n) --TE.TypeError (TE.Text "Diff: attempt to take diff of m and n where n is larger than m.")
   Diff (S n) (S m) = Diff n m
 
-type family DeclDimension (e :: EType) :: Nat where
-  DeclDimension EInt = Z
-  DeclDimension EReal = Z
-  DeclDimension EComplex = Z
-  DeclDimension ECVec = S Z
-  DeclDimension ERVec = S Z
-  DeclDimension EMat = S (S Z)
-  DeclDimension ESqMat = S Z
-  DeclDimension (EArray n t) = n `DT.Plus` DeclDimension t
-  DeclDimension a = Z --
-  TE.TypeError (TE.Text "DeclDimension: " TE.:<>: TE.ShowType a TE.:<>: TE.Text " has no well-defined idea of declared dimension")
+type family DeclDimension (e :: SLT.EType) :: Nat where
+  DeclDimension SLT.EInt = Z
+  DeclDimension SLT.EReal = Z
+  DeclDimension SLT.EComplex = Z
+  DeclDimension SLT.ECVec = S Z
+  DeclDimension SLT.ERVec = S Z
+  DeclDimension SLT.EMat = S (S Z)
+  DeclDimension SLT.ESqMat = S Z
+  DeclDimension (SLT.EArray n t) = n `DTN.Plus` DeclDimension t
+  DeclDimension a = Z -- TE.TypeError (TE.Text "DeclDimension: " TE.:<>: TE.ShowType a TE.:<>: TE.Text " has no well-defined idea of declared dimension")
 
-type family Dimension (e :: EType) :: Nat where
-  Dimension EInt = Z
-  Dimension EReal = Z
-  Dimension EComplex = Z
-  Dimension ECVec = S Z
-  Dimension ERVec = S Z
-  Dimension EMat = S (S Z)
-  Dimension ESqMat = S (S Z)
-  Dimension (EArray n t) = n `DT.Plus` Dimension t
+type family Dimension (e :: SLT.EType) :: Nat where
+  Dimension SLT.EInt = Z
+  Dimension SLT.EReal = Z
+  Dimension SLT.EComplex = Z
+  Dimension SLT.ECVec = S Z
+  Dimension SLT.ERVec = S Z
+  Dimension SLT.EMat = S (S Z)
+  Dimension SLT.ESqMat = S (S Z)
+  Dimension (SLT.EArray n t) = n `DTN.Plus` Dimension t
   Dimension a = TE.TypeError (TE.Text "Dimension: " TE.:<>: TE.ShowType a TE.:<>: TE.Text " has no well-defined idea of dimension")
 
-type family ApplyDiffToEType (n :: DiffHolder) (e :: EType) :: EType where
-  ApplyDiffToEType _ (EArray Z t) = TE.TypeError (TE.Text "Attempt to slice a zero-dimensional array.  Which means you had a zero dimensional array?")
-  ApplyDiffToEType (PosDiff _) (EArray (S Z) t) = TE.TypeError (TE.Text "ApplyDiffToEType: Impossible case of PosDiff but array of dimension 1.")
+type family ApplyDiffToEType (n :: DiffHolder) (e :: SLT.EType) :: SLT.EType where
+  ApplyDiffToEType _ (SLT.EArray Z t) = TE.TypeError (TE.Text "Attempt to slice a zero-dimensional array.  Which means you had a zero dimensional array?")
+  ApplyDiffToEType (PosDiff _) (SLT.EArray (S Z) t) = TE.TypeError (TE.Text "ApplyDiffToEType: Impossible case of PosDiff but array of dimension 1.")
 --  ApplyDiffToEType (PosDiff _) (EArray (S Z) t) = t -- slice is in the array
-  ApplyDiffToEType (PosDiff _) (EArray (S n) t) = EArray n t -- slice is in the array
-  ApplyDiffToEType Same (EArray (S Z) t) = t -- Slice a 1-d array case.
-  ApplyDiffToEType Same (EArray (S n) t) = EArray n t
+  ApplyDiffToEType (PosDiff _) (SLT.EArray (S n) t) = SLT.EArray n t -- slice is in the array
+  ApplyDiffToEType Same (SLT.EArray (S Z) t) = t -- Slice a 1-d array case.
+  ApplyDiffToEType Same (SLT.EArray (S n) t) = SLT.EArray n t
 --  ApplyDiffToEType (NegDiff (S n)) (EArray o t) = EArray o (Sliced n t) -- array doesn not have enough dimensions.  Slice the rest from the contained type.
-  ApplyDiffToEType (NegDiff (S n)) (EArray o t) = Sliced n t -- array doesn not have enough dimensions.  Slice the rest from the contained type.
+  ApplyDiffToEType (NegDiff (S n)) (SLT.EArray o t) = Sliced n t -- array doesn not have enough dimensions.  Slice the rest from the contained type.
   ApplyDiffToEType _ x = TE.TypeError (TE.Text "ApplyDiffToEtype to type other than EArray.")
 
-type family Sliced (n :: Nat) (a :: EType) :: EType where
-  Sliced _ EInt = TE.TypeError (TE.Text "Cannot slice (index) a scalar int.")
-  Sliced _ EReal = TE.TypeError (TE.Text "Cannot slice (index) a scalar real.")
-  Sliced _ EComplex = TE.TypeError (TE.Text "Cannot slice (index) a scalar complex.")
-  Sliced Z ERVec = EReal
-  Sliced _ ERVec = TE.TypeError (TE.Text "Cannot slice (index) a row-vector at a position other than 0.")
-  Sliced Z ECVec = EReal
-  Sliced _ ECVec = TE.TypeError (TE.Text "Cannot slice (index) a vector at a position other than 0.")
+type family Sliced (n :: Nat) (a :: SLT.EType) :: SLT.EType where
+  Sliced _ SLT.EInt = TE.TypeError (TE.Text "Cannot slice (index) a scalar int.")
+  Sliced _ SLT.EReal = TE.TypeError (TE.Text "Cannot slice (index) a scalar real.")
+  Sliced _ SLT.EComplex = TE.TypeError (TE.Text "Cannot slice (index) a scalar complex.")
+  Sliced Z SLT.ERVec = SLT.EReal
+  Sliced _ SLT.ERVec = TE.TypeError (TE.Text "Cannot slice (index) a row-vector at a position other than 0.")
+  Sliced Z SLT.ECVec = SLT.EReal
+  Sliced _ SLT.ECVec = TE.TypeError (TE.Text "Cannot slice (index) a vector at a position other than 0.")
 --  Sliced Z ESimplex = EReal
 --  Sliced _ ESimplex = TE.TypeError (TE.Text "Cannot slice (index) a simplex at a position other than 0.")
-  Sliced Z EMat = ERVec
-  Sliced (S Z) EMat = ECVec
-  Sliced _ EMat = TE.TypeError (TE.Text "Cannot slice (index) a matrix at a position other than 0 or 1.")
-  Sliced Z ESqMat = ERVec
-  Sliced (S Z) ESqMat = ECVec
-  Sliced _ ESqMat = TE.TypeError (TE.Text "Cannot slice (index) a matrix at a position other than 0 or 1.")
-  Sliced n (EArray n t) = t
-  Sliced n (EArray m t) = ApplyDiffToEType (Diff m (S n)) (EArray m t)
+  Sliced Z SLT.EMat = SLT.ERVec
+  Sliced (S Z) SLT.EMat = SLT.ECVec
+  Sliced _ SLT.EMat = TE.TypeError (TE.Text "Cannot slice (index) a matrix at a position other than 0 or 1.")
+  Sliced Z SLT.ESqMat = SLT.ERVec
+  Sliced (S Z) SLT.ESqMat = SLT.ECVec
+  Sliced _ SLT.ESqMat = TE.TypeError (TE.Text "Cannot slice (index) a matrix at a position other than 0 or 1.")
+  Sliced n (SLT.EArray n t) = t
+  Sliced n (SLT.EArray m t) = ApplyDiffToEType (Diff m (S n)) (SLT.EArray m t)
 
-type family SliceInnerN (n :: Nat) (a :: EType) :: EType where
+type family SliceInnerN (n :: Nat) (a :: SLT.EType) :: SLT.EType where
 --  SliceInnerN Z (EArray Z a) = a
   SliceInnerN Z a = a
   SliceInnerN (S n) a = SliceInnerN n (Sliced Z a)
@@ -151,50 +151,50 @@ fullArraySliceProofI pn = case pn of
   Refl ->
 -}
 
-type family IfLessOrEq (n :: Nat) (m :: Nat) (a :: EType) (b :: EType) :: EType where
+type family IfLessOrEq (n :: Nat) (m :: Nat) (a :: SLT.EType) (b :: SLT.EType) :: SLT.EType where
   IfLessOrEq Z Z a _ = a
   IfLessOrEq Z (S n) a _ = a
   IfLessOrEq (S n) Z _ b = b
   IfLessOrEq (S n) (S m) a b = IfLessOrEq n m a b
 
-type family Indexed (n :: Nat) (a :: EType) :: EType where
+type family Indexed (n :: Nat) (a :: SLT.EType) :: SLT.EType where
 --  Indexed Z ESimplex = ESimplex
 --  Indexed _ ESimplex = TE.TypeError (TE.Text "Attempt to index a simplex at a position other than 0.")
-  Indexed Z ECVec = ECVec
-  Indexed _ ECVec = TE.TypeError (TE.Text "Attempt to index a vector at a position other than 0.")
-  Indexed Z ERVec = ERVec
-  Indexed _ ERVec = TE.TypeError (TE.Text "Attempt to index a row_vector at a position other than 0.")
-  Indexed Z EMat = EMat
-  Indexed (S Z) EMat = EMat
-  Indexed _ EMat = TE.TypeError (TE.Text "Attempt to index a matrix at a position other than 0 or 1.")
-  Indexed Z ESqMat = EMat
-  Indexed (S Z) ESqMat = EMat
-  Indexed _ ESqMat = TE.TypeError (TE.Text "Attempt to index a (square) matrix at a position other than 0 or 1.")
-  Indexed n (EArray m t) = IfLessOrEq (S n) (Dimension (EArray m t)) (EArray m t) (TE.TypeError (TE.Text "Attempt to index an array at too high an index."))
+  Indexed Z SLT.ECVec = SLT.ECVec
+  Indexed _ SLT.ECVec = TE.TypeError (TE.Text "Attempt to index a vector at a position other than 0.")
+  Indexed Z SLT.ERVec = SLT.ERVec
+  Indexed _ SLT.ERVec = TE.TypeError (TE.Text "Attempt to index a row_vector at a position other than 0.")
+  Indexed Z SLT.EMat = SLT.EMat
+  Indexed (S Z) SLT.EMat = SLT.EMat
+  Indexed _ SLT.EMat = TE.TypeError (TE.Text "Attempt to index a matrix at a position other than 0 or 1.")
+  Indexed Z SLT.ESqMat = SLT.EMat
+  Indexed (S Z) SLT.ESqMat = SLT.EMat
+  Indexed _ SLT.ESqMat = TE.TypeError (TE.Text "Attempt to index a (square) matrix at a position other than 0 or 1.")
+  Indexed n (SLT.EArray m t) = IfLessOrEq (S n) (Dimension (SLT.EArray m t)) (SLT.EArray m t) (TE.TypeError (TE.Text "Attempt to index an array at too high an index."))
   Indexed _ _ = TE.TypeError (TE.Text "Cannot index a scalar.")
 
-newtype DeclIndexVecF (r :: EType -> Type) (et :: EType) = DeclIndexVecF {unDeclIndexVecF :: Vec (DeclDimension et) (r EInt)}
+newtype DeclIndexVecF (r :: SLT.EType -> Type) (et :: SLT.EType) = DeclIndexVecF {unDeclIndexVecF :: Vec (DeclDimension et) (r SLT.EInt) }
 
 instance TR.HFunctor DeclIndexVecF where
-  hfmap nat (DeclIndexVecF v) = DeclIndexVecF $ DT.map nat v
+  hfmap nat (DeclIndexVecF v) = DeclIndexVecF $ DVL.map nat v
 
 instance TR.HTraversable DeclIndexVecF where
   hmapM natM = fmap DeclIndexVecF . traverse natM . unDeclIndexVecF
   htraverse natM = fmap DeclIndexVecF . traverse natM . unDeclIndexVecF
 
-newtype IndexVecF (r :: EType -> Type) (et :: EType) = IndexVecF {unIndexVecF :: Vec (Dimension et) (r EInt)}
+newtype IndexVecF (r :: SLT.EType -> Type) (et :: SLT.EType) = IndexVecF {unIndexVecF :: Vec (Dimension et) (r SLT.EInt)}
 
 instance TR.HFunctor IndexVecF where
-  hfmap nat (IndexVecF v) = IndexVecF $ DT.map nat v
+  hfmap nat (IndexVecF v) = IndexVecF $ DVL.map nat v
 
 instance TR.HTraversable IndexVecF where
   hmapM natM = fmap IndexVecF . traverse natM . unIndexVecF
   htraverse natM = fmap IndexVecF . traverse natM . unIndexVecF
 
-newtype IndexVecM (r :: EType -> Type) (et :: EType) = IndexVecM {unIndexVecM :: Vec (Dimension et) (Maybe (r EInt))}
+newtype IndexVecM (r :: SLT.EType -> Type) (et :: SLT.EType) = IndexVecM {unIndexVecM :: Vec (Dimension et) (Maybe (r SLT.EInt)) }
 
 instance TR.HFunctor IndexVecM where
-  hfmap nat (IndexVecM v) = IndexVecM $ DT.map (fmap nat) v
+  hfmap nat (IndexVecM v) = IndexVecM $ DVL.map (fmap nat) v
 
 instance TR.HTraversable IndexVecM where
   htraverse natM = fmap IndexVecM . traverse (traverse natM) . unIndexVecM
@@ -207,21 +207,21 @@ data NestedVec :: Nat -> Type -> Type where
 
 instance Functor (NestedVec n) where
   fmap f = \case
-    NestedVec1 v -> NestedVec1 $ DT.map f v
-    NestedVec2 v -> NestedVec2 $ DT.map (DT.map f) v
-    NestedVec3 v -> NestedVec3 $ DT.map (DT.map (DT.map f)) v
+    NestedVec1 v -> NestedVec1 $ DVL.map f v
+    NestedVec2 v -> NestedVec2 $ DVL.map (DVL.map f) v
+    NestedVec3 v -> NestedVec3 $ DVL.map (DVL.map (DVL.map f)) v
 
 instance Foldable (NestedVec n) where
   foldMap f = \case
     NestedVec1 v -> foldMap f v
-    NestedVec2 v -> mconcat $ DT.toList $ fmap (foldMap f) v
-    NestedVec3 v -> mconcat $ concatMap DT.toList $ DT.toList $ fmap (foldMap f) <$> v
+    NestedVec2 v -> mconcat $ DVL.toList $ fmap (foldMap f) v
+    NestedVec3 v -> mconcat $ concatMap DVL.toList $ DVL.toList $ fmap (foldMap f) <$> v
 
 instance Traversable (NestedVec n) where
   traverse f = \case
-    NestedVec1 v -> NestedVec1 <$> DT.traverse f v
-    NestedVec2 v -> NestedVec2 <$> DT.traverse (DT.traverse f) v
-    NestedVec3 v -> NestedVec3 <$> DT.traverse (DT.traverse (DT.traverse f)) v
+    NestedVec1 v -> NestedVec1 <$> DVL.traverse f v
+    NestedVec2 v -> NestedVec2 <$> DVL.traverse (DVL.traverse f) v
+    NestedVec3 v -> NestedVec3 <$> DVL.traverse (DVL.traverse (DVL.traverse f)) v
 
 nestedVecHead :: NestedVec n a -> a
 nestedVecHead (NestedVec1 (a ::: _)) = a
@@ -257,15 +257,15 @@ eqVecEltType _ _ = testEquality (typeRep @a) (typeRep @b)
 eqVec :: (Typeable a, Typeable b, Eq a) => Vec n a -> Vec m b -> Bool
 eqVec v1 v2 = case eqVecLength v1 v2 of
   Just Refl -> case eqVecEltType v1 v2 of
-    Just Refl -> DT.toList v1 == DT.toList v2
+    Just Refl -> DVL.toList v1 == DVL.toList v2
     Nothing -> False
   Nothing -> False
 
 
 unNest :: NestedVec n a -> ([Int], [a])
-unNest (NestedVec1 v) = ([DT.length v], DT.toList v)
-unNest (NestedVec2 v) = ([DT.length v, DT.length (DT.head v)], concatMap DT.toList $ DT.toList v)
-unNest (NestedVec3 v) = ([DT.length v, DT.length (DT.head v), DT.length (DT.head (DT.head v))], concat $ concatMap (fmap DT.toList . DT.toList) (DT.toList v))
+unNest (NestedVec1 v) = ([DVL.length v], DVL.toList v)
+unNest (NestedVec2 v) = ([DVL.length v, DVL.length (DVL.head v)], concatMap DVL.toList $ DVL.toList v)
+unNest (NestedVec3 v) = ([DVL.length v, DVL.length (DVL.head v), DVL.length (DVL.head (DVL.head v))], concat $ concatMap (fmap DVL.toList . DVL.toList) (DVL.toList v))
 
 {-
 eTypeDim :: SType e -> Nat

@@ -36,24 +36,24 @@ import Stan.Language.Expressions
       UExpr )
 import Stan.Language.Types
     ( sTypeFromStanType,
-      Nat(..),
-      SNat,
       EIndexArray,
       EType(..),
       GenSType(..),
       SType(SInt),
       ScalarType,
       StanType(..),
-      sTypeName, TypeList)
-import Stan.Language.TypedList
-    ( oneTyped,
-      typeListToTypedListOfTypes,
-      zipTypedListsWith,
-      GenTypeList,
-      SameTypeList,
+      sTypeName,
+      TypedList(TNil, (:>)),
+      VecToSameTypedListF,
       SameTypedListToVecF,
-      TypedList(..),
-      VecToSameTypedListF(..), GenTypedList (..), foldTypedList, AllGenTypes )
+      GenSTypeList,
+      SameTypeList,
+      AllGenSTypes,
+      vecToSameTypedListF,
+      zipTypedListsWith,
+      sTypedFoldTypedList,
+      oneTyped
+    )
 import Stan.Language.Indexing
     ( Vec(..),
       DeclDimension,
@@ -79,7 +79,7 @@ import Stan.Language.Functions
 
 import qualified Data.Vec.Lazy as Vec
 import qualified Data.Type.Nat as DT
-import Data.Type.Nat (SNatI)
+import Data.Type.Nat (Nat(Z,S), SNat (SZ, SS), SNatI)
 import Data.Type.Equality (type (:~:)(..), gcastWith)
 import Control.Monad.Writer.Strict as W
 
@@ -102,7 +102,7 @@ type TListToVecC f n = SameTypedListToVecF f EInt n
 
 data DeclSpec t where
   DeclSpec :: StanType t -> Vec (DeclDimension t) (UExpr EInt) -> [VarModifier UExpr (ScalarType t)] -> DeclSpec t
-  ArraySpec :: (forall f. VecToTListC f n, forall f.TListToVecC f n, GenTypeList (SameTypeList EInt n))
+  ArraySpec :: (forall f. VecToTListC f n, forall f.TListToVecC f n, GenSTypeList (SameTypeList EInt n))
     => SNat (DT.S n) -> Vec (DT.S n) (UExpr EInt) -> DeclSpec t -> DeclSpec (EArray (DT.S n) t)
   TupleSpec :: TypedList StanType ts -> DeclSpec (ETuple ts)
 
@@ -186,7 +186,7 @@ choleskyFactorCorrSpec rce = DeclSpec StanCholeskyFactorCorr (rce ::: VNil) []
 choleskyFactorCovSpec :: UExpr EInt -> DeclSpec ESqMat
 choleskyFactorCovSpec rce = DeclSpec StanCholeskyFactorCov (rce ::: VNil) []
 
-arraySpec :: (forall f.VecToTListC f n, forall f.TListToVecC f n, GenTypeList (SameTypeList EInt n))
+arraySpec :: (forall f.VecToTListC f n, forall f.TListToVecC f n, GenSTypeList (SameTypeList EInt n))
           => SNat (DT.S n) -> Vec (DT.S n) (UExpr EInt) -> DeclSpec t -> DeclSpec (EArray (DT.S n) t)
 arraySpec = ArraySpec --(DeclSpec t tIndices vms) = DeclSpec (StanArray n t) (arrIndices Vec.++ tIndices) vms
 
@@ -381,10 +381,10 @@ break = SBreak
 continue :: UStmt
 continue = SContinue
 
-function :: AllGenTypes args => Function rt args -> TypedList (FuncArg Text) args -> (TypedList UExpr args -> (UStmt, UExpr rt)) -> UStmt
+function :: AllGenSTypes args => Function rt args -> TypedList (FuncArg Text) args -> (TypedList UExpr args -> (UStmt, UExpr rt)) -> UStmt
 function fd argNames bodyF = scoped $ SFunction fd argNames $ grouped [bodyS, SReturn ret]
   where
-    argTypes = typeListToTypedListOfTypes $ functionArgTypes fd
+    argTypes = {- typeListToTypedListOfTypes $ -} functionArgTypes fd
     argExprs = zipTypedListsWith (namedE . funcArgName) argNames argTypes
     (bodyS, ret) = bodyF argExprs
 
@@ -570,7 +570,7 @@ data Stmt :: (EType -> Type) -> Type where
   SWhile :: r EBool -> Stmt r -> Stmt r
   SBreak :: Stmt r
   SContinue :: Stmt r
-  SFunction :: AllGenTypes args => Function rt args -> TypedList (FuncArg Text) args -> Stmt r -> Stmt r
+  SFunction :: AllGenSTypes args => Function rt args -> TypedList (FuncArg Text) args -> Stmt r -> Stmt r
   SReturn :: r rt -> Stmt r
   SComment :: Traversable f => f Text -> Stmt r
   SProfile :: Text -> Stmt r -> Stmt r
@@ -593,7 +593,7 @@ data StmtF :: (EType -> Type) -> Type -> Type where
   SWhileF :: r EBool -> a -> StmtF r a
   SBreakF :: StmtF r a
   SContinueF :: StmtF r a
-  SFunctionF :: AllGenTypes args => Function rt args -> TypedList (FuncArg Text) args -> a -> StmtF r a
+  SFunctionF :: AllGenSTypes args => Function rt args -> TypedList (FuncArg Text) args -> a -> StmtF r a
   SReturnF :: r t -> StmtF r a
   SCommentF :: Traversable f => f Text -> StmtF r a
   SProfileF :: Text -> a -> StmtF r a
@@ -655,13 +655,13 @@ addTypedVarInScope vn st ctxt = mVLC where
     Nothing -> Just $ addTypedVarToInnerScope vn st ctxt
     Just _ -> Nothing
 
-addTypedVarsInScope :: AllGenTypes ts => TypedList (K VarName) ts -> VarLookupCtxt -> Maybe VarLookupCtxt
-addTypedVarsInScope typedVarNames vlc = foldTypedList f (Just vlc) typedVarNames
+addTypedVarsInScope :: AllGenSTypes ts => TypedList (K VarName) ts -> VarLookupCtxt -> Maybe VarLookupCtxt
+addTypedVarsInScope typedVarNames vlc = sTypedFoldTypedList f (Just vlc) typedVarNames
   where
     f (K vn) st mVlc = mVlc >>= addTypedVarInScope vn st
 
-addTypedVarsToInnerScope :: AllGenTypes ts => TypedList (K VarName) ts -> VarLookupCtxt -> VarLookupCtxt
-addTypedVarsToInnerScope typedVarNames vlc = foldTypedList f vlc typedVarNames
+addTypedVarsToInnerScope :: AllGenSTypes ts => TypedList (K VarName) ts -> VarLookupCtxt -> VarLookupCtxt
+addTypedVarsToInnerScope typedVarNames vlc = sTypedFoldTypedList f vlc typedVarNames
   where
     f (K vn) = addTypedVarToInnerScope vn
 

@@ -23,15 +23,14 @@ module Stan.Language.Expressions
 
 import qualified Stan.Language.Recursion as SLR
 import Stan.Language.Types
-    ( Nat(Z, S),
-      SNat(SZ, SS),
-      EArray1,
+    ( EArray1,
       EIndexArray,
       EType(ESqMat, ERVec, EInt, EBool, EArray, EMat, ECVec, EString,
             EComplex, EReal, ETuple),
-      SType(SInt, SArray), E2Tuple)
-import qualified Stan.Language.TypedList as TL
-import Stan.Language.TypedList ( eqTypedLists, TypedList )
+      SType(SInt, SArray), E2Tuple,
+      TypedList(TNil, (:>)),
+      eqTypedLists
+    )
 import Stan.Language.Indexing
     ( Vec(..),
       Sliced,
@@ -58,6 +57,7 @@ import Stan.Language.Functions ( Density(..), Function(..) )
 import Prelude hiding (Nat)
 import qualified Data.Vec.Lazy as Vec
 import qualified Data.Type.Nat as DT
+import Data.Type.Nat (Nat(Z, S), SNat (SZ, SS))
 
 import Data.Type.Equality ((:~:)(Refl), TestEquality(testEquality))
 
@@ -75,7 +75,7 @@ data LExprF :: (EType -> Type) -> EType -> Type where
   LMatrix :: [Vec n Double] -> LExprF r EMat
   LArray :: NestedVec n (r t) -> LExprF r (EArray n t)
   LIntRange :: Maybe (r EInt) -> Maybe (r EInt) -> LExprF r (EArray (S Z) EInt)  -- NB: unexported since we only use for indexing
-  LTuple :: TL.TypedList r ts -> LExprF r (ETuple ts)
+  LTuple :: TypedList r ts -> LExprF r (ETuple ts)
   LFunction :: Function rt args -> TypedList r args -> LExprF r rt
   LDensity :: Density st args -> r st -> TypedList r args -> LExprF r EReal -- e.g., binomial_lupmf(st | ns, p)
   LUnaryOp :: SUnaryOp op -> r t -> LExprF r (UnaryResultT op t)

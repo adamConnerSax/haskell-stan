@@ -88,8 +88,14 @@ library
                  , Stan.Language.Program
                  , Stan.Language.Recursion
                  , Stan.Language.Statements
-                 , Stan.Language.TypedList
+--                 , Stan.Language.TypedList
                  , Stan.Language.Types
+  other-modules: Stan.Language.Types.EType
+               , Stan.Language.Types.ETypeList
+               , Stan.Language.Types.TypedList
+               , Stan.Language.Types.SType
+               ,
+
   hs-source-dirs:   src
 
 executable expressions-test
