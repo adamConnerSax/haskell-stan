@@ -21,6 +21,8 @@ import Prelude hiding (All)
 import qualified Control.Foldl as FL
 import Data.Array ((!), (//))
 import qualified Data.Array as Array
+
+import qualified Stan.Language.ASTContext as SLA
 import qualified Stan.Language.Statements as SLS
 import qualified Stan.Language.Evaluate as SLE
 
@@ -162,12 +164,12 @@ stmtAsText :: SLS.UStmt -> Either Text Text
 stmtAsText = stmtAsText' PP.defaultLayoutOptions
 
 stmtAsText' :: PP.LayoutOptions -> SLS.UStmt -> Either Text Text
-stmtAsText' lo stmt = case SLE.statementToCodeE SLS.emptyLookupCtxt stmt of
+stmtAsText' lo stmt = case SLE.statementToCodeE SLA.emptyLookupCtxt stmt of
   Right x -> pure $ PP.renderStrict $ PP.layoutSmart lo x
   Left err ->
     let msg = "Lookup error when building code from tree: " <> err <> "\n"
               <> "Tree with failed lookups between hashes follows.\n"
-              <> case SLE.eStatementToCodeE SLS.emptyLookupCtxt stmt of
+              <> case SLE.eStatementToCodeE SLA.emptyLookupCtxt stmt of
                    Left err2 -> "Yikes! Can't build error tree: " <> err2 <> "\n"
                    Right x -> PP.renderStrict $ PP.layoutSmart lo x
     in Left msg

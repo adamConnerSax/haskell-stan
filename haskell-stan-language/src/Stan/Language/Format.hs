@@ -22,6 +22,7 @@ module Stan.Language.Format
   )
   where
 
+import qualified Stan.Language.ASTContext as SLA
 import Stan.Language.Recursion
 import Stan.Language.Types
 import Stan.Language.Indexing
@@ -419,8 +420,8 @@ exprToText' lo = PP.renderStrict . PP.layoutSmart lo . unK . exprToCode
 exprToText :: LExpr t -> Text
 exprToText = exprToText' PP.defaultLayoutOptions
 
-printLookupCtxt :: IndexLookupCtxt -> Text
-printLookupCtxt (IndexLookupCtxt s i) = "sizes: " <> T.intercalate ", " (printF <$> Map.toList s)
+printLookupCtxt :: SLA.IndexLookupCtxt -> Text
+printLookupCtxt (SLA.IndexLookupCtxt s i) = "sizes: " <> T.intercalate ", " (printF <$> Map.toList s)
                                         <> "indexes: " <> T.intercalate ", " (printF <$> Map.toList i)
   where
     printF :: forall t.(Text, LExpr t) -> Text

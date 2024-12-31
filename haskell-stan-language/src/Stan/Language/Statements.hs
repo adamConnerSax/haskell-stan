@@ -23,6 +23,7 @@ module Stan.Language.Statements
   where
 
 import qualified Stan.Language.Recursion as SLR
+import qualified Stan.Language.ASTContext as SLA
 import Stan.Language.Expressions
     ( functionE,
       intE,
@@ -417,9 +418,13 @@ reject :: TypedList UExpr args -> UStmt
 reject = SReject
 
 scoped :: UStmt -> UStmt
-scoped s = SGroup Scoping [SContext (modifyVarCtxt enterNewScope), s , SContext (modifyVarCtxt leaveScope)]
+scoped s = SGroup Scoping
+           [SContext (SLA.modifyVarCtxt SLA.enterNewScope)
+           , s
+           , SContext (SLA.modifyVarCtxt SLA.leaveScope)
+           ]
 
-context :: (LookupCtxt -> LookupCtxt) -> UStmt
+context :: (SLA.ASTCtxt -> SLA.ASTCtxt) -> UStmt
 context = SContext
 
 grouped :: Traversable f => f UStmt -> UStmt
@@ -428,12 +433,13 @@ grouped = SGroup UnBracketed
 groupedWithBrackets :: Traversable f => f UStmt -> UStmt
 groupedWithBrackets = SGroup Bracketed
 
-insertIndexBinding :: IndexKey -> LExpr EIndexArray -> LookupCtxt -> LookupCtxt
-insertIndexBinding k ie (LookupCtxt vlc (IndexLookupCtxt a b)) =
-  LookupCtxt vlc $ IndexLookupCtxt a (Map.insert k ie b)
+insertIndexBinding :: IndexKey -> LExpr EIndexArray -> SLA.ASTCtxt -> SLA.ASTCtxt
+insertIndexBinding k ie (SLA.ASTCtxt vlc (SLA.IndexLookupCtxt a b)) =
+  SLA.ASTCtxt vlc $ SLA.IndexLookupCtxt a (Map.insert k ie b)
 
-insertSizeBinding :: IndexKey -> LExpr EInt -> LookupCtxt -> LookupCtxt
-insertSizeBinding k ie (LookupCtxt vlc (IndexLookupCtxt a b)) = LookupCtxt vlc $ IndexLookupCtxt (Map.insert k ie a) b
+insertSizeBinding :: IndexKey -> LExpr EInt -> SLA.ASTCtxt -> SLA.ASTCtxt
+insertSizeBinding k ie (SLA.ASTCtxt vlc (SLA.IndexLookupCtxt a b)) =
+  SLA.ASTCtxt vlc $ SLA.IndexLookupCtxt (Map.insert k ie a) b
 
 data VarModifier :: (EType -> Type) -> EType -> Type where
   VarLower :: r t -> VarModifier r t
@@ -575,7 +581,7 @@ data Stmt :: (EType -> Type) -> Type where
   SReject :: TypedList r args -> Stmt r
   SBlock :: StmtBlock -> Stmt r -> Stmt r
   SGroup :: Traversable f => GroupType -> f (Stmt r) -> Stmt r
-  SContext :: (LookupCtxt -> LookupCtxt) -> Stmt r
+  SContext :: (SLA.ASTCtxt -> SLA.ASTCtxt) -> Stmt r
 
 data StmtF :: (EType -> Type) -> Type -> Type where
   SDeclareF ::  Text -> StanType et -> DeclIndexVecF r et -> [VarModifier r (ScalarType et)] -> StmtF r a
@@ -598,12 +604,13 @@ data StmtF :: (EType -> Type) -> Type -> Type where
   SRejectF :: TypedList r args -> StmtF r a
   SBlockF :: StmtBlock -> a -> StmtF r a
   SGroupF :: Traversable f => GroupType -> f a -> StmtF r a
-  SContextF :: (LookupCtxt -> LookupCtxt) -> StmtF r a
+  SContextF :: (SLA.ASTCtxt -> SLA.ASTCtxt) -> StmtF r a
 
 type instance RS.Base (Stmt f) = StmtF f
 
 type LStmt = Stmt LExpr
 type UStmt = Stmt UExpr
+{-
 type IndexArrayU = UExpr (EArray (S Z) EInt)
 type IndexArrayL = LExpr (EArray (S Z) EInt)
 type IndexSizeMap = Map IndexKey (LExpr EInt)
@@ -615,9 +622,9 @@ data VarNameCheck = CheckPassed | NameMissing | WrongType Text
 checkTypedVar :: VarName -> SType t -> VarTypeMap -> VarNameCheck
 checkTypedVar vn st m = case Map.lookup vn m of
   Nothing -> NameMissing
-  Just sst -> if Some.mkSome st == sst then CheckPassed else WrongType $ Some.withSome sst (\prevST -> sTypeName prevST)
+  Just sst -> if Some.mkSome st == sst then CheckPassed else WrongType $ Some.withSome sst sTypeName prevST
 
-newtype VarLookupCtxt = VarLookupCtxt (NE.NonEmpty VarTypeMap) deriving newtype (Show)
+newtype VarLookupCtxt = VarSLC.ASTCtxt (NE.NonEmpty VarTypeMap) deriving newtype (Show)
 
 emptyVarLookupCtxt :: VarLookupCtxt
 emptyVarLookupCtxt = VarLookupCtxt $ mempty :| []
@@ -688,7 +695,7 @@ modifyVarCtxt f (LookupCtxt vlc ilc) = LookupCtxt (f vlc) ilc
 
 modifyIndexCtxt :: (IndexLookupCtxt -> IndexLookupCtxt) -> LookupCtxt -> LookupCtxt
 modifyIndexCtxt f (LookupCtxt vlc ilc) = LookupCtxt vlc $ f ilc
-
+-}
 
 instance Functor (StmtF f) where
   fmap f x = case x of

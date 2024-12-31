@@ -21,18 +21,20 @@ where
 --import qualified Stan.ModelBuilder.Expressions as SME
 import Prelude hiding (Nat)
 
-import Stan.Language.Types ( EType(EInt, EArray), StanType, sTypeFromStanType, SType(..), GenSType(..), AllGenSTypes, sTypeName)
+import qualified Stan.Language.ASTContext as SLA
+import Stan.Language.Types ( EType(EInt, EArray)
+                           , StanType
+                           , sTypeFromStanType
+                           , SType(..), GenSType(..), AllGenSTypes, sTypeName
+                           )
 import Stan.Language.Expressions ( IndexKey, VarName, LExpr, LExprF (..), UExpr, UExprF(..), lNamedE )
 import Stan.Language.Functions (TypedArgNames, funcArgName)
 import Stan.Language.Statements
-    ( IndexLookupCtxt(sizes, indexes),
-      LStmt,
+    ( LStmt,
       Stmt(..),
       StmtF(..),
       ForEachSlice,
-      UStmt, LookupCtxt (..), addTypedVarToInnerScope, addTypedVarsToInnerScope,
-      addTypedVarsInScope,
-      modifyVarCtxt, enterNewScope, VarNameCheck (..), checkTypedVar, varLookupMap )
+      UStmt)
 import Stan.Language.Recursion
     ( HFunctor(..),
       type (~>),
@@ -83,31 +85,31 @@ import qualified Prettyprinter as PP
 data Context = Context {
                        }
 
-type LookupM = StateT LookupCtxt (Either Text)
-type ReaderM = ReaderT LookupCtxt (Either Text)
+type LookupM = StateT SLA.ASTCtxt (Either Text)
+type ReaderM = ReaderT SLA.ASTCtxt (Either Text)
 
 lookupIndex :: IndexKey -> LookupM (LExpr (EArray (S Z) EInt))
 lookupIndex k = do
-  im <- gets (indexes . indexCtxt)
+  im <- gets (SLA.indexes . SLA.indexCtxt)
   case Map.lookup k im of
     Just e -> pure e
     Nothing -> lift $ Left $ "lookupIndex: \"" <> k <> "\" not found in index map."
 
 lookupSize :: IndexKey -> LookupM (LExpr EInt)
 lookupSize k = do
-  sm <- gets (sizes . indexCtxt)
+  sm <- gets (SLA.sizes . SLA.indexCtxt)
   case Map.lookup k sm of
     Just e -> pure e
     Nothing -> lift $ Left $ "lookupSize: \"" <> k <> "\" not found in size map."
 
 lookupVar :: VarName -> SType t -> LookupM (LExpr t)
 lookupVar vn st = do
-  vtm <- gets $ varLookupMap . varCtxt
-  case checkTypedVar vn st vtm of
-    CheckPassed -> pure $ lNamedE vn st
-    NameMissing -> do
+  vtm <- gets $ SLA.varLookupMap . SLA.varCtxt
+  case SLA.checkTypedVar vn st vtm of
+    SLA.CheckPassed -> pure $ lNamedE vn st
+    SLA.NameMissing -> do
       lift $ Left $ "variable name \"" <> vn <> "\" used but not declared."
-    WrongType dt -> lift $ Left $ "variable name \"" <> vn <> "\" previously declared with type \"" <> dt <> " but used with type \"" <> sTypeName st <> "\""
+    SLA.WrongType dt -> lift $ Left $ "variable name \"" <> vn <> "\" previously declared with type \"" <> dt <> " but used with type \"" <> sTypeName st <> "\""
 
 toLExprAlg :: IAlgM LookupM UExprF LExpr
 toLExprAlg = \case
@@ -120,25 +122,27 @@ doLookups :: NatM LookupM UExpr LExpr
 doLookups = iCataM toLExprAlg
 
 ucDeclare :: VarName -> StanType t -> LookupM ()
-ucDeclare varName stanType = modify $ modifyVarCtxt $ addTypedVarToInnerScope varName $ sTypeFromStanType stanType
+ucDeclare varName stanType =
+  modify $ SLA.modifyVarCtxt $ SLA.addTypedVarToInnerScope varName $ sTypeFromStanType stanType
 
 ucAddIntCounterToLoopBodyScope :: VarName -> LookupM ()
-ucAddIntCounterToLoopBodyScope vn = modify $ modifyVarCtxt $ addTypedVarToInnerScope vn SInt
+ucAddIntCounterToLoopBodyScope vn = modify $ SLA.modifyVarCtxt $ SLA.addTypedVarToInnerScope vn SInt
 
 ucAddTypedCounterToLoopBodyScope :: forall t r . GenSType (ForEachSlice t) => VarName -> r t -> LookupM ()
-ucAddTypedCounterToLoopBodyScope vn _ce = modify $ modifyVarCtxt $ addTypedVarToInnerScope vn (genSType @(ForEachSlice t))
+ucAddTypedCounterToLoopBodyScope vn _ce =
+  modify $ SLA.modifyVarCtxt $ SLA.addTypedVarToInnerScope vn (genSType @(ForEachSlice t))
 
 ucAddArgsToFunctionBodyScope :: AllGenSTypes args => TypedArgNames args -> LookupM ()
 ucAddArgsToFunctionBodyScope fArgs = do
-  vc <- gets varCtxt
-  let newVCM = addTypedVarsInScope (hfmap (K . funcArgName) fArgs) $ enterNewScope vc
+  vc <- gets SLA.varCtxt
+  let newVCM = SLA.addTypedVarsInScope (hfmap (K . funcArgName) fArgs) $ SLA.enterNewScope vc
   case newVCM of
     Nothing -> lift $ Left "Error adding function arguments to function body scope"
-    Just newVC -> modify (modifyVarCtxt $ const newVC)
+    Just newVC -> modify (SLA.modifyVarCtxt $ const newVC)
 
 ucAddReturnToFunctionBodyScope :: UExpr t -> LookupM ()
 ucAddReturnToFunctionBodyScope ue = case unIFix ue of
-  UL (LNamed vn st) -> modify $ modifyVarCtxt $ addTypedVarToInnerScope vn st
+  UL (LNamed vn st) -> modify $ SLA.modifyVarCtxt $ SLA.addTypedVarToInnerScope vn st
   _ -> pure ()
 
 contextualLookup :: UStmt -> LookupM (RS.Base LStmt UStmt)
@@ -168,11 +172,14 @@ updateContextA = \case
   SContext f -> modify f
   _ -> pure ()
 
-ucAddTypedCounterToLoopBodyScopeF :: forall t r . GenSType (ForEachSlice t) => VarName -> r t -> LookupCtxt -> LookupCtxt
-ucAddTypedCounterToLoopBodyScopeF vn _ce = modifyVarCtxt $ addTypedVarToInnerScope vn (genSType @(ForEachSlice t))
+ucAddTypedCounterToLoopBodyScopeF :: forall t r . GenSType (ForEachSlice t)
+  => VarName -> r t -> SLA.ASTCtxt -> SLA.ASTCtxt
+ucAddTypedCounterToLoopBodyScopeF vn _ce =
+  SLA.modifyVarCtxt $ SLA.addTypedVarToInnerScope vn (genSType @(ForEachSlice t))
 
-ucAddArgsToFunctionBodyScopeF :: AllGenSTypes args => TypedArgNames args -> LookupCtxt -> LookupCtxt
-ucAddArgsToFunctionBodyScopeF fArgs = modifyVarCtxt $ addTypedVarsToInnerScope (hfmap (K . funcArgName) fArgs) . enterNewScope
+ucAddArgsToFunctionBodyScopeF :: AllGenSTypes args => TypedArgNames args -> SLA.ASTCtxt -> SLA.ASTCtxt
+ucAddArgsToFunctionBodyScopeF fArgs =
+  SLA.modifyVarCtxt $ SLA.addTypedVarsToInnerScope (hfmap (K . funcArgName) fArgs) . SLA.enterNewScope
 
 
 type UStmt' = Fix (StmtF UExpr)
@@ -182,10 +189,10 @@ doLookupsInCStatement' :: UStmt' -> LookupM LStmt'
 doLookupsInCStatement' = anaM (\x -> htraverse doLookups (unFix x) >>= updateContext)
 -}
 
-doLookupsInStatementE :: LookupCtxt -> UStmt -> Either Text LStmt
+doLookupsInStatementE :: SLA.ASTCtxt -> UStmt -> Either Text LStmt
 doLookupsInStatementE ctxt0 = flip evalStateT ctxt0 . doLookupsInCStatement
 
-statementToCodeE :: LookupCtxt -> UStmt -> Either Text CodePP
+statementToCodeE :: SLA.ASTCtxt -> UStmt -> Either Text CodePP
 statementToCodeE ctxt0 x = doLookupsInStatementE ctxt0 x >>= stmtToCodeE
 
 data EExprF :: (EType -> Type) -> EType -> Type where
@@ -210,27 +217,27 @@ lExprToEExpr = iCata (IFix . EL)
 
 lookupIndexE :: IndexKey -> LookupM (EExpr (EArray (S Z) EInt))
 lookupIndexE k =  do
-  im <- gets (indexes . indexCtxt)
+  im <- gets (SLA.indexes . SLA.indexCtxt)
   case Map.lookup k im of
     Just e -> pure $ lExprToEExpr e
     Nothing -> pure $ IFix $ EE $ "#index: " <> k <> "#"
 
 lookupSizeE :: IndexKey -> LookupM (EExpr EInt)
 lookupSizeE k =  do
-  im <- gets (sizes . indexCtxt)
+  im <- gets (SLA.sizes . SLA.indexCtxt)
   case Map.lookup k im of
     Just e -> pure $ lExprToEExpr e
     Nothing -> pure $ IFix $ EE $ "#size: " <> k <> "#"
 
 lookupVarE :: VarName -> SType t -> LookupM (EExpr t)
 lookupVarE vn st = do
-  vtm <- gets $ varLookupMap . varCtxt
-  case checkTypedVar vn st vtm of
-    CheckPassed -> pure $ lExprToEExpr $ lNamedE vn st
-    NameMissing -> do
-      vc <- gets varCtxt
+  vtm <- gets $ SLA.varLookupMap . SLA.varCtxt
+  case SLA.checkTypedVar vn st vtm of
+    SLA.CheckPassed -> pure $ lExprToEExpr $ lNamedE vn st
+    SLA.NameMissing -> do
+      vc <- gets SLA.varCtxt
       pure $ IFix $ EE $ "#undeclared: " <> vn <> "# (varCtxt=" <> show vc  <> ")"
-    WrongType _dt -> pure $ IFix $ EE $ "#badType \"" <> vn <> "#"
+    SLA.WrongType _dt -> pure $ IFix $ EE $ "#badType \"" <> vn <> "#"
 
 type EStmt = Stmt EExpr
 
@@ -244,7 +251,7 @@ contextualLookupAE x = do
 doLookupsEInStatement :: UStmt -> LookupM EStmt
 doLookupsEInStatement = RS.anaM contextualLookupAE --(\x -> htraverse doLookupsE (RS.project x) >>= updateContext)
 
-doLookupsEInStatementE :: LookupCtxt -> UStmt -> Either Text EStmt
+doLookupsEInStatementE :: SLA.ASTCtxt -> UStmt -> Either Text EStmt
 doLookupsEInStatementE ctxt0 = flip evalStateT ctxt0 . doLookupsEInStatement
 
 doLookupsE :: NatM LookupM UExpr EExpr
@@ -265,7 +272,7 @@ eExprToCode = K . iExprToCode . unK . eExprToIExprCode
 eStmtToCode :: EStmt -> Either Text CodePP
 eStmtToCode = RS.hylo stmtToCodeAlg (hfmap eExprToCode . RS.project)
 
-eStatementToCodeE :: LookupCtxt -> UStmt -> Either Text CodePP
+eStatementToCodeE :: SLA.ASTCtxt -> UStmt -> Either Text CodePP
 eStatementToCodeE ctxt0 x = doLookupsEInStatementE ctxt0 x >>= eStmtToCode
 
 {-
