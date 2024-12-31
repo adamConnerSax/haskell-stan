@@ -12,7 +12,6 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE TypeOperators #-}
-{-# LANGUAGE TypeSynonymInstances #-}
 {-# LANGUAGE UndecidableInstances #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 
@@ -22,19 +21,17 @@ module Stan.Language.Statements
   )
   where
 
-import qualified Stan.Language.Recursion as SLR
+import qualified Stan.Language.Statement as SLS
 import qualified Stan.Language.ASTContext as SLA
 import Stan.Language.Expressions
-    ( functionE,
-      intE,
-      namedE,
-      namedSizeE,
-      ExprList,
-      IndexKey,
-      VarName,
-      IntE,
-      LExpr,
-      UExpr )
+  (intE,
+    namedE,
+    namedSizeE,
+    ExprList,
+    IndexKey,
+    IntE,
+    LExpr,
+    UExpr )
 import Stan.Language.Types
     ( sTypeFromStanType,
       EIndexArray,
@@ -43,7 +40,6 @@ import Stan.Language.Types
       SType(SInt),
       ScalarType,
       StanType(..),
-      sTypeName,
       TypedList(TNil, (:>)),
       VecToSameTypedListF,
       SameTypedListToVecF,
@@ -52,14 +48,10 @@ import Stan.Language.Types
       AllGenSTypes,
       vecToSameTypedListF,
       zipTypedListsWith,
-      sTypedFoldTypedList,
-      oneTyped
     )
 import Stan.Language.Indexing
     ( Vec(..),
       DeclDimension,
-      Sliced,
-      N0,
       DeclIndexVecF(DeclIndexVecF),
       N1,
       s1,
@@ -74,22 +66,16 @@ import Stan.Language.Functions
       Function,
       FuncArg,
       funcArgName,
-      functionArgTypes,
-      simpleFunction )
+      functionArgTypes)
 
 import qualified Data.Vec.Lazy as Vec
 import qualified Data.Type.Nat as DT
-import Data.Type.Nat (Nat(Z,S), SNat, SNatI)
+import Data.Type.Nat (Nat, SNat)
 import Data.Type.Equality (type (:~:)(..), gcastWith)
-import Control.Monad.Writer.Strict as W
 
 import Prelude hiding (Nat)
 import Relude.Extra
-import qualified Data.List.NonEmpty as NE
 import qualified Data.Map.Strict as Map
-import qualified Data.Some as Some
-import qualified Data.Functor.Foldable as RS
-import Stan.Language.Recursion (K(..))
 
 type StanName = Text
 
@@ -99,7 +85,7 @@ type TListToVecC f n = SameTypedListToVecF f EInt n
 --type VecToTListAC n t = VecToSameTypedListF UExpr EInt (n `DT.Plus` DeclDimension t)
 
 data DeclSpec t where
-  DeclSpec :: StanType t -> Vec (DeclDimension t) (UExpr EInt) -> [VarModifier UExpr (ScalarType t)] -> DeclSpec t
+  DeclSpec :: StanType t -> Vec (DeclDimension t) (UExpr EInt) -> [SLS.VarModifier UExpr (ScalarType t)] -> DeclSpec t
   ArraySpec :: (forall f. VecToTListC f n, forall f.TListToVecC f n, GenSTypeList (SameTypeList EInt n))
     => SNat (DT.S n) -> Vec (DT.S n) (UExpr EInt) -> DeclSpec t -> DeclSpec (EArray (DT.S n) t)
   TupleSpec :: TypedList StanType ts -> DeclSpec (ETuple ts)
@@ -122,18 +108,18 @@ declDims (DeclSpec _ dims _) = dims
 declDims (ArraySpec _ dims ds) = dims Vec.++ declDims ds
 declDims (TupleSpec _) = VNil
 
-declVMS :: DeclSpec t -> [VarModifier UExpr (ScalarType t)]
+declVMS :: DeclSpec t -> [SLS.VarModifier UExpr (ScalarType t)]
 declVMS (DeclSpec _ _ vms) = vms
 declVMS (ArraySpec _ _ ids) = declVMS ids
 declVMS (TupleSpec _) = []
 
-replaceDeclVMs :: [VarModifier UExpr (ScalarType t)] -> DeclSpec t -> DeclSpec t
+replaceDeclVMs :: [SLS.VarModifier UExpr (ScalarType t)] -> DeclSpec t -> DeclSpec t
 replaceDeclVMs vms = \case
   DeclSpec st vdims _-> DeclSpec st vdims vms
   ArraySpec n arrDims ds -> ArraySpec n arrDims (replaceDeclVMs vms ds)
   TupleSpec sts -> TupleSpec sts
 
-addVMs :: [VarModifier UExpr (ScalarType t)] -> DeclSpec t -> DeclSpec t
+addVMs :: [SLS.VarModifier UExpr (ScalarType t)] -> DeclSpec t -> DeclSpec t
 addVMs vms' = \case
   DeclSpec st vdims vms -> DeclSpec st vdims (vms <> vms')
   ArraySpec n arrDims ds -> ArraySpec n arrDims (addVMs vms' ds)
@@ -213,52 +199,52 @@ tuple3Spec st1 st2 st3 = TupleSpec (st1 :> st2 :> st3 :> TNil)
 
 
 -- functions for ease of use and exporting.  Monomorphised to UStmt, etc.
-declare' :: Text -> StanType t -> Vec (DeclDimension t) (UExpr EInt) -> [VarModifier UExpr (ScalarType t)] -> UStmt
-declare' vn vt iDecls = SDeclare vn vt (DeclIndexVecF iDecls)
+declare' :: Text -> StanType t -> Vec (DeclDimension t) (UExpr EInt) -> [SLS.VarModifier UExpr (ScalarType t)] -> SLS.UStmt
+declare' vn vt iDecls = SLS.SDeclare vn vt (DeclIndexVecF iDecls)
 
-declare :: Text -> DeclSpec t -> UStmt
+declare :: Text -> DeclSpec t -> SLS.UStmt
 declare vn (DeclSpec st indices vms) = declare' vn st indices vms
 declare vn ds@(ArraySpec _ arrDims ids) = declare' vn (declType ds) (arrDims Vec.++ declDims ids) $ declVMS ids
 declare vn (TupleSpec sts) = declare' vn (StanTuple sts) VNil []
 
-declareN :: NamedDeclSpec t -> UStmt
+declareN :: NamedDeclSpec t -> SLS.UStmt
 declareN (NamedDeclSpec n ds) = declare n ds
 
-declareAndAssign' :: Text -> StanType t -> Vec (DeclDimension t) (UExpr EInt) -> [VarModifier UExpr (ScalarType t)] -> UExpr t -> UStmt
-declareAndAssign' vn vt iDecls vms = SDeclAssign vn vt (DeclIndexVecF iDecls) vms
+declareAndAssign' :: Text -> StanType t -> Vec (DeclDimension t) (UExpr EInt) -> [SLS.VarModifier UExpr (ScalarType t)] -> UExpr t -> SLS.UStmt
+declareAndAssign' vn vt iDecls vms = SLS.SDeclAssign vn vt (DeclIndexVecF iDecls) vms
 
-declareAndAssign :: Text -> DeclSpec t -> UExpr t -> UStmt
+declareAndAssign :: Text -> DeclSpec t -> UExpr t -> SLS.UStmt
 declareAndAssign vn (DeclSpec vt indices vms) = declareAndAssign' vn vt indices vms
 declareAndAssign vn ads@(ArraySpec _ arrDims ids) = declareAndAssign' vn (declType ads) (arrDims Vec.++ declDims ids) $ declVMS ids
 declareAndAssign vn (TupleSpec sts) = declareAndAssign' vn (StanTuple sts) VNil []
 
-declareAndAssignN :: NamedDeclSpec t -> UExpr t -> UStmt
+declareAndAssignN :: NamedDeclSpec t -> UExpr t -> SLS.UStmt
 declareAndAssignN (NamedDeclSpec vn ds) = declareAndAssign vn ds
 
-addToTarget :: UExpr EReal -> UStmt
-addToTarget = STarget
+addToTarget :: UExpr EReal -> SLS.UStmt
+addToTarget = SLS.STarget
 
-assign :: UExpr t -> UExpr t -> UStmt
-assign = SAssign
+assign :: UExpr t -> UExpr t -> SLS.UStmt
+assign = SLS.SAssign
 
 -- doing it this way avoids using Stans += syntax.  I just expand.
 -- to do otherwise I would have to add a constructor to Stmt
-opAssign :: (ta ~ BinaryResultT bop ta tb) => SBinaryOp bop -> UExpr ta -> UExpr tb -> UStmt
-opAssign = SOpAssign
+opAssign :: (ta ~ BinaryResultT bop ta tb) => SBinaryOp bop -> UExpr ta -> UExpr tb -> SLS.UStmt
+opAssign = SLS.SOpAssign
 
-plusEq, (+=) :: (ta ~ BinaryResultT BAdd ta tb) => UExpr ta -> UExpr tb -> UStmt
+plusEq, (+=) :: (ta ~ BinaryResultT BAdd ta tb) => UExpr ta -> UExpr tb -> SLS.UStmt
 plusEq = opAssign SAdd
 (+=) = opAssign SAdd
 
-minusEq, (-=) :: (ta ~ BinaryResultT BSubtract ta tb) => UExpr ta -> UExpr tb -> UStmt
+minusEq, (-=) :: (ta ~ BinaryResultT BSubtract ta tb) => UExpr ta -> UExpr tb -> SLS.UStmt
 minusEq = opAssign SSubtract
 (-=) = opAssign SSubtract
 
-timesEq, (*=) :: (ta ~ BinaryResultT BMultiply ta tb) => UExpr ta -> UExpr tb -> UStmt
+timesEq, (*=) :: (ta ~ BinaryResultT BMultiply ta tb) => UExpr ta -> UExpr tb -> SLS.UStmt
 timesEq = opAssign SMultiply
 (*=) = opAssign SMultiply
 
-divEq, (/=) :: (ta ~ BinaryResultT BDivide ta tb) => UExpr ta -> UExpr tb -> UStmt
+divEq, (/=) :: (ta ~ BinaryResultT BDivide ta tb) => UExpr ta -> UExpr tb -> SLS.UStmt
 divEq = opAssign SDivide
 (/=) = opAssign SDivide
 
@@ -268,67 +254,51 @@ data DensityWithArgs g where
 withDWA :: (forall args.Density g args -> TypedList UExpr args -> r) -> DensityWithArgs g -> r
 withDWA f (DensityWithArgs d args) = f d args
 
-target :: UExpr EReal -> UStmt
-target = STarget
+target :: UExpr EReal -> SLS.UStmt
+target = SLS.STarget
 
-sample :: UExpr t -> Density t args -> TypedList UExpr args -> UStmt
-sample = SSample
+sample :: UExpr t -> Density t args -> TypedList UExpr args -> SLS.UStmt
+sample = SLS.SSample
 
-sampleW, (|~|) :: UExpr t -> DensityWithArgs t  -> UStmt
-sampleW ue (DensityWithArgs d al)= SSample ue d al
+sampleW, (|~|) :: UExpr t -> DensityWithArgs t  -> SLS.UStmt
+sampleW ue (DensityWithArgs d al)= SLS.SSample ue d al
 ue |~| dwa = sampleW ue dwa
 
-type family ForEachSlice (a :: EType) :: EType where
-  ForEachSlice EInt = EInt -- required for looping over ranges. But Ick.
-  ForEachSlice ECVec = EReal
-  ForEachSlice ERVec = EReal
-  ForEachSlice EMat = EReal
-  ForEachSlice ESqMat = EReal
-  ForEachSlice (EArray m t) = Sliced N0 (EArray m t)
-
-data ForType t where
-  SpecificNumbered :: UExpr EInt -> UExpr EInt -> ForType EInt
-  IndexedLoop :: IndexKey -> ForType EInt
-  SpecificIn :: UExpr t -> ForType t
---  IndexedIn :: IndexKey -> UExpr t -> ForType t
-
-data VarAndForType (t :: EType) where
-  VarAndForType :: GenSType (ForEachSlice t) => Text -> ForType t -> VarAndForType t
 
 --intVecToLoopVFTs :: Text -> Vec.Vec n IntE -> TypeList VarAndForType
 
-for :: forall t . GenSType (ForEachSlice t)
-    => Text -> ForType t -> (UExpr (ForEachSlice t) -> UStmt) -> UStmt
+for :: forall t . GenSType (SLS.ForEachSlice t)
+    => Text -> SLS.ForType t -> (UExpr (SLS.ForEachSlice t) -> SLS.UStmt) -> SLS.UStmt
 for loopCounter ft bodyF = case ft of
-  SpecificNumbered se' ee' -> scoped $ SFor loopCounter se' ee' $ bodyF (namedE loopCounter SInt)
-  IndexedLoop ik -> scoped $ SFor loopCounter (intE 1) (namedSizeE ik) $ bodyF (namedE loopCounter SInt)
-  SpecificIn e -> scoped $ SForEach loopCounter e $ bodyF loopCounterE
+  SLS.SpecificNumbered se' ee' -> scoped $ SLS.SFor loopCounter se' ee' $ bodyF (namedE loopCounter SInt)
+  SLS.IndexedLoop ik -> scoped $ SLS.SFor loopCounter (intE 1) (namedSizeE ik) $ bodyF (namedE loopCounter SInt)
+  SLS.SpecificIn e -> scoped $ SLS.SForEach loopCounter e $ bodyF loopCounterE
 --  IndexedIn _ e -> SForEach loopCounter e $ bodyF loopCounterE
   where
-    loopCounterE = namedE loopCounter $ genSType @(ForEachSlice t)
+    loopCounterE = namedE loopCounter $ genSType @(SLS.ForEachSlice t)
 
-loopOver :: GenSType (ForEachSlice t)
-         => UExpr t -> Text -> (UExpr (ForEachSlice t) -> UStmt) -> UStmt
-loopOver container loopVarName = for loopVarName (SpecificIn container)
+loopOver :: GenSType (SLS.ForEachSlice t)
+         => UExpr t -> Text -> (UExpr (SLS.ForEachSlice t) -> SLS.UStmt) -> SLS.UStmt
+loopOver container loopVarName = for loopVarName (SLS.SpecificIn container)
 {-# INLINEABLE loopOver #-}
 
-ftSized :: UExpr EInt -> ForType EInt
-ftSized = SpecificNumbered (intE 1)
+ftSized :: UExpr EInt -> SLS.ForType EInt
+ftSized = SLS.SpecificNumbered (intE 1)
 
-loopSized :: UExpr EInt -> Text -> (UExpr EInt -> UStmt) -> UStmt
+loopSized :: UExpr EInt -> Text -> (UExpr EInt -> SLS.UStmt) -> SLS.UStmt
 loopSized nE loopVarName = for loopVarName $ ftSized nE
 {-# INLINEABLE loopSized #-}
 
 type family ForEachSliceArgs (tl :: [EType]) :: [EType] where
   ForEachSliceArgs '[] = '[]
-  ForEachSliceArgs (et ': ets) = ForEachSlice et ': ForEachSliceArgs ets
+  ForEachSliceArgs (et ': ets) = SLS.ForEachSlice et ': ForEachSliceArgs ets
 
-fesaProof0 :: ForEachSliceArgs (SameTypeList t DT.Z) :~: SameTypeList (ForEachSlice t) DT.Z
+fesaProof0 :: ForEachSliceArgs (SameTypeList t DT.Z) :~: SameTypeList (SLS.ForEachSlice t) DT.Z
 fesaProof0 = Refl
 
 newtype FESAProof t n
   = FESAProof
-    { getFESAProof :: ForEachSliceArgs (SameTypeList t n) :~: SameTypeList (ForEachSlice t) n}
+    { getFESAProof :: ForEachSliceArgs (SameTypeList t n) :~: SameTypeList (SLS.ForEachSlice t) n}
 
 fesaProofI :: forall t n . DT.SNat n -> FESAProof t n
 fesaProofI n = DT.withSNat n
@@ -336,58 +306,58 @@ fesaProofI n = DT.withSNat n
                (\fpn -> FESAProof $ gcastWith (getFESAProof fpn) Refl)
 --fesaProofI DT.SS = gcastWith (fesaProofI $ DT.snatToNat ) Refl
 
-vftSized :: Text -> UExpr EInt -> VarAndForType EInt
-vftSized lvn = VarAndForType lvn . ftSized
+vftSized :: Text -> UExpr EInt -> SLS.VarAndForType EInt
+vftSized lvn = SLS.VarAndForType lvn . ftSized
 
-nestedLoops :: TypedList VarAndForType ts -> (ExprList (ForEachSliceArgs ts) -> UStmt) -> UStmt
+nestedLoops :: TypedList SLS.VarAndForType ts -> (ExprList (ForEachSliceArgs ts) -> SLS.UStmt) -> SLS.UStmt
 nestedLoops TNil f = scoped $ f TNil
-nestedLoops (VarAndForType vln ft :> TNil) f = for vln ft $ \e -> f (e :> TNil)
-nestedLoops (VarAndForType vln ft :> vfts) f =
+nestedLoops (SLS.VarAndForType vln ft :> TNil) f = for vln ft $ \e -> f (e :> TNil)
+nestedLoops (SLS.VarAndForType vln ft :> vfts) f =
   let g e es = f (e :> es) in for vln ft
                               $ \e -> nestedLoops vfts (g e)
 
-type IntVecVFT (n :: Nat) = TypedList VarAndForType (SameTypeList EInt n)
+type IntVecVFT (n :: Nat) = TypedList SLS.VarAndForType (SameTypeList EInt n)
 
-vecVFT :: forall m . VecToSameTypedListF VarAndForType EInt m => Text -> Vec.Vec m IntE -> IntVecVFT m
+vecVFT :: forall m . VecToSameTypedListF SLS.VarAndForType EInt m => Text -> Vec.Vec m IntE -> IntVecVFT m
 vecVFT counterPrefix v =
-  let g :: Nat -> IntE -> VarAndForType EInt
-      g nt ie = VarAndForType (counterPrefix <> show nt) (SpecificNumbered (intE 1) ie)
+  let g :: Nat -> IntE -> SLS.VarAndForType EInt
+      g nt ie = SLS.VarAndForType (counterPrefix <> show nt) (SLS.SpecificNumbered (intE 1) ie)
   in vecToSameTypedListF g v
 
-intVecLoops :: forall m . (VecToSameTypedListF VarAndForType EInt m)
+intVecLoops :: forall m . (VecToSameTypedListF SLS.VarAndForType EInt m)
             => Text
             -> Vec.Vec m IntE
-            -> (ExprList (ForEachSliceArgs (SameTypeList EInt m)) -> UStmt)
-            -> UStmt
+            -> (ExprList (ForEachSliceArgs (SameTypeList EInt m)) -> SLS.UStmt)
+            -> SLS.UStmt
 intVecLoops counterPrefix v stmtF = nestedLoops (vecVFT counterPrefix v) stmtF
 
-nullS :: UStmt
-nullS = SContext id
+nullS :: SLS.UStmt
+nullS = SLS.SContext id
 
-ifThen :: UExpr EBool -> UStmt -> UStmt
-ifThen ce sTrue = SIfElse ((ce, sTrue) :| []) nullS
+ifThen :: UExpr EBool -> SLS.UStmt -> SLS.UStmt
+ifThen ce sTrue = SLS.SIfElse ((ce, sTrue) :| []) nullS
 
-ifThenElse :: NonEmpty (UExpr EBool, UStmt) -> UStmt -> UStmt
-ifThenElse = SIfElse
+ifThenElse :: NonEmpty (UExpr EBool, SLS.UStmt) -> SLS.UStmt -> SLS.UStmt
+ifThenElse = SLS.SIfElse
 
-while :: UExpr EBool -> UStmt -> UStmt
-while = SWhile
+while :: UExpr EBool -> SLS.UStmt -> SLS.UStmt
+while = SLS.SWhile
 
-break :: UStmt
-break = SBreak
+break :: SLS.UStmt
+break = SLS.SBreak
 
-continue :: UStmt
-continue = SContinue
+continue :: SLS.UStmt
+continue = SLS.SContinue
 
-function :: AllGenSTypes args => Function rt args -> TypedList (FuncArg Text) args -> (TypedList UExpr args -> (UStmt, UExpr rt)) -> UStmt
-function fd argNames bodyF = scoped $ SFunction fd argNames $ grouped [bodyS, SReturn ret]
+function :: AllGenSTypes args => Function rt args -> TypedList (FuncArg Text) args -> (TypedList UExpr args -> (SLS.UStmt, UExpr rt)) -> SLS.UStmt
+function fd argNames bodyF = scoped $ SLS.SFunction fd argNames $ grouped [bodyS, SLS.SReturn ret]
   where
     argTypes = {- typeListToTypedListOfTypes $ -} functionArgTypes fd
     argExprs = zipTypedListsWith (namedE . funcArgName) argNames argTypes
     (bodyS, ret) = bodyF argExprs
 
 {-
-densityFunction :: Traversable f => Density gt args -> TypedList (FuncArg Text) (gt ': args) -> (TypedList UExpr (gt ': args) -> (f UStmt, UExpr EReal)) -> UStmt
+densityFunction :: Traversable f => Density gt args -> TypedList (FuncArg Text) (gt ': args) -> (TypedList UExpr (gt ': args) -> (f SLS.UStmt, UExpr EReal)) -> SLS.UStmt
 densityFunction fd argNames bodyF = SDensity fd argNames bodyS ret
   where
     argTypes = typeListToTypedListOfTypes $ densityFunctionArgTypes fd
@@ -398,40 +368,40 @@ densityFunction fd argNames bodyF = SDensity fd argNames bodyS ret
 simpleFunctionBody :: Function rt pts
                    -> StanName
                    -> (ExprList pts -> DeclSpec rt)
-                   -> (UExpr rt -> ExprList pts -> [UStmt])
+                   -> (UExpr rt -> ExprList pts -> [SLS.UStmt])
                    -> ExprList pts
-                   -> (NonEmpty UStmt, UExpr rt)
+                   -> (NonEmpty SLS.UStmt, UExpr rt)
 simpleFunctionBody _ n retDSF bF args = let rE = namedE n st in  (declare n (retDSF args) :| bF rE args, rE)
   where
     st = sTypeFromStanType $ declType $ retDSF args
 
-comment :: NonEmpty Text -> UStmt
-comment = SComment
+comment :: NonEmpty Text -> SLS.UStmt
+comment = SLS.SComment
 
-profile :: Text -> UStmt -> UStmt
-profile = SProfile
+profile :: Text -> SLS.UStmt -> SLS.UStmt
+profile = SLS.SProfile
 
-print :: TypedList UExpr args -> UStmt
-print = SPrint
+print :: TypedList UExpr args -> SLS.UStmt
+print = SLS.SPrint
 
-reject :: TypedList UExpr args -> UStmt
-reject = SReject
+reject :: TypedList UExpr args -> SLS.UStmt
+reject = SLS.SReject
 
-scoped :: UStmt -> UStmt
-scoped s = SGroup Scoping
-           [SContext (SLA.modifyVarCtxt SLA.enterNewScope)
+scoped :: SLS.UStmt -> SLS.UStmt
+scoped s = SLS.SGroup SLS.Scoping
+           [SLS.SContext (SLA.modifyVarCtxt SLA.enterNewScope)
            , s
-           , SContext (SLA.modifyVarCtxt SLA.leaveScope)
+           , SLS.SContext (SLA.modifyVarCtxt SLA.leaveScope)
            ]
 
-context :: (SLA.ASTCtxt -> SLA.ASTCtxt) -> UStmt
-context = SContext
+context :: (SLA.ASTCtxt -> SLA.ASTCtxt) -> SLS.UStmt
+context = SLS.SContext
 
-grouped :: Traversable f => f UStmt -> UStmt
-grouped = SGroup UnBracketed
+grouped :: Traversable f => f SLS.UStmt -> SLS.UStmt
+grouped = SLS.SGroup SLS.UnBracketed
 
-groupedWithBrackets :: Traversable f => f UStmt -> UStmt
-groupedWithBrackets = SGroup Bracketed
+groupedWithBrackets :: Traversable f => f SLS.UStmt -> SLS.UStmt
+groupedWithBrackets = SLS.SGroup SLS.Bracketed
 
 insertIndexBinding :: IndexKey -> LExpr EIndexArray -> SLA.ASTCtxt -> SLA.ASTCtxt
 insertIndexBinding k ie (SLA.ASTCtxt vlc (SLA.IndexLookupCtxt a b)) =
@@ -441,427 +411,14 @@ insertSizeBinding :: IndexKey -> LExpr EInt -> SLA.ASTCtxt -> SLA.ASTCtxt
 insertSizeBinding k ie (SLA.ASTCtxt vlc (SLA.IndexLookupCtxt a b)) =
   SLA.ASTCtxt vlc $ SLA.IndexLookupCtxt (Map.insert k ie a) b
 
-data VarModifier :: (EType -> Type) -> EType -> Type where
-  VarLower :: r t -> VarModifier r t
-  VarUpper :: r t -> VarModifier r t
-  VarOffset :: r t -> VarModifier r t
-  VarMultiplier :: r t -> VarModifier r t
+lowerM :: UExpr t -> SLS.VarModifier UExpr t
+lowerM = SLS.VarLower
 
-lowerM :: UExpr t -> VarModifier UExpr t
-lowerM = VarLower
+upperM :: UExpr t -> SLS.VarModifier UExpr t
+upperM = SLS.VarUpper
 
-upperM :: UExpr t -> VarModifier UExpr t
-upperM = VarUpper
+offsetM :: UExpr t -> SLS.VarModifier UExpr t
+offsetM = SLS.VarOffset
 
-offsetM :: UExpr t -> VarModifier UExpr t
-offsetM = VarOffset
-
-multiplierM :: UExpr t -> VarModifier UExpr t
-multiplierM = VarMultiplier
-
-newtype CodeWriter a = CodeWriter { unCodeWriter :: W.Writer [UStmt] a } deriving newtype (Functor, Applicative, Monad, W.MonadWriter [UStmt])
-
-data MaybeCW a = NoCW a | NeedsCW (CodeWriter a)
-
-asCW :: MaybeCW a -> CodeWriter a
-asCW (NoCW a) = pure a
-asCW (NeedsCW cw) = cw
-
-instance Functor MaybeCW where
-  fmap f (NoCW a) = NoCW $ f a
-  fmap f (NeedsCW cw) = NeedsCW $ fmap f cw
-
-instance Applicative MaybeCW where
-  pure = NoCW
-  (NoCW f) <*> (NoCW a) = NoCW $ f a
-  (NoCW f) <*> (NeedsCW cw) = NeedsCW $ fmap f cw
-  (NeedsCW f) <*> (NoCW a) = NeedsCW $ f <*> (pure a)
-  (NeedsCW f) <*> (NeedsCW cw) = NeedsCW $ f <*> cw
-
-instance Monad MaybeCW where
-  (NoCW a) >>= f = f a
-  (NeedsCW cwa) >>= f = NeedsCW $ do
-    a <- cwa
-    case f a of
-      NoCW b -> pure b
-      NeedsCW cwb -> cwb
-
-instance W.MonadWriter [UStmt] MaybeCW where
-  tell w = NeedsCW $ W.tell w
-  listen m = case m of
-    NoCW a -> NoCW (a, [])
-    NeedsCW cwa -> NeedsCW $ W.listen cwa
-  pass m = case m of
-    NoCW (a, _) -> NoCW a
-    NeedsCW cw -> NeedsCW $ W.pass cw
-
-writerL :: CodeWriter a -> ([UStmt], a)
-writerL (CodeWriter w) = (stmts, a)
-  where (a, stmts) = W.runWriter w
-
-writerL' :: CodeWriter a -> [UStmt]
-writerL' = fst . writerL
-
-addStmt :: UStmt -> CodeWriter ()
-addStmt = W.tell . pure
-
-declareW :: Text -> DeclSpec t -> CodeWriter (UExpr t)
-declareW t ds = do
-  addStmt $ declare t ds
-  return $ namedE t (sTypeFromStanType $ declType ds)
-
-declareNW :: NamedDeclSpec t -> CodeWriter (UExpr t)
-declareNW nds = do
-  addStmt $ declareN nds
-  return $ namedE (declName nds) (sTypeFromStanType $ declType $ decl nds)
-
-declareRHSW :: Text -> DeclSpec t -> UExpr t -> CodeWriter (UExpr t)
-declareRHSW t ds rhs = do
-  addStmt $ declareAndAssign t ds rhs
-  return $ namedE t (sTypeFromStanType $ declType ds)
-
-declareRHSNW :: NamedDeclSpec t -> UExpr t -> CodeWriter (UExpr t)
-declareRHSNW nds rhs = do
-  addStmt $ declareAndAssignN nds rhs
-  return $ namedE (declName nds) (sTypeFromStanType $ declType $ decl nds)
-
-{-
-asFunction :: ContainerOf v a -> IntE -> UExpr a
-asFunction (InnerSliceable c) = \ke -> sliceE s0 ke c
-asFunction (Functional f) = f
-
-asVector :: StanName -> ContainerOf ECVec EReal -> CodeWriter VectorE
-asVector n (InnerSliceable c) = pure c
--}
-
-instance SLR.HFunctor VarModifier where
-  hfmap f = \case
-    VarLower x -> VarLower $ f x
-    VarUpper x -> VarUpper $ f x
-    VarOffset x -> VarOffset $ f x
-    VarMultiplier x -> VarMultiplier $ f x
-
-instance SLR.HTraversable VarModifier where
-  htraverse nat = \case
-    VarLower x -> VarLower <$> nat x
-    VarUpper x -> VarUpper <$> nat x
-    VarOffset x -> VarOffset <$> nat x
-    VarMultiplier x -> VarMultiplier <$> nat x
-  hmapM = SLR.htraverse
-
-data StmtBlock = FunctionsStmts
-               | DataStmts
-               | TDataStmts
-               | ParametersStmts
-               | TParametersStmts
-               | ModelStmts
-               | GeneratedQuantitiesStmts
-
-data GroupType = Bracketed | UnBracketed | Scoping deriving stock (Show, Eq)
-
--- Statements
-data Stmt :: (EType -> Type) -> Type where
-  SDeclare ::  Text -> StanType et -> DeclIndexVecF r et -> [VarModifier r (ScalarType et)] -> Stmt r
-  SDeclAssign :: Text -> StanType et -> DeclIndexVecF r et -> [VarModifier r (ScalarType et)] -> r et -> Stmt r
-  SAssign :: r t -> r t -> Stmt r
-  SOpAssign :: (ta ~ BinaryResultT op ta tb) => SBinaryOp op -> r ta -> r tb -> Stmt r
-  STarget :: r EReal -> Stmt r
-  SSample :: r st -> Density st args -> TypedList r args -> Stmt r
-  SFor :: Text -> r EInt -> r EInt -> Stmt r -> Stmt r
-  SForEach :: GenSType (ForEachSlice t) => Text -> r t -> Stmt r -> Stmt r
-  SIfElse :: NonEmpty (r EBool, Stmt r) -> Stmt r -> Stmt r -- [(condition, ifTrue)] -> ifAllFalse
-  SWhile :: r EBool -> Stmt r -> Stmt r
-  SBreak :: Stmt r
-  SContinue :: Stmt r
-  SFunction :: AllGenSTypes args => Function rt args -> TypedList (FuncArg Text) args -> Stmt r -> Stmt r
-  SReturn :: r rt -> Stmt r
-  SComment :: Traversable f => f Text -> Stmt r
-  SProfile :: Text -> Stmt r -> Stmt r
-  SPrint :: TypedList r args -> Stmt r
-  SReject :: TypedList r args -> Stmt r
-  SBlock :: StmtBlock -> Stmt r -> Stmt r
-  SGroup :: Traversable f => GroupType -> f (Stmt r) -> Stmt r
-  SContext :: (SLA.ASTCtxt -> SLA.ASTCtxt) -> Stmt r
-
-data StmtF :: (EType -> Type) -> Type -> Type where
-  SDeclareF ::  Text -> StanType et -> DeclIndexVecF r et -> [VarModifier r (ScalarType et)] -> StmtF r a
-  SDeclAssignF :: Text -> StanType et -> DeclIndexVecF r et -> [VarModifier r (ScalarType et)] -> r et -> StmtF r a
-  SAssignF :: r t -> r t -> StmtF r a
-  SOpAssignF :: (ta ~ BinaryResultT op ta tb) => SBinaryOp op -> r ta -> r tb -> StmtF r a
-  STargetF :: r EReal -> StmtF r a
-  SSampleF :: r st -> Density st args -> TypedList r args -> StmtF r a
-  SForF :: Text -> r EInt -> r EInt -> a -> StmtF r a
-  SForEachF ::  GenSType (ForEachSlice t) => Text -> r t -> a -> StmtF r a
-  SIfElseF :: NonEmpty (r EBool, a) -> a -> StmtF r a -- [(condition, ifTrue)] -> ifAllFalse
-  SWhileF :: r EBool -> a -> StmtF r a
-  SBreakF :: StmtF r a
-  SContinueF :: StmtF r a
-  SFunctionF :: AllGenSTypes args => Function rt args -> TypedList (FuncArg Text) args -> a -> StmtF r a
-  SReturnF :: r t -> StmtF r a
-  SCommentF :: Traversable f => f Text -> StmtF r a
-  SProfileF :: Text -> a -> StmtF r a
-  SPrintF :: TypedList r args -> StmtF r a
-  SRejectF :: TypedList r args -> StmtF r a
-  SBlockF :: StmtBlock -> a -> StmtF r a
-  SGroupF :: Traversable f => GroupType -> f a -> StmtF r a
-  SContextF :: (SLA.ASTCtxt -> SLA.ASTCtxt) -> StmtF r a
-
-type instance RS.Base (Stmt f) = StmtF f
-
-type LStmt = Stmt LExpr
-type UStmt = Stmt UExpr
-{-
-type IndexArrayU = UExpr (EArray (S Z) EInt)
-type IndexArrayL = LExpr (EArray (S Z) EInt)
-type IndexSizeMap = Map IndexKey (LExpr EInt)
-type IndexArrayMap = Map IndexKey IndexArrayL
-type VarTypeMap = Map VarName (Some.Some SType)
-
-data VarNameCheck = CheckPassed | NameMissing | WrongType Text
-
-checkTypedVar :: VarName -> SType t -> VarTypeMap -> VarNameCheck
-checkTypedVar vn st m = case Map.lookup vn m of
-  Nothing -> NameMissing
-  Just sst -> if Some.mkSome st == sst then CheckPassed else WrongType $ Some.withSome sst sTypeName prevST
-
-newtype VarLookupCtxt = VarSLC.ASTCtxt (NE.NonEmpty VarTypeMap) deriving newtype (Show)
-
-emptyVarLookupCtxt :: VarLookupCtxt
-emptyVarLookupCtxt = VarLookupCtxt $ mempty :| []
-
-varLookupMap :: VarLookupCtxt -> VarTypeMap
-varLookupMap (VarLookupCtxt vs) = fold vs
-
-enterNewScope :: VarLookupCtxt -> VarLookupCtxt
-enterNewScope (VarLookupCtxt (gs :| ls)) = VarLookupCtxt (gs :| mempty : ls)
-
-{-
-innerScope :: VarLookupCtxt -> VarTypeMap
-innerScope (VarLookupCtxt (gs :| [])) = gs
-innerScope (VarLookupCtxt (gs :| is : _)) = is
--}
-
-leaveScope :: VarLookupCtxt -> VarLookupCtxt
-leaveScope v@(VarLookupCtxt (_gs :| [])) = v
-leaveScope (VarLookupCtxt (gs :| _ : os)) = VarLookupCtxt (gs :| os)
-
-insertVarType :: VarName -> SType t -> VarTypeMap -> VarTypeMap
-insertVarType vn st = Map.insert vn (Some.mkSome st)
-
-addTypedVarToInnerScope :: VarName -> SType t -> VarLookupCtxt -> VarLookupCtxt
-addTypedVarToInnerScope vn st (VarLookupCtxt (gs :| [])) = VarLookupCtxt $ insertVarType vn st gs :| []
-addTypedVarToInnerScope vn st (VarLookupCtxt (gs :| is : os)) = VarLookupCtxt $ gs :| insertVarType vn st is : os
-
-addTypedVarInScope :: VarName -> SType t -> VarLookupCtxt -> Maybe VarLookupCtxt
-addTypedVarInScope vn st ctxt = mVLC where
-  mExists = Map.lookup vn (varLookupMap ctxt)
-  mVLC = case mExists of
-    Nothing -> Just $ addTypedVarToInnerScope vn st ctxt
-    Just _ -> Nothing
-
-addTypedVarsInScope :: AllGenSTypes ts => TypedList (K VarName) ts -> VarLookupCtxt -> Maybe VarLookupCtxt
-addTypedVarsInScope typedVarNames vlc = sTypedFoldTypedList f (Just vlc) typedVarNames
-  where
-    f (K vn) st mVlc = mVlc >>= addTypedVarInScope vn st
-
-addTypedVarsToInnerScope :: AllGenSTypes ts => TypedList (K VarName) ts -> VarLookupCtxt -> VarLookupCtxt
-addTypedVarsToInnerScope typedVarNames vlc = sTypedFoldTypedList f vlc typedVarNames
-  where
-    f (K vn) = addTypedVarToInnerScope vn
-
-
-array_num_elements :: (SNatI n, GenSType t) => Function EInt '[EArray n t]
-array_num_elements = simpleFunction "size" {- any chance this should be num_elements? --als was "inv"?? -}
-
-indexSize :: IndexArrayU -> UExpr EInt
-indexSize = functionE array_num_elements . oneTyped
-
-data IndexLookupCtxt = IndexLookupCtxt { sizes :: IndexSizeMap, indexes :: IndexArrayMap }
-
-emptyIndexLookupCtxt :: IndexLookupCtxt
-emptyIndexLookupCtxt = IndexLookupCtxt mempty mempty
-
-data LookupCtxt =
-  LookupCtxt
-  { varCtxt :: VarLookupCtxt
-  , indexCtxt :: IndexLookupCtxt
-  }
-
-emptyLookupCtxt :: LookupCtxt
-emptyLookupCtxt = LookupCtxt emptyVarLookupCtxt emptyIndexLookupCtxt
-
-modifyVarCtxt :: (VarLookupCtxt -> VarLookupCtxt) -> LookupCtxt -> LookupCtxt
-modifyVarCtxt f (LookupCtxt vlc ilc) = LookupCtxt (f vlc) ilc
-
-modifyIndexCtxt :: (IndexLookupCtxt -> IndexLookupCtxt) -> LookupCtxt -> LookupCtxt
-modifyIndexCtxt f (LookupCtxt vlc ilc) = LookupCtxt vlc $ f ilc
--}
-
-instance Functor (StmtF f) where
-  fmap f x = case x of
-    SDeclareF txt st divf vms -> SDeclareF txt st divf vms
-    SDeclAssignF txt st divf vms rhse -> SDeclAssignF txt st divf vms rhse
-    SAssignF ft ft' -> SAssignF ft ft'
-    SOpAssignF op ft ft' -> SOpAssignF op ft ft'
-    STargetF f' -> STargetF f'
-    SSampleF f_st dis al -> SSampleF f_st dis al
-    SForF ctr startE endE body -> SForF ctr startE endE (f body)
-    SForEachF ctr fromE body -> SForEachF ctr fromE (f body)
-    SIfElseF x1 sf -> SIfElseF (secondF f x1) (f sf)
-    SWhileF cond sf -> SWhileF cond (f sf)
-    SBreakF -> SBreakF
-    SContinueF -> SContinueF
-    SFunctionF func al sf -> SFunctionF func al (f sf)
-    SReturnF re -> SReturnF re
-    SCommentF t -> SCommentF t
-    SProfileF t stmt -> SProfileF t (f stmt)
-    SPrintF args -> SPrintF args
-    SRejectF args -> SRejectF args
-    SBlockF bl stmt -> SBlockF bl (f stmt)
-    SGroupF s stmts -> SGroupF s  $ fmap f stmts
-    SContextF cf -> SContextF cf
-
-instance Foldable (StmtF f) where
-  foldMap f = \case
-    SDeclareF {} -> mempty
-    SDeclAssignF {} -> mempty
-    SAssignF {} -> mempty
-    SOpAssignF {} -> mempty
-    STargetF {} -> mempty
-    SSampleF {} -> mempty
-    SForF _ _ _ body -> f body
-    SForEachF _ _ body -> f body
-    SIfElseF ifConds sf -> foldMap (f . snd) ifConds <> f sf
-    SWhileF _ body -> f body
-    SBreakF -> mempty
-    SContinueF -> mempty
-    SFunctionF _ _ body -> f body
-    SReturnF _ -> mempty
-    SCommentF _ -> mempty
-    SProfileF _ body -> f body
-    SPrintF {} -> mempty
-    SRejectF {} -> mempty
-    SGroupF _ body -> foldMap f body
-    SBlockF _ body -> f body
-    SContextF _ -> mempty
-
-instance Traversable (StmtF f) where
-  traverse g = \case
-    SDeclareF txt st divf vms -> pure $ SDeclareF txt st divf vms
-    SDeclAssignF txt st divf vms fet -> pure $ SDeclAssignF txt st divf vms fet
-    SAssignF ft ft' -> pure $ SAssignF ft ft'
-    SOpAssignF op ft ft' -> pure $ SOpAssignF op ft ft'
-    STargetF f -> pure $ STargetF f
-    SSampleF f_st dis al -> pure $ SSampleF f_st dis al
-    SForF txt f f' sfs -> SForF txt f f' <$> g sfs
-    SForEachF txt ft sfs -> SForEachF txt ft <$> g sfs
-    SIfElseF x0 sf -> SIfElseF <$> traverse (\(c, s) -> pure ((,) c) <*> g s) x0 <*> g sf
-    SWhileF f body -> SWhileF f <$> g body
-    SBreakF -> pure SBreakF
-    SContinueF -> pure SContinueF
-    SFunctionF func al sfs -> SFunctionF func al <$> g sfs
-    SReturnF re -> pure $ SReturnF re
-    SCommentF t -> pure $ SCommentF t
-    SProfileF t stmts -> SProfileF t <$> g stmts
-    SPrintF args -> pure $ SPrintF args
-    SRejectF args -> pure $ SRejectF args
-    SGroupF s stmts -> SGroupF s <$> traverse g stmts
-    SBlockF bl stmt -> SBlockF bl <$> g stmt
-    SContextF f  -> pure $ SContextF f
-
-instance Functor (RS.Base (Stmt f)) => RS.Recursive (Stmt f) where
-  project = \case
-    SDeclare txt st divf vms -> SDeclareF txt st divf vms
-    SDeclAssign txt st divf vms fet -> SDeclAssignF txt st divf vms fet
-    SAssign ft ft' -> SAssignF ft ft'
-    SOpAssign op ft ft' -> SOpAssignF op ft ft'
-    STarget f -> STargetF f
-    SSample f_st dis al -> SSampleF f_st dis al
-    SFor txt f f' sts -> SForF txt f f' sts
-    SForEach txt ft sts -> SForEachF txt ft sts
-    SIfElse x0 st -> SIfElseF x0 st
-    SWhile f sts -> SWhileF f sts
-    SBreak -> SBreakF
-    SContinue -> SContinueF
-    SFunction func al sts -> SFunctionF func al sts
-    SReturn re -> SReturnF re
-    SComment t -> SCommentF t
-    SProfile t body -> SProfileF t body
-    SPrint args -> SPrintF args
-    SReject args -> SRejectF args
-    SGroup s sts -> SGroupF s sts
-    SBlock bl sts -> SBlockF bl sts
-    SContext mf -> SContextF mf
-
-instance Functor (RS.Base (Stmt f)) => RS.Corecursive (Stmt f) where
-  embed = \case
-    SDeclareF txt st divf vms -> SDeclare txt st divf vms
-    SDeclAssignF txt st divf vms fet -> SDeclAssign txt st divf vms fet
-    SAssignF ft ft' -> SAssign ft ft'
-    SOpAssignF op ft ft' -> SOpAssign op ft ft'
-    STargetF f -> STarget f
-    SSampleF f_st dis al -> SSample f_st dis al
-    SForF txt f f' sts -> SFor txt f f' sts
-    SForEachF txt ft sts -> SForEach txt ft sts
-    SIfElseF x0 st -> SIfElse x0 st
-    SWhileF f sts -> SWhile f sts
-    SBreakF -> SBreak
-    SContinueF -> SContinue
-    SFunctionF func al sts -> SFunction func al sts
-    SReturnF re -> SReturn re
-    SCommentF t -> SComment t
-    SProfileF t body -> SProfile t body
-    SPrintF args -> SPrint args
-    SRejectF args -> SReject args
-    SGroupF s sts -> SGroup s sts
-    SBlockF bl sts -> SBlock bl sts
-    SContextF mf -> SContext mf
-
-instance SLR.HFunctor StmtF where
-  hfmap nat = \case
-    SDeclareF txt st divf vms -> SDeclareF txt st (SLR.hfmap nat divf) (fmap (SLR.hfmap nat) vms)
-    SDeclAssignF txt st divf vms rhe -> SDeclAssignF txt st (SLR.hfmap nat divf) (fmap (SLR.hfmap nat) vms) (nat rhe)
-    SAssignF lhe rhe -> SAssignF (nat lhe) (nat rhe)
-    SOpAssignF op lhe rhe -> SOpAssignF op (nat lhe) (nat rhe)
-    STargetF rhe -> STargetF (nat rhe)
-    SSampleF gst dis al -> SSampleF (nat gst) dis (SLR.hfmap nat al)
-    SForF txt se ee body -> SForF txt (nat se) (nat ee) body
-    SForEachF txt gt body -> SForEachF txt (nat gt) body
-    SIfElseF x0 sf -> SIfElseF (firstF nat x0) sf
-    SWhileF g body -> SWhileF (nat g) body
-    SBreakF -> SBreakF
-    SContinueF -> SContinueF
-    SFunctionF func al body -> SFunctionF func al body
-    SReturnF re -> SReturnF (nat re)
-    SCommentF x -> SCommentF x
-    SProfileF x body -> SProfileF x body
-    SPrintF args -> SPrintF (SLR.hfmap nat args)
-    SRejectF args -> SRejectF (SLR.hfmap nat args)
-    SGroupF s body -> SGroupF s body
-    SBlockF bl body -> SBlockF bl body
-    SContextF mf -> SContextF mf
-
-instance SLR.HTraversable StmtF where
-  htraverse natM = \case
-    SDeclareF txt st indexEs vms -> SDeclareF txt st <$> SLR.htraverse natM indexEs <*> traverse (SLR.htraverse natM) vms
-    SDeclAssignF txt st indexEs vms rhe -> SDeclAssignF txt st <$> SLR.htraverse natM indexEs <*> traverse (SLR.htraverse natM) vms <*> natM rhe
-    SAssignF lhe rhe -> SAssignF <$> natM lhe <*> natM rhe
-    SOpAssignF op lhe rhe -> SOpAssignF op <$> natM lhe <*> natM rhe
-    STargetF re -> STargetF <$> natM re
-    SSampleF ste dist al -> SSampleF <$> natM ste <*> pure dist <*> SLR.htraverse natM al
-    SForF txt se ee body -> SForF txt <$> natM se <*> natM ee <*> pure body
-    SForEachF txt at' body -> SForEachF txt <$> natM at' <*> pure body
-    SIfElseF x0 sf -> SIfElseF <$> traverse (\(c, s) -> (,) <$> natM c <*> pure s) x0 <*> pure sf
-    SWhileF cond body -> SWhileF <$> natM cond <*> pure body
-    SBreakF -> pure SBreakF
-    SContinueF -> pure SContinueF
-    SFunctionF func al body -> pure $ SFunctionF func al body
-    SReturnF re -> SReturnF <$> natM re
-    SCommentF x -> pure $ SCommentF x
-    SProfileF x body -> pure $ SProfileF x body
-    SPrintF args -> SPrintF <$> SLR.htraverse natM args
-    SRejectF args -> SRejectF <$> SLR.htraverse natM args
-    SGroupF s body -> pure $ SGroupF s body
-    SBlockF bl body -> pure $ SBlockF bl body
-    SContextF mf -> pure $ SContextF mf
-  hmapM = SLR.htraverse
+multiplierM :: UExpr t -> SLS.VarModifier UExpr t
+multiplierM = SLS.VarMultiplier

@@ -29,7 +29,7 @@ import Stan.Language.Indexing
 import Stan.Language.Operations
 import Stan.Language.Functions
 import Stan.Language.Expressions
-import Stan.Language.Statements
+import qualified Stan.Language.Statement as SLS
 
 import qualified Data.Functor.Foldable as RS
 import qualified Data.Foldable as Foldable
@@ -54,7 +54,7 @@ type CodePP = PP.Doc ()
 
 -- we replace LExprs within statements with prettyprinted code
 -- then fold up the statements to produce code
-stmtToCodeE :: LStmt -> Either Text CodePP
+stmtToCodeE :: SLS.LStmt -> Either Text CodePP
 stmtToCodeE = RS.hylo stmtToCodeAlg (hfmap exprToCode . RS.project)
 
 lineLayout :: PP.Doc a -> PP.Doc a
@@ -65,64 +65,64 @@ preferOpBreak prefix op rhs = PP.flatAlt
                               (prefix <> PP.line <> op <+> rhs)
                               (prefix <+> op <+> rhs)
 
-stmtToCodeAlg :: StmtF (K CodePP) (Either Text CodePP) -> Either Text CodePP
+stmtToCodeAlg :: SLS.StmtF (K CodePP) (Either Text CodePP) -> Either Text CodePP
 stmtToCodeAlg = \case
-  SDeclareF txt st divf vms -> Right $ lineLayout
+  SLS.SDeclareF txt st divf vms -> Right $ lineLayout
                                $ stanDeclHead st (unK <$> Vec.toList (unDeclIndexVecF divf)) vms <> PP.softline
                                <> PP.pretty txt <> PP.semi
-  SDeclAssignF txt st divf vms rhs -> Right $ lineLayout
+  SLS.SDeclAssignF txt st divf vms rhs -> Right $ lineLayout
                                       $ preferOpBreak
                                       (stanDeclHead st (unK <$> Vec.toList (unDeclIndexVecF divf)) vms <+> PP.pretty txt)
                                       PP.equals
                                       (unK rhs <> PP.semi)
-  SAssignF lhs rhs -> Right $ lineLayout $ preferOpBreak (unK lhs) PP.equals (unK rhs <> PP.semi)
-  SOpAssignF op lhs rhs -> Right $ lineLayout $ preferOpBreak (unK lhs) (opDoc op <> PP.equals) (unK rhs <> PP.semi)
-  STargetF rhs -> Right $ lineLayout $ preferOpBreak "target" "+=" $ unK rhs <> PP.semi
-  SSampleF lhs (Density dn _ _) al -> Right $ lineLayout
+  SLS.SAssignF lhs rhs -> Right $ lineLayout $ preferOpBreak (unK lhs) PP.equals (unK rhs <> PP.semi)
+  SLS.SOpAssignF op lhs rhs -> Right $ lineLayout $ preferOpBreak (unK lhs) (opDoc op <> PP.equals) (unK rhs <> PP.semi)
+  SLS.STargetF rhs -> Right $ lineLayout $ preferOpBreak "target" "+=" $ unK rhs <> PP.semi
+  SLS.SSampleF lhs (Density dn _ _) al -> Right $ lineLayout
                                          $ preferOpBreak
                                          (unK lhs)
                                          "~"
                                          (PP.pretty dn <> PP.parens (csArgList al) <> PP.semi)
-  SForF txt fe te body -> (\b -> "for" <+> PP.parens (PP.pretty txt <+> "in" <+> unK fe <> PP.colon <> unK te) <+> bracketCode (PP.group b)) <$> body
-  SForEachF txt e body -> (\b -> "foreach" <+> PP.parens (PP.pretty txt <+> "in" <+> unK e) <+> bracketLoopCode b) <$> body
-  SIfElseF condAndIfTrueL allFalse -> ifElseCode condAndIfTrueL allFalse
-  SWhileF if' body -> (\b -> "while" <+> PP.parens (unK if') <+> bracketLoopCode b) <$> body
-  SBreakF -> Right $ "break" <> PP.semi
-  SContinueF -> Right $ "continue" <> PP.semi
-  SFunctionF (Function fname rt ats) al body ->
+  SLS.SForF txt fe te body -> (\b -> "for" <+> PP.parens (PP.pretty txt <+> "in" <+> unK fe <> PP.colon <> unK te) <+> bracketCode (PP.group b)) <$> body
+  SLS.SForEachF txt e body -> (\b -> "foreach" <+> PP.parens (PP.pretty txt <+> "in" <+> unK e) <+> bracketLoopCode b) <$> body
+  SLS.SIfElseF condAndIfTrueL allFalse -> ifElseCode condAndIfTrueL allFalse
+  SLS.SWhileF if' body -> (\b -> "while" <+> PP.parens (unK if') <+> bracketLoopCode b) <$> body
+  SLS.SBreakF -> Right $ "break" <> PP.semi
+  SLS.SContinueF -> Right $ "continue" <> PP.semi
+  SLS.SFunctionF (Function fname rt ats) al body ->
     (\b -> functionArg rt <+> PP.pretty fname <> functionArgs ats al <+> bracketCode b) <$> body
-  SFunctionF (IdentityFunction _) _ _  -> Left "Attempt to *declare* Identity function!"
-  SReturnF re -> Right $ "return" <+> unK re <> PP.semi
-  SCommentF cs -> case toList cs of
+  SLS.SFunctionF (IdentityFunction _) _ _  -> Left "Attempt to *declare* Identity function!"
+  SLS.SReturnF re -> Right $ "return" <+> unK re <> PP.semi
+  SLS.SCommentF cs -> case toList cs of
     [] -> Right mempty
     [c] -> Right $ "//" <+> PP.pretty c
     csList -> Right $ "{*" <> PP.line <> PP.indent 2 (PP.vsep $ PP.pretty <$> csList) <> PP.line <> "*}"
-  SProfileF t body -> (\b -> "profile" <> PP.parens (PP.dquotes $ PP.pretty t) <+> bracketCode b) <$> body
-  SPrintF al -> Right $ "print" <+> PP.parens (csArgList al) <> PP.semi
-  SRejectF al -> Right $ "reject" <+> PP.parens (csArgList al) <> PP.semi
-  SGroupF bracketed body -> case bracketed of
-    UnBracketed -> blockCode <$> sequence body
-    Bracketed -> bracketBlock <$> sequence body
-    Scoping -> PP.hcat . toList <$> sequence body
+  SLS.SProfileF t body -> (\b -> "profile" <> PP.parens (PP.dquotes $ PP.pretty t) <+> bracketCode b) <$> body
+  SLS.SPrintF al -> Right $ "print" <+> PP.parens (csArgList al) <> PP.semi
+  SLS.SRejectF al -> Right $ "reject" <+> PP.parens (csArgList al) <> PP.semi
+  SLS.SGroupF bracketed body -> case bracketed of
+    SLS.UnBracketed -> blockCode <$> sequence body
+    SLS.Bracketed -> bracketBlock <$> sequence body
+    SLS.Scoping -> PP.hcat . toList <$> sequence body
 
-  SBlockF bl body -> (\b -> PP.pretty (stmtBlockHeader bl) <+> bracketCode b) <$> body
-  SContextF _f  -> Right mempty
+  SLS.SBlockF bl body -> (\b -> PP.pretty (stmtBlockHeader bl) <+> bracketCode b) <$> body
+  SLS.SContextF _f  -> Right mempty
 
 indexCodeL :: [CodePP] -> CodePP
 indexCodeL [] = ""
 indexCodeL x = PP.brackets $ PP.hsep $ PP.punctuate "," x
 
-stanDeclHead :: forall t . StanType t -> [CodePP] -> [VarModifier (K CodePP) (ScalarType t)] -> CodePP
+stanDeclHead :: forall t . StanType t -> [CodePP] -> [SLS.VarModifier (K CodePP) (ScalarType t)] -> CodePP
 stanDeclHead st il vms = case st of
   StanArray sn arrayType -> arrayDeclHead (fromIntegral $ DTN.snatToNatural sn) arrayType
   StanSqMatrix -> PP.pretty (stanTypeName st) <> varModifiersToCode vms <> indexCodeL (il <> il) -- otherwise we only get one index
   _ -> PP.pretty (stanTypeName st) <> varModifiersToCode vms <> indexCodeL il
   where
     vmToCode = \case
-      VarLower x -> "lower" <> PP.equals <> unK x
-      VarUpper x -> "upper" <> PP.equals <> unK x
-      VarOffset x -> "offset" <> PP.equals <> unK x
-      VarMultiplier x -> "multiplier" <> PP.equals <> unK x
+      SLS.VarLower x -> "lower" <> PP.equals <> unK x
+      SLS.VarUpper x -> "upper" <> PP.equals <> unK x
+      SLS.VarOffset x -> "offset" <> PP.equals <> unK x
+      SLS.VarMultiplier x -> "multiplier" <> PP.equals <> unK x
     varModifiersToCode varModifierList =
       if null varModifierList
       then mempty
@@ -404,15 +404,15 @@ unNestedToCode surroundF dims items = surround $ go dims items
     go [] as = as
     go (x : xs) as = go xs (group' x as [])
 
-stmtBlockHeader :: StmtBlock -> Text
+stmtBlockHeader :: SLS.StmtBlock -> Text
 stmtBlockHeader = \case
-  FunctionsStmts -> "functions"
-  DataStmts -> "data"
-  TDataStmts -> "transformed data"
-  ParametersStmts -> "parameters"
-  TParametersStmts -> "transformed parameters"
-  ModelStmts -> "model"
-  GeneratedQuantitiesStmts -> "generated quantities"
+  SLS.FunctionsStmts -> "functions"
+  SLS.DataStmts -> "data"
+  SLS.TDataStmts -> "transformed data"
+  SLS.ParametersStmts -> "parameters"
+  SLS.TParametersStmts -> "transformed parameters"
+  SLS.ModelStmts -> "model"
+  SLS.GeneratedQuantitiesStmts -> "generated quantities"
 
 exprToText' :: PP.LayoutOptions -> LExpr t -> Text
 exprToText' lo = PP.renderStrict . PP.layoutSmart lo . unK . exprToCode

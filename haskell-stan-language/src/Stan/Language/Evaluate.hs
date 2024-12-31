@@ -29,7 +29,7 @@ import Stan.Language.Types ( EType(EInt, EArray)
                            )
 import Stan.Language.Expressions ( IndexKey, VarName, LExpr, LExprF (..), UExpr, UExprF(..), lNamedE )
 import Stan.Language.Functions (TypedArgNames, funcArgName)
-import Stan.Language.Statements
+import Stan.Language.Statement
     ( LStmt,
       Stmt(..),
       StmtF(..),

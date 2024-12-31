@@ -80,6 +80,7 @@ library
          , Relude.Extra)
   exposed-modules: Stan.Language
                  , Stan.Language.ASTContext
+                 , Stan.Language.CodeWriter
                  , Stan.Language.Evaluate
                  , Stan.Language.Expressions
                  , Stan.Language.Format
@@ -88,6 +89,7 @@ library
                  , Stan.Language.Operations
                  , Stan.Language.Program
                  , Stan.Language.Recursion
+                 , Stan.Language.Statement
                  , Stan.Language.Statements
                  , Stan.Language.Types
   other-modules: Stan.Language.Types.EType

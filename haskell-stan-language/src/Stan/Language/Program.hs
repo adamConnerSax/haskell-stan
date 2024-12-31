@@ -3,7 +3,6 @@
 {-# LANGUAGE DerivingVia #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE GADTs #-}
-{-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE PolyKinds #-}
 {-# LANGUAGE RankNTypes #-}
@@ -23,7 +22,8 @@ import Data.Array ((!), (//))
 import qualified Data.Array as Array
 
 import qualified Stan.Language.ASTContext as SLA
-import qualified Stan.Language.Statements as SLS
+import qualified Stan.Language.Statement as SLS
+import qualified Stan.Language.Statements as SLSS
 import qualified Stan.Language.Evaluate as SLE
 
 import qualified Prettyprinter.Render.Text as PP
@@ -89,31 +89,31 @@ programToStmt gq p = SLS.SGroup SLS.UnBracketed fullProgramStmt
           ss5 = ss4 ++ [modelStmt]
           ss6 = ss5 ++ maybe [] pure gqStmtM
       in s :| ss6
-    functionsStmtM = let x = stmtsArray ! SBFunctions in if null x then Nothing else Just (SLS.SBlock SLS.FunctionsStmts $ SLS.grouped x)
+    functionsStmtM = let x = stmtsArray ! SBFunctions in if null x then Nothing else Just (SLS.SBlock SLS.FunctionsStmts $ SLSS.grouped x)
     dataStmt =
         let d = stmtsArray ! SBData
-            gqd = SLS.comment ("For Generated Quantities" :| []) : stmtsArray ! SBDataGQ
-         in SLS.SBlock SLS.DataStmts $ SLS.grouped (d ++ if gq `elem` [NeitherLL_PP, All] then gqd else [])
+            gqd = SLSS.comment ("For Generated Quantities" :| []) : stmtsArray ! SBDataGQ
+         in SLS.SBlock SLS.DataStmts $ SLSS.grouped (d ++ if gq `elem` [NeitherLL_PP, All] then gqd else [])
     tDataStmtM =
       let
         x = stmtsArray ! SBTransformedData
         xGQ = if  not (null $ stmtsArray ! SBTransformedDataGQ)
-              then SLS.comment ("For Generated Quantities" :| []) : stmtsArray ! SBTransformedDataGQ
+              then SLSS.comment ("For Generated Quantities" :| []) : stmtsArray ! SBTransformedDataGQ
               else stmtsArray ! SBTransformedDataGQ
-      in if null x && null xGQ then Nothing else Just (SLS.SBlock SLS.TDataStmts $ SLS.grouped $ x ++ if gq `elem` [NeitherLL_PP, All] then xGQ else [])
-    paramsStmt = SLS.SBlock SLS.ParametersStmts $ SLS.grouped $ stmtsArray ! SBParameters
-    tParamsStmtM = let x = stmtsArray ! SBTransformedParameters in if null x then Nothing else Just (SLS.SBlock SLS.TParametersStmts $ SLS.grouped x)
-    modelStmt = SLS.SBlock SLS.ModelStmts $ SLS.grouped $ stmtsArray ! SBModel
+      in if null x && null xGQ then Nothing else Just (SLS.SBlock SLS.TDataStmts $ SLSS.grouped $ x ++ if gq `elem` [NeitherLL_PP, All] then xGQ else [])
+    paramsStmt = SLS.SBlock SLS.ParametersStmts $ SLSS.grouped $ stmtsArray ! SBParameters
+    tParamsStmtM = let x = stmtsArray ! SBTransformedParameters in if null x then Nothing else Just (SLS.SBlock SLS.TParametersStmts $ SLSS.grouped x)
+    modelStmt = SLS.SBlock SLS.ModelStmts $ SLSS.grouped $ stmtsArray ! SBModel
     gqStmtM =
         let gqs = stmtsArray ! SBGeneratedQuantities
             lls = stmtsArray ! SBLogLikelihood
             pps = stmtsArray ! SBPosteriorPrediction
          in case gq of
                 NoGQ -> Nothing
-                NeitherLL_PP -> Just $ SLS.SBlock SLS.GeneratedQuantitiesStmts $ SLS.grouped gqs
-                OnlyLL -> Just $ SLS.SBlock SLS.GeneratedQuantitiesStmts $ SLS.grouped lls
-                OnlyPP -> Just $ SLS.SBlock SLS.GeneratedQuantitiesStmts $ SLS.grouped pps
-                All -> Just $ SLS.SBlock SLS.GeneratedQuantitiesStmts $ SLS.grouped $ gqs ++ lls ++ pps
+                NeitherLL_PP -> Just $ SLS.SBlock SLS.GeneratedQuantitiesStmts $ SLSS.grouped gqs
+                OnlyLL -> Just $ SLS.SBlock SLS.GeneratedQuantitiesStmts $ SLSS.grouped lls
+                OnlyPP -> Just $ SLS.SBlock SLS.GeneratedQuantitiesStmts $ SLSS.grouped pps
+                All -> Just $ SLS.SBlock SLS.GeneratedQuantitiesStmts $ SLSS.grouped $ gqs ++ lls ++ pps
 
 
 -- check if the type of statement is allowed in the block then, if so, provide the modification function

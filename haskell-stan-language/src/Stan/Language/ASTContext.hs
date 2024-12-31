@@ -4,15 +4,12 @@
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE FlexibleInstances #-}
-{-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE PolyKinds #-}
 {-# LANGUAGE QuantifiedConstraints #-}
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TypeFamilies #-}
-{-# LANGUAGE TypeOperators #-}
-{-# LANGUAGE TypeSynonymInstances #-}
 {-# LANGUAGE UndecidableInstances #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 
@@ -22,72 +19,33 @@ module Stan.Language.ASTContext
   )
   where
 
-import qualified Stan.Language.Recursion as SLR
 import Stan.Language.Expressions
     ( functionE,
-      intE,
-      namedE,
-      namedSizeE,
-      ExprList,
       IndexKey,
       VarName,
-      IntE,
       LExpr,
       UExpr )
 import Stan.Language.Types
-    ( sTypeFromStanType,
-      EIndexArray,
-      EType(..),
+    ( EType(..),
       GenSType(..),
-      SType(SInt),
-      ScalarType,
-      StanType(..),
+      SType,
       sTypeName,
-      TypedList(TNil, (:>)),
-      VecToSameTypedListF,
-      SameTypedListToVecF,
-      GenSTypeList,
-      SameTypeList,
+      TypedList,
       AllGenSTypes,
-      vecToSameTypedListF,
-      zipTypedListsWith,
       sTypedFoldTypedList,
       oneTyped
     )
-import Stan.Language.Indexing
-    ( Vec(..),
-      DeclDimension,
-      Sliced,
-      N0,
-      DeclIndexVecF(DeclIndexVecF),
-      N1,
-      s1,
-      N2,
-      s2 )
-import Stan.Language.Operations
-    ( BinaryResultT,
-      BinaryOp(BAdd, BDivide, BMultiply, BSubtract),
-      SBinaryOp(SDivide, SAdd, SSubtract, SMultiply) )
 import Stan.Language.Functions
-    ( Density,
-      Function,
-      FuncArg,
-      funcArgName,
-      functionArgTypes,
+    (Function,
       simpleFunction )
 
-import qualified Data.Vec.Lazy as Vec
-import qualified Data.Type.Nat as DT
-import Data.Type.Nat (Nat(Z,S), SNat, SNatI)
-import Data.Type.Equality (type (:~:)(..), gcastWith)
-import Control.Monad.Writer.Strict as W
+import Data.Type.Nat (Nat(Z,S), SNatI)
 
 import Prelude hiding (Nat)
 import Relude.Extra
 import qualified Data.List.NonEmpty as NE
 import qualified Data.Map.Strict as Map
 import qualified Data.Some as Some
-import qualified Data.Functor.Foldable as RS
 import Stan.Language.Recursion (K(..))
 
 type IndexArrayU = UExpr (EArray (S Z) EInt)
