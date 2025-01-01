@@ -55,7 +55,7 @@ import Data.Type.Equality ((:~:)(Refl), TestEquality(testEquality))
 type IndexKey = Text
 type VarName = Text
 
--- Expressions
+-- Expression
 data LExprF :: (EType -> Type) -> EType -> Type where
   LNamed :: Text -> SType t -> LExprF r t
   LInt :: Int -> LExprF r EInt

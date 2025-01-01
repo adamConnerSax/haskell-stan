@@ -15,7 +15,20 @@
 
 module Stan.Language.CodeWriter
   (
-    module Stan.Language.CodeWriter
+    CodeWriter
+  , MaybeCW
+  , asCW
+  , writeStmt
+  , writeStmt_
+  , writerL
+  , writerL_
+  , addStmt
+  , (+%)
+  , addStmts
+  , declareW
+  , declareNW
+  , declareRHSW
+  , declareRHSNW
   )
   where
 
@@ -29,7 +42,7 @@ import Control.Monad.Writer.Strict as W
 import Prelude hiding (Nat)
 --import Relude.Extra
 
-newtype CodeWriter a = CodeWriter { unCodeWriter :: W.Writer [SLS.UStmt] a } deriving newtype (Functor, Applicative, Monad, W.MonadWriter [SLS.UStmt])
+newtype CodeWriter a = CodeWriter { _unCodeWriter :: W.Writer [SLS.UStmt] a } deriving newtype (Functor, Applicative, Monad, W.MonadWriter [SLS.UStmt])
 
 data MaybeCW a = NoCW a | NeedsCW (CodeWriter a)
 
@@ -69,11 +82,21 @@ writerL :: CodeWriter a -> ([SLS.UStmt], a)
 writerL (CodeWriter w) = (stmts, a)
   where (a, stmts) = W.runWriter w
 
-writerL' :: CodeWriter a -> [SLS.UStmt]
-writerL' = fst . writerL
+writeStmt :: CodeWriter a -> (SLS.UStmt, a)
+writeStmt = first SLSS.grouped . writerL
 
-addStmt :: SLS.UStmt -> CodeWriter ()
+writerL_ :: CodeWriter a -> [SLS.UStmt]
+writerL_ = fst . writerL
+
+writeStmt_ :: CodeWriter a -> SLS.UStmt
+writeStmt_ = SLSS.grouped . writerL_
+
+addStmt, (+%) :: SLS.UStmt -> CodeWriter ()
 addStmt = W.tell . pure
+(+%) = W.tell . pure
+
+addStmts :: Traversable f => f SLS.UStmt -> CodeWriter ()
+addStmts = traverse_ addStmt
 
 declareW :: Text -> SLSS.DeclSpec t -> CodeWriter (UExpr t)
 declareW t ds = do

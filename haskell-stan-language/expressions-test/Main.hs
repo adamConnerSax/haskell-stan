@@ -11,6 +11,7 @@ import Prelude hiding (print)
 import Stan.Language.Types
 import Stan.Language.Indexing
 import Stan.Language.Operations
+import Stan.Language.Expression
 import Stan.Language.Expressions
 import Stan.Language.Evaluate
 import Stan.Language.Recursion
@@ -252,14 +253,22 @@ main = do
                  $ \sie -> grouped $ (sie `assign` (realE 2) :| [assign x (x `plus` y)
                                                                 , stmtWhile
                                                                 , ln 1 `assign` (foldl' plusE (ln 2) $ fmap ln [3..20])])
-  writeStmtAsText 80 $ grouped $ fmap rdecl [1..20] <> [declare_x, declare_y, declare_n, declare_l, declare "votes" $ vectorSpec $ intE 3, formatS1]
+
+  let formatS1' = for "q" (SpecificIn $ namedE "votes" SCVec) $ \sie -> writeStmt_ $ do
+        addStmt $ sie `assign` realE 2
+        addStmt $ x `assign` (x `plus` y)
+        addStmt $ stmtWhile
+        addStmt $ ln 1 `assign` (foldl' plusE (ln 2) $ fmap ln [3..20])
+
+  writeStmtAsText 80 $ grouped $ fmap rdecl [1..20] <> [declare_x, declare_y, declare_n, declare_l, declare "votes" $ vectorSpec $ intE 3, formatS1']
 
   let
     f :: Function EReal [ECVec, ECVec, EArray N1 EInt, EInt, EInt]
     f = simpleFunction "f"
     fArgList = Arg "x1" :> Arg "x2" :> DataArg "m" :> Arg "ThisIsALongName" :> Arg "AsIsThisNameAlsoLong" :> TNil
     fBody :: ExprList [ECVec, ECVec, EArray N1 EInt, EInt, EInt] -> (UStmt, UExpr EReal)
-    fBody (x1 :> x2 :> _ :> _ :> _ :> TNil) = first grouped $ writerL $ declareRHSW "r" realSpec $ (tr (x1 `eMinus` x2) `times` (x1 `eMinus` x2))
+    fBody (x1 :> x2 :> _ :> _ :> _ :> TNil) =
+      writeStmt $ declareRHSW "r" realSpec $ (tr (x1 `eMinus` x2) `times` (x1 `eMinus` x2))
     funcStmt = function f fArgList fBody
   writeStmtAsText 80 funcStmt
 
