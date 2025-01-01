@@ -27,7 +27,7 @@ import Stan.Language.Types ( EType(EInt, EArray)
                            , sTypeFromStanType
                            , SType(..), GenSType(..), AllGenSTypes, sTypeName
                            )
-import Stan.Language.Expressions ( IndexKey, VarName, LExpr, LExprF (..), UExpr, UExprF(..), lNamedE )
+import Stan.Language.Expression ( IndexKey, VarName, LExpr, LExprF (..), UExpr, UExprF(..), lNamedE )
 import Stan.Language.Functions (TypedArgNames, funcArgName)
 import Stan.Language.Statement
     ( LStmt,

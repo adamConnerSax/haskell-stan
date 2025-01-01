@@ -82,6 +82,7 @@ library
                  , Stan.Language.ASTContext
                  , Stan.Language.CodeWriter
                  , Stan.Language.Evaluate
+                 , Stan.Language.Expression
                  , Stan.Language.Expressions
                  , Stan.Language.Format
                  , Stan.Language.Functions

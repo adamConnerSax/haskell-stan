@@ -22,10 +22,7 @@ module Stan.Language.Statement
 
 import qualified Stan.Language.Recursion as SLR
 import qualified Stan.Language.ASTContext as SLA
-import Stan.Language.Expressions
-    (IndexKey,
-      LExpr,
-      UExpr )
+import qualified Stan.Language.Expression as SLE
 import Stan.Language.Types
   ( EType(..),
     GenSType(..),
@@ -59,9 +56,9 @@ type family ForEachSlice (a :: EType) :: EType where
   ForEachSlice (EArray m t) = Sliced N0 (EArray m t)
 
 data ForType t where
-  SpecificNumbered :: UExpr EInt -> UExpr EInt -> ForType EInt
-  IndexedLoop :: IndexKey -> ForType EInt
-  SpecificIn :: UExpr t -> ForType t
+  SpecificNumbered :: SLE.UExpr EInt -> SLE.UExpr EInt -> ForType EInt
+  IndexedLoop :: SLE.IndexKey -> ForType EInt
+  SpecificIn :: SLE.UExpr t -> ForType t
 --  IndexedIn :: IndexKey -> UExpr t -> ForType t
 
 data VarAndForType (t :: EType) where
@@ -147,8 +144,8 @@ data StmtF :: (EType -> Type) -> Type -> Type where
 
 type instance RS.Base (Stmt f) = StmtF f
 
-type LStmt = Stmt LExpr
-type UStmt = Stmt UExpr
+type LStmt = Stmt SLE.LExpr
+type UStmt = Stmt SLE.UExpr
 
 instance Functor (StmtF f) where
   fmap f x = case x of
