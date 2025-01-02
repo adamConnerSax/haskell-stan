@@ -15,11 +15,12 @@ module Stan.Builder.CoreTypes
 where
 
 import qualified Stan.Builder.JSON as SJ
---import Stan.ModelBuilder.Distributions ()
-
 import qualified Stan.Language.Types as SLT
 import qualified Stan.Language.Program as SLP
 import qualified Stan.Language.Format as SLF
+import qualified Stan.Language.ASTContext as SLA
+import qualified Stan.Language.Expression as SLE
+import qualified Stan.Language.Statement as SLS -- was TE
 import qualified Stan.Language.Statements as SLS -- was TE
 import qualified Stan.Builder.ParameterTypes as SBPT
 
@@ -74,7 +75,7 @@ stanBuildEither :: Either Text a -> StanBuilderM md gq a
 stanBuildEither = either stanBuildError return
 
 data BuilderState md gq = BuilderState { declaredVars :: !ScopedDeclarations
-                                       , indexBindings :: !SLS.IndexLookupCtxt
+                                       , indexBindings :: !SLA.IndexLookupCtxt
                                        , modelRowBuilders :: !(RowInfos md)
                                        , gqRowBuilders :: !(RowInfos gq)
                                        , constModelJSON :: JSONSeriesFold ()  -- json for things which are attached to no data set.
@@ -88,7 +89,7 @@ initialBuilderState :: RowInfos md -> RowInfos gq -> BuilderState md gq
 initialBuilderState modelRowInfos gqRowInfos =
   BuilderState
   initialScopedDeclarations
-  SLS.emptyLookupCtxt
+  SLA.emptyIndexLookupCtxt
   modelRowInfos
   gqRowInfos
   mempty
@@ -138,18 +139,18 @@ runStanGroupBuilder sgb md gq =
 buildRowInfo :: d -> RowTypeTag r -> GroupIndexAndIntMapMakers d r -> RowInfo d r
 buildRowInfo d rtt (GroupIndexAndIntMapMakers tf@(ToFoldable f) ims imbs) = Foldl.fold fld $ f d  where
   gisFld = indexBuildersForDataSetFold ims
-  uBindings = Map.insert (dataSetName rtt) (SLS.namedLIndex ("N_" <> dataSetName rtt))
+  uBindings = Map.insert (dataSetName rtt) (SLE.namedLIndex ("N_" <> dataSetName rtt))
                 $ useBindingsFromGroupIndexMakers rtt ims
   fld = RowInfo tf uBindings <$> gisFld <*> pure imbs <*> pure mempty
 
-useBindingsFromGroupIndexMakers :: RowTypeTag r -> GroupIndexMakers r -> SLS.IndexArrayMap
+useBindingsFromGroupIndexMakers :: RowTypeTag r -> GroupIndexMakers r -> SLA.IndexArrayMap
 useBindingsFromGroupIndexMakers rtt (GroupIndexMakers gims) = Map.fromList l where
   l = g <$> DHash.toList gims
   g (gtt DSum.:=> _) =
     let gn = taggedGroupName gtt
         dsn = dataSetName rtt
         indexName = dsn <> "_" <> gn
-        indexExpr = SLS.namedLIndex indexName
+        indexExpr = SLE.namedLIndex indexName
     in (gn, indexExpr)
 
 intMapsForDataSetFoldM :: GroupIntMapBuilders r -> Foldl.FoldM (Either Text) r (GroupIntMaps r)
@@ -327,7 +328,7 @@ contraIndexMap f (IndexMap rgi ggi gigk rg) = IndexMap (contramap f rgi) ggi gig
 data RowInfo d r = RowInfo
                    {
                      toFoldable    :: ToFoldable d r
-                   , expressionBindings :: SLS.IndexArrayMap
+                   , expressionBindings :: SLA.IndexArrayMap
                    , groupIndexes  :: GroupIndexes r
                    , groupIntMapBuilders  :: GroupIntMapBuilders r
                    , jsonSeries    :: JSONSeriesFold r

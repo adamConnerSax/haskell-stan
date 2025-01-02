@@ -43,9 +43,10 @@ module Stan.Builder.ParameterTypes
 
 import Prelude hiding (All)
 
-import qualified Stan.Language.Types as TE
-import qualified Stan.Language.TypedList as TE
-import qualified Stan.Language.Statements as TE
+import qualified Stan.Language.Types as SLT
+import Stan.Language.Statement (UStmt)
+import qualified Stan.Language.Statements as SLS
+import qualified Stan.Language.CodeWriter as SLC
 import Stan.Language.Recursion (hfmap, htraverse)
 import qualified Data.GADT.Compare as GC
 import qualified Data.GADT.Show as GC
@@ -55,17 +56,18 @@ import qualified Data.Dependent.Map as DM
 import Data.Type.Equality (TestEquality(testEquality))
 import qualified Text.Show
 import qualified Data.Set as Set
-import Stan.Language.Expressions (UExpr)
+import Stan.Language.Expression (UExpr)
+import Stan.Language.Expressions (ExprList, namedE)
 import Stan.Language.Types (sTypeToEType)
 
   -- ultimately, we should not expose this constructor.  So to get one of these you have to add a Builder to the DMap.
-data ParameterTag :: TE.EType -> Type where
-  ParameterTag :: TE.SType t -> TE.StanName -> ParameterTag t
+data ParameterTag :: SLT.EType -> Type where
+  ParameterTag :: SLT.SType t -> SLS.StanName -> ParameterTag t
 
-taggedParameterType :: ParameterTag t -> TE.SType t
+taggedParameterType :: ParameterTag t -> SLT.SType t
 taggedParameterType (ParameterTag st _) = st
 
-taggedParameterName :: ParameterTag t -> TE.StanName
+taggedParameterName :: ParameterTag t -> SLS.StanName
 taggedParameterName (ParameterTag _ n ) = n
 
 instance GC.GEq ParameterTag where
@@ -92,12 +94,12 @@ instance GC.GShow ParameterTag where gshowsPrec = Text.Show.showsPrec
 parameterTagFromBP :: BuildParameter t -> ParameterTag t
 parameterTagFromBP p = ParameterTag (bParameterSType p) (bParameterName p)
 
-parameterTagExpr :: ParameterTag t -> TE.UExpr t
-parameterTagExpr (ParameterTag st n) = TE.namedE n st
+parameterTagExpr :: ParameterTag t -> UExpr t
+parameterTagExpr (ParameterTag st n) = namedE n st
 
 --data UseParameter :: TE.EType -> Type where
 --  AsIs :: ParameterTag t -> UseParameter t
---  Mapped :: (TE.UExpr t -> TE.UExpr t') -> UseParameter t -> UseParameter t'
+--  Mapped :: (UExpr t -> UExpr t') -> UseParameter t -> UseParameter t'
 
 
 
@@ -105,28 +107,28 @@ parameterTagExpr (ParameterTag st n) = TE.namedE n st
 --useParameterExpr (AsIs pt) = parameterTagExpr pt
 --useParameterExpr (Mapped g pt) = g $ useParameterExpr pt
 
---mapParameter :: (TE.UExpr t -> TE.UExpr t') -> UseParameter t -> UseParameter t'
+--mapParameter :: (UExpr t -> UExpr t') -> UseParameter t -> UseParameter t'
 --mapParameter = Mapped
 
 -- Transformed Data declarations can only depend on other transformed data, so we need
 -- a wrapper type to enforce that.
 
---type Givens ts = TE.TypedList TE.UExpr ts
+--type Givens ts = TE.TypedList UExpr ts
 
 -- parameterized by the type of the parameter
 -- Each can include statements to be added to
 -- transformed data block
-data Parameter :: TE.EType -> Type where
-  GivenP :: TE.UExpr t -> Parameter t
+data Parameter :: SLT.EType -> Type where
+  GivenP :: UExpr t -> Parameter t
   BuildP :: ParameterTag t -> Parameter t
-  MappedP :: (TE.UExpr t -> TE.UExpr t') -> Parameter t -> Parameter t'
+  MappedP :: (UExpr t -> UExpr t') -> Parameter t -> Parameter t'
 
-parameterExpr :: Parameter t -> TE.UExpr t
+parameterExpr :: Parameter t -> UExpr t
 parameterExpr (GivenP e) = e
 parameterExpr (BuildP p) = parameterTagExpr p
 parameterExpr (MappedP g p) = g $ parameterExpr p
 
-given :: TE.UExpr t -> Parameter t
+given :: UExpr t -> Parameter t
 given = GivenP
 
 build :: ParameterTag t -> Parameter t
@@ -135,46 +137,47 @@ build = BuildP
 mapped :: (UExpr t -> UExpr t') -> Parameter t -> Parameter t'
 mapped = MappedP
 
-type Parameters ts = TE.TypedList Parameter ts
+type Parameters ts = SLT.TypedList Parameter ts
 
-tagsAsExprs :: TE.TypedList ParameterTag ts -> TE.ExprList ts
+tagsAsExprs :: SLT.TypedList ParameterTag ts -> ExprList ts
 tagsAsExprs = hfmap parameterTagExpr
 {-# INLINEABLE tagsAsExprs #-}
 
-tagsAsParams :: TE.TypedList ParameterTag ts -> Parameters ts
+tagsAsParams :: SLT.TypedList ParameterTag ts -> Parameters ts
 tagsAsParams = hfmap build
 {-# INLINEABLE tagsAsParams #-}
 
 
-parametersAsExprs :: Parameters ts -> TE.ExprList ts
+parametersAsExprs :: Parameters ts -> ExprList ts
 parametersAsExprs = hfmap parameterExpr
 {-# INLINEABLE parametersAsExprs #-}
 
-data FunctionToDeclare = FunctionToDeclare Text TE.UStmt
+data FunctionToDeclare = FunctionToDeclare Text UStmt
 
 data DeclCode t where
-  DeclRHS :: TE.UExpr t -> DeclCode t
-  DeclCodeF :: (TE.UExpr t -> TE.CodeWriter ()) -> DeclCode t
+  DeclRHS :: UExpr t -> DeclCode t
+  DeclCodeF :: (UExpr t -> SLC.CodeWriter ()) -> DeclCode t
 
-data TData :: TE.EType -> Type where
-  TData :: TE.NamedDeclSpec t
+data TData :: SLT.EType -> Type where
+  TData :: SLS.NamedDeclSpec t
         -> [FunctionToDeclare]
-        -> TE.TypedList TData ts
-        -> (TE.ExprList ts -> DeclCode t) -- code for the transformed data block
+        -> SLT.TypedList TData ts
+        -> (ExprList ts -> DeclCode t) -- code for the transformed data block
         -> TData t
 
 parameterTagFromTData :: TData t -> ParameterTag t
-parameterTagFromTData (TData (TE.NamedDeclSpec n (TE.DeclSpec st _ _)) _ _ _) = ParameterTag (TE.sTypeFromStanType st) n
-parameterTagFromTData (TData (TE.NamedDeclSpec n (TE.ArraySpec sn _ ds)) _ _ _) = ParameterTag (TE.sTypeFromStanType $ TE.StanArray sn $ TE.declType ds) n
---parameterTagFromTData (TData _ _ _ _) = error "parameterTagFromData called "
+parameterTagFromTData (TData (SLS.NamedDeclSpec n (SLS.DeclSpec st _ _)) _ _ _) = ParameterTag (SLT.sTypeFromStanType st) n
+parameterTagFromTData (TData (SLS.NamedDeclSpec n (SLS.ArraySpec sn _ ds)) _ _ _) = ParameterTag (SLT.sTypeFromStanType $ SLT.StanArray sn $ SLS.declType ds) n
+parameterTagFromTData (TData (SLS.NamedDeclSpec n (SLS.TupleSpec ts)) _ _ _) = ParameterTag (SLT.sTypeFromStanType $ SLT.StanTuple ts) n
 
+-- should we also check names?
 instance TestEquality TData where
   testEquality tda tdb = testEquality (f tda) (f tdb) where
-    f (TData (TE.NamedDeclSpec _ (TE.DeclSpec st _ _)) _ _ _) = TE.sTypeFromStanType st
-    f (TData (TE.NamedDeclSpec _ (TE.ArraySpec sn _ ds)) _ _ _) = TE.sTypeFromStanType $ TE.StanArray sn $ TE.declType ds
+    f (TData (SLS.NamedDeclSpec _ (SLS.DeclSpec st _ _)) _ _ _) = SLT.sTypeFromStanType st
+    f (TData (SLS.NamedDeclSpec _ (SLS.ArraySpec sn _ ds)) _ _ _) = SLT.sTypeFromStanType $ SLT.StanArray sn $ SLS.declType ds
+    f (TData (SLS.NamedDeclSpec _ (SLS.TupleSpec ts)) _ _ _) = SLT.sTypeFromStanType $ SLT.StanTuple ts
 
-
---withTData :: TData t -> (forall ts.TE.NamedDeclSpec t -> TE.TypedList TData ts -> (TE.ExprList ts -> TE.UExpr t) -> r) -> r
+--withTData :: TData t -> (forall ts.TE.NamedDeclSpec t -> TE.TypedList TData ts -> (TE.ExprList ts -> UExpr t) -> r) -> r
 --withTData (TData nds tds eF) f = f nds tds eF
 
 --tDataNamedDecl :: TData t -> TE.NamedDeclSpec t
@@ -185,25 +188,25 @@ data TransformedParameterLocation  where
   ModelBlock :: TransformedParameterLocation
   ModelBlockLocal :: TransformedParameterLocation
 
-data BuildParameter :: TE.EType -> Type where
+data BuildParameter :: SLT.EType -> Type where
   TransformedDataP :: TData t -> BuildParameter t
-  UntransformedP :: TE.NamedDeclSpec t
+  UntransformedP :: SLS.NamedDeclSpec t
                  -> [FunctionToDeclare]
                  -> Parameters qs
-                 -> (TE.ExprList qs -> TE.UExpr t -> TE.CodeWriter ()) -- prior in model block
+                 -> (ExprList qs -> UExpr t -> SLC.CodeWriter ()) -- prior in model block
                  -> BuildParameter t
-  TransformedP :: TE.NamedDeclSpec t
+  TransformedP :: SLS.NamedDeclSpec t
                -> [FunctionToDeclare]
                -> Parameters qs -- parameters for transformation
                -> TransformedParameterLocation
-               -> (TE.ExprList qs -> DeclCode t) -- code for transformation
+               -> (ExprList qs -> DeclCode t) -- code for transformation
                -> Parameters rs -- parameters for prior (if nec)
-               -> (TE.ExprList rs -> TE.UExpr t -> TE.CodeWriter ()) -- prior in model block (if nec)
+               -> (ExprList rs -> UExpr t -> SLC.CodeWriter ()) -- prior in model block (if nec)
                -> BuildParameter t
 
 instance TestEquality BuildParameter where
   testEquality bpa bpb = testEquality (f bpa) (f bpb) where
-    f = TE.sTypeFromStanType . TE.declType . TE.decl . getNamedDecl
+    f = SLT.sTypeFromStanType . SLS.declType . SLS.decl . getNamedDecl
 
 -- Parameter Dependencies types are scoped to stay within a `Parameter t`
 -- so to do anything which uses them, we need to use CPS
@@ -213,11 +216,11 @@ withBPDeps (UntransformedP _ _ ps _) f = f ps
 withBPDeps (TransformedP _ _ pq _ _ pr _) f = f pq <> f pr
 --withBPDeps (ModelP _ _ pq _ ) f = f pq
 
-data BParameterCollection = BParameterCollection { pdm :: DM.DMap ParameterTag BuildParameter, usedNames :: Set TE.StanName }
+data BParameterCollection = BParameterCollection { pdm :: DM.DMap ParameterTag BuildParameter, usedNames :: Set SLS.StanName }
 
 --type BuildParameters ts = TE.TypedList BuildParameter ts
 
-getNamedDecl :: BuildParameter t -> TE.NamedDeclSpec t --SB.StanBuilderM md gq (TE.NamedDeclSpec t)
+getNamedDecl :: BuildParameter t -> SLS.NamedDeclSpec t --SB.StanBuilderM md gq (TE.NamedDeclSpec t)
 getNamedDecl = \case
   TransformedDataP (TData nds _ _ _) -> nds
   UntransformedP x _ _ _ -> x
@@ -235,14 +238,14 @@ setNamedDecl x = \case
 -}
 --  TransformedDiffTypeP _ y z a b c d -> TransformedDiffTypeP x y z a b c d
 
-bParameterName :: BuildParameter t -> TE.StanName
-bParameterName = TE.declName . getNamedDecl
+bParameterName :: BuildParameter t -> SLS.StanName
+bParameterName = SLS.declName . getNamedDecl
 
-bParameterStanType :: BuildParameter t -> TE.StanType t
-bParameterStanType = TE.declType . TE.decl . getNamedDecl
+bParameterStanType :: BuildParameter t -> SLT.StanType t
+bParameterStanType = SLS.declType . SLS.decl . getNamedDecl
 
-bParameterSType :: BuildParameter t -> TE.SType t
-bParameterSType = TE.sTypeFromStanType . bParameterStanType
+bParameterSType :: BuildParameter t -> SLT.SType t
+bParameterSType = SLT.sTypeFromStanType . bParameterStanType
 
 addBuildParameterE :: BuildParameter t -> BParameterCollection -> Either Text (BParameterCollection, ParameterTag t)
 addBuildParameterE bp bpc = do
@@ -252,9 +255,9 @@ addBuildParameterE bp bpc = do
     then Left $ "Attempt to add " <> pName <> " to parameter collection but a parameter of that name is already present."
     else Right $ let ttn = parameterTagFromBP bp in (BParameterCollection (DM.insert ttn bp $ pdm bpc) (Set.insert pName $ usedNames bpc), ttn)
 
-lookupParameterExpressions :: Parameters ts -> DM.DMap ParameterTag TE.UExpr -> Either Text (TE.TypedList TE.UExpr ts)
+lookupParameterExpressions :: Parameters ts -> DM.DMap ParameterTag UExpr -> Either Text (SLT.TypedList UExpr ts)
 lookupParameterExpressions ps eMap = htraverse f ps where
-  f :: Parameter t -> Either Text (TE.UExpr t)
+  f :: Parameter t -> Either Text (UExpr t)
   f p = case p of
       GivenP e -> return e
       BuildP ttn -> do
@@ -264,8 +267,8 @@ lookupParameterExpressions ps eMap = htraverse f ps where
       MappedP g p' -> g <$> f p'
 --    MappedP g p -> g <$> f p
 
-lookupTDataExpressions :: TE.TypedList TData ts -> DM.DMap ParameterTag TE.UExpr -> Either Text (TE.TypedList TE.UExpr ts)
+lookupTDataExpressions :: SLT.TypedList TData ts -> DM.DMap ParameterTag UExpr -> Either Text (SLT.TypedList UExpr ts)
 lookupTDataExpressions tds = lookupParameterExpressions (hfmap (BuildP . parameterTagFromTData) tds)
 
-addBuiltExpressionToMap :: BuildParameter t -> TE.UExpr t -> DM.DMap ParameterTag UExpr -> DM.DMap ParameterTag UExpr
+addBuiltExpressionToMap :: BuildParameter t -> UExpr t -> DM.DMap ParameterTag UExpr -> DM.DMap ParameterTag UExpr
 addBuiltExpressionToMap bp  =  DM.insert (parameterTagFromBP bp)

@@ -17,17 +17,20 @@ where
 
 import qualified Stan.Builder.CoreTypes as SBC
 import qualified Stan.Language.Types as SLT
+import qualified Stan.Language.ASTContext as SLA
+import qualified Stan.Language.Expression as SLE
 import qualified Stan.Language.Expressions as SLE
 import qualified Stan.Language.Functions as SLF
 import qualified Stan.Language.Program as SLP
---import qualified Stan.Language.Format as SLF
+import qualified Stan.Language.Statement as SLS -- was TE
 import qualified Stan.Language.Statements as SLS -- was TE
---import qualified Stan.Builder.ParameterTypes as SBPT
+import qualified Stan.Language.CodeWriter as SLC
+
+import Control.Monad (unless)
 import qualified Control.Monad.Writer.Strict as W
 import qualified Data.Dependent.HashMap as DHash
 import qualified Data.Map.Strict as Map
 import qualified Data.Set as Set
---import qualified Data.List.NonEmpty as NE
 
 addStmtToCode :: SLS.UStmt -> SBC.StanBuilderM md gq ()
 addStmtToCode stmt = do
@@ -53,12 +56,12 @@ addStmtsToCodeTop stmts = do
   f <- SBC.stanBuildEither $ SLP.addStmtsToBlockTop cb stmts
   modifyCode f
 
-addFromCodeWriter :: SLS.CodeWriter a -> SBC.StanBuilderM md gq a
-addFromCodeWriter (SLS.CodeWriter cw) = addStmtsToCode stmts >> return a
+addFromCodeWriter :: SLC.CodeWriter a -> SBC.StanBuilderM md gq a
+addFromCodeWriter (SLC.CodeWriter cw) = addStmtsToCode stmts >> return a
   where (a, stmts) = W.runWriter cw
 
-addScopedFromCodeWriter :: SLS.CodeWriter a -> SBC.StanBuilderM md gq a
-addScopedFromCodeWriter (SLS.CodeWriter cw) = addStmtsToCode [SLS.scoped stmts] >> return a
+addScopedFromCodeWriter :: SLC.CodeWriter a -> SBC.StanBuilderM md gq a
+addScopedFromCodeWriter (SLC.CodeWriter cw) = addStmtsToCode [SLS.scoped $ SLS.grouped stmts] >> return a
   where (a, stmts) = W.runWriter cw
 
 modifyCode' :: (SLP.StanProgram -> SLP.StanProgram) -> SBC.BuilderState md gq -> SBC.BuilderState md gq
@@ -138,7 +141,7 @@ setDeclarationsNE dmNE SBC.GQScope sd = sd { SBC.gqScope = dmNE}
 declarationsInScope :: SBC.ScopedDeclarations -> NonEmpty SBC.DeclarationMap
 declarationsInScope sd = declarationsNE (SBC.currentScope sd) sd
 
-addVarInScope :: SLS.StanName -> SLT.StanType t -> SBC.StanBuilderM md gq (SLS.UExpr t)
+addVarInScope :: SLS.StanName -> SLT.StanType t -> SBC.StanBuilderM md gq (SLE.UExpr t)
 addVarInScope sn st = do
   let newSD sd = do
         _ <- alreadyDeclared sd sn st
@@ -203,7 +206,7 @@ withRowInfo missing presentF rtt =
       rowInfos <- SBC.gqRowBuilders <$> get
       maybe missing presentF $ DHash.lookup rtt rowInfos
 
-getDataSetBindings :: SBC.RowTypeTag r -> SBC.StanBuilderM md gq SLS.IndexArrayMap
+getDataSetBindings :: SBC.RowTypeTag r -> SBC.StanBuilderM md gq SLA.IndexArrayMap
 getDataSetBindings rtt = withRowInfo err (return .  SBC.expressionBindings) rtt where
   idt = SBC.inputDataType rtt
   err = SBC.stanBuildError $ "getDataSetbindings: row-info=" <> SBC.dataSetName rtt <> " not found in " <> show idt
@@ -211,7 +214,7 @@ getDataSetBindings rtt = withRowInfo err (return .  SBC.expressionBindings) rtt 
 setDataSetForBindings :: SBC.RowTypeTag r -> SBC.StanBuilderM md gq ()
 setDataSetForBindings rtt = do
   newUseBindings <- getDataSetBindings rtt
-  modify $ modifyIndexBindings (\lc -> lc { SLS.indexes = newUseBindings })
+  modify $ modifyIndexBindings (\lc -> lc { SLA.indexes = newUseBindings })
 
 useDataSetForBindings :: SBC.RowTypeTag r -> SBC.StanBuilderM md gq a -> SBC.StanBuilderM md gq a
 useDataSetForBindings rtt x = getDataSetBindings rtt >>= flip withUseBindings x
@@ -231,55 +234,55 @@ modifyDeclaredVarsA :: Applicative t
 modifyDeclaredVarsA f bs = (\x -> bs { SBC.declaredVars = x}) <$> f (SBC.declaredVars bs)
 -- (BuilderState dv vbs mrb gqrb cj hf c) = (\x -> BuilderState x vbs mrb gqrb cj hf c) <$> f dv
 
-modifyIndexBindings :: (SLS.IndexLookupCtxt -> SLS.IndexLookupCtxt)
+modifyIndexBindings :: (SLA.IndexLookupCtxt -> SLA.IndexLookupCtxt)
                     -> SBC.BuilderState md gq
                     -> SBC.BuilderState md gq
 modifyIndexBindings f bs = bs {SBC.indexBindings = f (SBC.indexBindings bs)}
 --(BuilderState dv vbs mrb gqrb cj hf c) = BuilderState dv (f vbs) mrb gqrb cj hf c
 
 modifyIndexBindingsA :: Applicative t
-                     => (SLS.IndexLookupCtxt -> t SLS.IndexLookupCtxt)
+                     => (SLA.IndexLookupCtxt -> t SLA.IndexLookupCtxt)
                      -> SBC.BuilderState md gq
                      -> t (SBC.BuilderState md gq)
 modifyIndexBindingsA f bs = (\x -> bs {SBC.indexBindings = x}) <$> f (SBC.indexBindings bs)
 --(BuilderState dv vbs mrb gqrb cj hf c) = (\x -> BuilderState dv x mrb gqrb cj hf c) <$> f vbs
 
-withUseBindings :: SLS.IndexArrayMap -> SBC.StanBuilderM md gq a -> SBC.StanBuilderM md gq a
+withUseBindings :: SLA.IndexArrayMap -> SBC.StanBuilderM md gq a -> SBC.StanBuilderM md gq a
 withUseBindings ubs m = do
   oldBindings <- SBC.indexBindings <$> get
-  modify $ modifyIndexBindings (\lc -> lc {SLS.indexes = ubs})
+  modify $ modifyIndexBindings (\lc -> lc {SLA.indexes = ubs})
   a <- m
   modify $ modifyIndexBindings $ const oldBindings
   return a
 
-extendUseBindings :: SLS.IndexArrayMap -> SBC.StanBuilderM md gq a -> SBC.StanBuilderM md gq a
+extendUseBindings :: SLA.IndexArrayMap -> SBC.StanBuilderM md gq a -> SBC.StanBuilderM md gq a
 extendUseBindings ubs' m = do
   oldBindings <- SBC.indexBindings <$> get
-  modify $ modifyIndexBindings (\lc -> lc {SLS.indexes = Map.union ubs' (SLS.indexes lc)})
+  modify $ modifyIndexBindings (\lc -> lc {SLA.indexes = Map.union ubs' (SLA.indexes lc)})
   a <- m
   modify $ modifyIndexBindings $ const oldBindings
   return a
 
-withDeclBindings :: SLS.IndexSizeMap -> SBC.StanBuilderM md gq a -> SBC.StanBuilderM md gq a
+withDeclBindings :: SLA.IndexSizeMap -> SBC.StanBuilderM md gq a -> SBC.StanBuilderM md gq a
 withDeclBindings dbs m = do
   oldBindings <- SBC.indexBindings <$> get
-  modify $ modifyIndexBindings (\lc -> lc {SLS.sizes = dbs})
+  modify $ modifyIndexBindings (\lc -> lc {SLA.sizes = dbs})
   a <- m
   modify $ modifyIndexBindings $ const oldBindings
   return a
 
-extendDeclBindings :: SLS.IndexSizeMap -> SBC.StanBuilderM md gq a -> SBC.StanBuilderM md gq a
+extendDeclBindings :: SLA.IndexSizeMap -> SBC.StanBuilderM md gq a -> SBC.StanBuilderM md gq a
 extendDeclBindings dbs' m = do
   oldBindings <- SBC.indexBindings <$> get
-  modify $ modifyIndexBindings (\lc -> lc {SLS.sizes = Map.union dbs' (SLS.sizes lc)})
+  modify $ modifyIndexBindings (\lc -> lc {SLA.sizes = Map.union dbs' (SLA.sizes lc)})
   a <- m
   modify $ modifyIndexBindings $ const oldBindings
   return a
 
-addScopedDeclBindings :: SLS.IndexSizeMap -> SBC.StanBuilderM env d a -> SBC.StanBuilderM env d a
+addScopedDeclBindings :: SLA.IndexSizeMap -> SBC.StanBuilderM env d a -> SBC.StanBuilderM env d a
 addScopedDeclBindings dbs' m = do
   oldBindings <- SBC.indexBindings <$> get
-  modify $ modifyIndexBindings (\lc -> lc {SLS.sizes = Map.union dbs' (SLS.sizes lc)})
+  modify $ modifyIndexBindings (\lc -> lc {SLA.sizes = Map.union dbs' (SLA.sizes lc)})
   a <- m
   modify $ modifyIndexBindings $ const oldBindings
   return a
@@ -317,17 +320,15 @@ addFunctionsOnce :: Text -> SBC.StanBuilderM md gq () -> SBC.StanBuilderM md gq 
 addFunctionsOnce functionsName fCode = do
 --  (BuilderState vars ibs rowBuilders cj fsNames code) <- get
   fsNames <- gets SBC.hasFunctions
-  if functionsName `Set.member` fsNames
-    then return ()
-    else (do
-             inBlock SLP.SBFunctions fCode
-             modify $ modifyFunctionNames $ Set.insert functionsName
-         )
+  Control.Monad.unless (functionsName `Set.member` fsNames) $ do
+    inBlock SLP.SBFunctions fCode
+    modify $ modifyFunctionNames $ Set.insert functionsName
 
-addFunctionOnce :: Traversable g
+
+addFunctionOnce :: SLT.AllGenSTypes ats
                 => SLF.Function rt ats
                 -> SLF.TypedArgNames ats
-                -> (SLE.ExprList ats -> (g SLS.UStmt, SLE.UExpr rt))
+                -> (SLE.ExprList ats -> (SLS.UStmt, SLE.UExpr rt))
                 -> SBC.StanBuilderM md gq (SLF.Function rt ats)
 addFunctionOnce f@(SLF.Function fn _ _) argNames fBF = do
   fsNames <- gets SBC.hasFunctions
@@ -337,14 +338,14 @@ addFunctionOnce f@(SLF.Function fn _ _) argNames fBF = do
   pure f
 addFunctionOnce f@(SLF.IdentityFunction _) _ _ = pure f
 
-addDensityOnce :: Traversable g
+addDensityOnce :: (SLT.AllGenSTypes ats, SLT.GenSType gt)
                => SLF.Density gt ats
                -> SLF.TypedArgNames (gt ': ats)
-               -> (SLE.ExprList (gt ': ats) -> (g SLS.UStmt, SLE.UExpr SLT.EReal))
+               -> (SLE.ExprList (gt ': ats) -> (SLS.UStmt, SLE.UExpr SLT.EReal))
                -> SBC.StanBuilderM md gq (SLF.Density gt ats)
 addDensityOnce f@(SLF.Density fn _ _) argNames fBF = do
   fsNames <- gets SBC.hasFunctions
-  when (not $  fn `Set.member` fsNames) $ do
+  unless (fn `Set.member` fsNames) $ do
     inBlock SLP.SBFunctions $ addStmtToCode $ SLS.function (SLF.densityAsFunction f) argNames fBF
     modify $ modifyFunctionNames (Set.insert fn)
   pure f
