@@ -138,10 +138,9 @@ arrayIndexList v = unK <$> Vec.toList v
 
 stanDeclHead :: forall t . SLS.DeclSpec (K CodePP) t -> CodePP
 stanDeclHead = \case
-  SLS.DeclSpec st iv vms -> case st of
-    StanSqMatrix -> PP.pretty (stanTypeName st) <> varModifiersToCode vms <> indexCodeL (declIndexList iv <> declIndexList iv) -- otherwise we only get one index
-    _ -> PP.pretty (stanTypeName st) <> varModifiersToCode vms <> indexCodeL (declIndexList iv)
-
+  SLS.ScalarSpec st vms -> PP.pretty (stanTypeName st) <> varModifiersToCode vms
+  SLS.VectorSpec st l vms -> PP.pretty (stanTypeName st) <> varModifiersToCode vms <> indexCodeL [unK l]
+  SLS.MatrixSpec st r c vms -> PP.pretty (stanTypeName st) <> varModifiersToCode vms <> indexCodeL [unK r, unK c]
   SLS.ArraySpec _sn iv ds -> arrayDeclHead iv ds
     where
       arrayDeclHead :: forall t' n' . (ScalarType t ~ ScalarType t') => Vec (DTN.S n') (K CodePP EInt) -> SLS.DeclSpec (K CodePP) t' -> CodePP

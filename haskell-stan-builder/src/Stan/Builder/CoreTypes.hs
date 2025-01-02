@@ -20,14 +20,12 @@ import qualified Stan.Language.Program as SLP
 import qualified Stan.Language.Format as SLF
 import qualified Stan.Language.ASTContext as SLA
 import qualified Stan.Language.Expression as SLE
-import qualified Stan.Language.Statement as SLS -- was TE
 import qualified Stan.Language.Statements as SLS -- was TE
 import qualified Stan.Builder.ParameterTypes as SBPT
 
 import Prelude hiding (All)
 import qualified Control.Foldl as Foldl
 import qualified Data.Aeson as Aeson
---import qualified Data.Array as Array
 import qualified Data.Dependent.HashMap as DHash
 import qualified Data.GADT.Compare as GADT
 import qualified Data.IntMap.Strict as IntMap
@@ -40,7 +38,6 @@ import qualified Type.Reflection as Reflection
 import qualified Data.GADT.Show as GADT
 import qualified Data.Dependent.Sum as DSum
 import qualified Data.Dependent.Map as DM
---import Stan.ModelConfig (InputDataType(..))
 
 type FunctionsBlock = T.Text
 type DataBlock = T.Text

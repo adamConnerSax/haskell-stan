@@ -36,7 +36,6 @@ import Stan.Language.Types
 import Stan.Language.Indexing
     ( Sliced,
       N0,
-      DeclIndexVecF (..)
     )
 import Stan.Language.Operations ( BinaryResultT, SBinaryOp)
 import Stan.Language.Functions
@@ -122,20 +121,26 @@ type VecToTListC f n = VecToSameTypedListF f EInt n
 type TListToVecC f n = SameTypedListToVecF f EInt n
 
 data DeclSpec :: (EType -> Type) -> EType -> Type  where
-  DeclSpec :: StanType t -> DeclIndexVecF r t -> VarModifiers r (ScalarType t) -> DeclSpec r t
+  ScalarSpec :: StanType t -> VarModifiers r (ScalarType t) -> DeclSpec r t
+  VectorSpec :: StanType t -> r EInt -> VarModifiers r (ScalarType t) -> DeclSpec r t
+  MatrixSpec :: StanType t -> r EInt -> r EInt -> VarModifiers r (ScalarType t) -> DeclSpec r t
   ArraySpec :: (forall f. VecToTListC f n, forall f.TListToVecC f n, GenSTypeList (SameTypeList EInt n))
     => DT.SNat (DT.S n) -> Vec.Vec (DT.S n) (r EInt) -> DeclSpec r t -> DeclSpec r (EArray (DT.S n) t)
   TupleSpec :: TypedList (DeclSpec r) ts -> DeclSpec r (ETuple ts)
 
 instance SLR.HFunctor DeclSpec where
   hfmap f = \case
-    DeclSpec st dv vm -> DeclSpec st (DeclIndexVecF $ Vec.map f $ unDeclIndexVecF dv) (SLR.hfmap f vm)
+    ScalarSpec st vm -> ScalarSpec st (SLR.hfmap f vm)
+    VectorSpec st l vm -> VectorSpec st (f l) (SLR.hfmap f vm)
+    MatrixSpec st r c vm -> MatrixSpec st (f r) (f c) (SLR.hfmap f vm)
     ArraySpec n dv ds -> ArraySpec n (Vec.map f dv) (SLR.hfmap f ds)
     TupleSpec dss -> TupleSpec $ SLR.hfmap (SLR.hfmap f) dss
 
 instance SLR.HTraversable DeclSpec where
   htraverse nat = \case
-    DeclSpec st dv vm -> (DeclSpec st . DeclIndexVecF <$> traverse nat (unDeclIndexVecF dv)) <*> SLR.htraverse nat vm
+    ScalarSpec st vm -> ScalarSpec st <$> SLR.htraverse nat vm
+    VectorSpec st l vm -> VectorSpec st <$> nat l <*> SLR.htraverse nat vm
+    MatrixSpec st r c vm -> MatrixSpec st <$> nat r <*> nat c <*> SLR.htraverse nat vm
     ArraySpec n dv ds -> ArraySpec n <$> traverse nat dv <*> SLR.htraverse nat ds
     TupleSpec dss -> TupleSpec <$> SLR.htraverse (SLR.htraverse nat) dss
   hmapM = SLR.htraverse

@@ -43,15 +43,13 @@ import qualified Stan.Language.CodeWriter as SLC
 import qualified Stan.Language.Functions as SLF
 import qualified Stan.Functions.Containers as SFC
 
---import qualified Control.Monad.State as St
---import qualified Stan.Language.StanFunctions as TE
 import Stan.Language.Recursion (hfmap, K(..))
 
 import qualified Data.Dependent.Map as DM
 import qualified Data.Dependent.Sum as DM
 import qualified Data.Graph as Gr
 import qualified Control.Foldl as FL
-import Data.Vec.Lazy (Vec(..))
+
 -- put Builder in collection and return a tag to add to anything wanting to use the parameter as a dependency
 
 addBuildParameter :: PT.BuildParameter t -> SBC.StanBuilderM md gq (PT.Parameter t)
@@ -227,7 +225,7 @@ addCenteredHierarchical nds ps d = addBuildParameter
 addNonCenteredParameter :: SLS.NamedDeclSpec t
                         -> PT.Parameters ts
                         -> PT.TransformedParameterLocation
-                        -> SLS.DeclSpec t
+                        -> SLS.DeclSpec SLE.UExpr t
                         -> SLF.Density t ts
                         -> PT.Parameters qs
                         -> (SLE.ExprList qs -> SLE.UExpr t -> SLE.UExpr t)
@@ -244,7 +242,7 @@ addNonCenteredParameter nds ps tpl rawDS rawD qs eF = do
 -- those should be dependencies, so use `nonCenteredParameters'
 simpleNonCentered :: SLS.NamedDeclSpec t
                   -> PT.TransformedParameterLocation
-                  -> SLS.DeclSpec t
+                  -> SLS.DeclSpec SLE.UExpr t
                   -> SLS.DensityWithArgs t
                   -> PT.Parameters qs
                   -> (SLE.ExprList qs -> SLE.UExpr t -> SLE.UExpr t)
@@ -269,21 +267,32 @@ addNonCenteredHierarchicalS nds tpl ps (SLS.DensityWithArgs d dArgs) =
 
 addTransformedHP :: SLS.NamedDeclSpec t
                  -> PT.TransformedParameterLocation
-                 -> Maybe [SLS.VarModifier SLE.UExpr (SLT.ScalarType t)]
+                 -> Maybe (SLS.VarModifiers SLE.UExpr (SLT.ScalarType t))
                  -> SLS.DensityWithArgs t
                  -> (SLE.UExpr t -> SLE.UExpr t)
                  -> SBC.StanBuilderM md gq (PT.Parameter t)
 addTransformedHP nds tpl rawCsM rawPrior fromRawF = do
   case SLS.decl nds of
-    SLS.DeclSpec st dims _ -> do
-      let rawNDS = SLS.NamedDeclSpec (rawName $ SLS.declName nds) $ maybe (SLS.decl nds) (SLS.DeclSpec st dims) rawCsM
+    SLS.ScalarSpec st _ -> do
+      let rawNDS = SLS.NamedDeclSpec (rawName $ SLS.declName nds) $ maybe (SLS.decl nds) (SLS.ScalarSpec st) rawCsM
+      rawP <- addIndependentPriorP rawNDS rawPrior
+      addBuildParameter $ simpleTransformedP nds [] (rawP :> TNil) tpl (\(e :> TNil) -> PT.DeclRHS $ fromRawF e)
+    SLS.VectorSpec st l _ -> do
+      let rawNDS = SLS.NamedDeclSpec (rawName $ SLS.declName nds) $ maybe (SLS.decl nds) (SLS.VectorSpec st l) rawCsM
+      rawP <- addIndependentPriorP rawNDS rawPrior
+      addBuildParameter $ simpleTransformedP nds [] (rawP :> TNil) tpl (\(e :> TNil) -> PT.DeclRHS $ fromRawF e) -- (ExprList qs -> DeclCode t)
+    SLS.MatrixSpec st r c _ -> do
+      let rawNDS = SLS.NamedDeclSpec (rawName $ SLS.declName nds) $ maybe (SLS.decl nds) (SLS.MatrixSpec st r c) rawCsM
       rawP <- addIndependentPriorP rawNDS rawPrior
       addBuildParameter $ simpleTransformedP nds [] (rawP :> TNil) tpl (\(e :> TNil) -> PT.DeclRHS $ fromRawF e) -- (ExprList qs -> DeclCode t)
     SLS.ArraySpec n arrDims ds -> do
       let rawNDS = SLS.NamedDeclSpec (rawName $ SLS.declName nds) $ maybe (SLS.decl nds) (\vms -> SLS.replaceDeclVMs vms (SLS.ArraySpec n arrDims ds)) rawCsM
       rawP <- addIndependentPriorP rawNDS rawPrior
       addBuildParameter $ simpleTransformedP nds [] (rawP :> TNil) tpl (\(e :> TNil) -> PT.DeclRHS $ fromRawF e) -- (ExprList qs -> DeclCode t)
---    SLS.TupleSpec sts ->
+    SLS.TupleSpec sts -> do -- this can't handle a change of constraints. Just removes them.
+      let rawNDS = SLS.NamedDeclSpec (rawName $ SLS.declName nds) $ SLS.removeVMs $ SLS.TupleSpec sts
+      rawP <- addIndependentPriorP rawNDS rawPrior
+      addBuildParameter $ simpleTransformedP nds [] (rawP :> TNil) tpl (\(e :> TNil) -> PT.DeclRHS $ fromRawF e) -- (ExprList qs -> DeclCode t)
 
 iidMatrixP :: SLS.NamedDeclSpec SLT.EMat
           -> [PT.FunctionToDeclare]
@@ -304,16 +313,19 @@ iidMatrixBP nds ftd ps d = PT.UntransformedP nds ftd ps
 -- this puts the prior on the raw parameters
 withIIDRawMatrix :: SLS.NamedDeclSpec SLT.EMat
                  -> PT.TransformedParameterLocation
-                 -> Maybe [SLS.VarModifier SLE.UExpr SLT.EReal] -- constraints on raw
+                 -> Maybe (SLS.VarModifiers SLE.UExpr SLT.EReal) -- constraints on raw
                  -> SLS.DensityWithArgs SLT.ECVec -- prior density on raw
                  -> PT.Parameters qs
                  -> (SLE.ExprList qs -> SLE.MatrixE -> SLE.MatrixE)
                  -> SBC.StanBuilderM md gq (PT.Parameter SLT.EMat)
 withIIDRawMatrix nds tpl rawCsM dwa qs f = do
- let SLS.DeclSpec _ (rowsE ::: colsE ::: VNil) _ = SLS.decl nds
-     rawNDS = SLS.NamedDeclSpec (rawName $ SLS.declName nds) $ SLS.addVMs (fromMaybe [] rawCsM) $ SLS.matrixSpec rowsE colsE
- rawP <- SLS.withDWA (\d tl -> iidMatrixP rawNDS [] (exprListToParameters tl) d) dwa
- addBuildParameter $ simpleTransformedP nds [] (rawP :> qs) tpl (\(rmE :> qsE) -> PT.DeclRHS $ f qsE rmE)
+  let (SLS.NamedDeclSpec _ ds) = nds
+  case ds of
+     SLS.MatrixSpec _ rowsE colsE _ -> do
+       let rawNDS = SLS.NamedDeclSpec (rawName $ SLS.declName nds) $ SLS.addVMs (fromMaybe SLS.NoModifiers rawCsM) $ SLS.matrixSpec rowsE colsE
+       rawP <- SLS.withDWA (\d tl -> iidMatrixP rawNDS [] (exprListToParameters tl) d) dwa
+       addBuildParameter $ simpleTransformedP nds [] (rawP :> qs) tpl (\(rmE :> qsE) -> PT.DeclRHS $ f qsE rmE)
+     _ -> SBC.stanBuildError "Parameters: withIIDRawMatrix called with non-matrix type!"
 
 {-
 -- this puts the prior on the transformed matrix

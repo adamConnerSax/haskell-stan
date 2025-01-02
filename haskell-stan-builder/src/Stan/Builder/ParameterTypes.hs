@@ -45,6 +45,7 @@ import Prelude hiding (All)
 
 import qualified Stan.Language.Types as SLT
 import Stan.Language.Statement (UStmt)
+import qualified Stan.Language.Statement as SLS
 import qualified Stan.Language.Statements as SLS
 import qualified Stan.Language.CodeWriter as SLC
 import Stan.Language.Recursion (hfmap, htraverse)
@@ -166,16 +167,21 @@ data TData :: SLT.EType -> Type where
         -> TData t
 
 parameterTagFromTData :: TData t -> ParameterTag t
-parameterTagFromTData (TData (SLS.NamedDeclSpec n (SLS.DeclSpec st _ _)) _ _ _) = ParameterTag (SLT.sTypeFromStanType st) n
+parameterTagFromTData (TData (SLS.NamedDeclSpec n (SLS.ScalarSpec st _)) _ _ _) = ParameterTag (SLT.sTypeFromStanType st) n
+parameterTagFromTData (TData (SLS.NamedDeclSpec n (SLS.VectorSpec st _ _)) _ _ _) = ParameterTag (SLT.sTypeFromStanType st) n
+parameterTagFromTData (TData (SLS.NamedDeclSpec n (SLS.MatrixSpec st _ _ _)) _ _ _) = ParameterTag (SLT.sTypeFromStanType st) n
 parameterTagFromTData (TData (SLS.NamedDeclSpec n (SLS.ArraySpec sn _ ds)) _ _ _) = ParameterTag (SLT.sTypeFromStanType $ SLT.StanArray sn $ SLS.declType ds) n
-parameterTagFromTData (TData (SLS.NamedDeclSpec n (SLS.TupleSpec ts)) _ _ _) = ParameterTag (SLT.sTypeFromStanType $ SLT.StanTuple ts) n
+parameterTagFromTData (TData (SLS.NamedDeclSpec n (SLS.TupleSpec ts)) _ _ _) = ParameterTag (SLT.sTypeFromStanType $ SLT.StanTuple $ hfmap SLS.declType ts) n
+--parameterTagFromTData (TData (SLS.NamedDeclSpec n (SLS.TupleSpec ts)) _ _ _) = ParameterTag (SLT.sTypeFromStanType $ SLT.StanTuple ts) n
 
 -- should we also check names?
 instance TestEquality TData where
   testEquality tda tdb = testEquality (f tda) (f tdb) where
-    f (TData (SLS.NamedDeclSpec _ (SLS.DeclSpec st _ _)) _ _ _) = SLT.sTypeFromStanType st
+    f (TData (SLS.NamedDeclSpec _ (SLS.ScalarSpec st _)) _ _ _) = SLT.sTypeFromStanType st
+    f (TData (SLS.NamedDeclSpec _ (SLS.VectorSpec st _ _)) _ _ _) = SLT.sTypeFromStanType st
+    f (TData (SLS.NamedDeclSpec _ (SLS.MatrixSpec st _ _ _)) _ _ _) = SLT.sTypeFromStanType st
     f (TData (SLS.NamedDeclSpec _ (SLS.ArraySpec sn _ ds)) _ _ _) = SLT.sTypeFromStanType $ SLT.StanArray sn $ SLS.declType ds
-    f (TData (SLS.NamedDeclSpec _ (SLS.TupleSpec ts)) _ _ _) = SLT.sTypeFromStanType $ SLT.StanTuple ts
+    f (TData (SLS.NamedDeclSpec _ (SLS.TupleSpec ts)) _ _ _) = SLT.sTypeFromStanType $ SLT.StanTuple $ hfmap SLS.declType ts
 
 --withTData :: TData t -> (forall ts.TE.NamedDeclSpec t -> TE.TypedList TData ts -> (TE.ExprList ts -> UExpr t) -> r) -> r
 --withTData (TData nds tds eF) f = f nds tds eF

@@ -131,8 +131,8 @@ type family ScalarType (et :: EType) :: EType where
   ScalarType EComplex = EComplex
   ScalarType (ETuple '[]) = TE.TypeError (TE.Text "ScalarType: 0-Tuple has no scalar type and is not allowed!")
   ScalarType (ETuple '[e]) = TE.TypeError (TE.Text "ScalarType: 1-Tuple is not allowed!")
-  ScalarType (ETuple es) = TE.TypeError (TE.Text "ScalarType: n-Tuple has no scalar type!")
-  ScalarType a = TE.TypeError (TE.Text "ScalarType: " TE.:<>: TE.ShowType a TE.:<>: TE.Text " has no scalar type")
+  ScalarType (ETuple es) = EVoid --TE.TypeError (TE.Text "ScalarType: n-Tuple has no scalar type!")
+  ScalarType a = EVoid --TE.TypeError (TE.Text "ScalarType: " TE.:<>: TE.ShowType a TE.:<>: TE.Text " has no scalar type")
 
 type family IsContainer (t :: EType) :: Constraint where
   IsContainer ECVec = ()
