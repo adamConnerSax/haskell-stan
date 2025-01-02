@@ -22,6 +22,7 @@ module Stan.Functions.Operators
   )
   where
 
+import qualified Stan.Language.Expression as SLE
 import qualified Stan.Language.Expressions as SLE
 import qualified Stan.Language.Operations as SLO
 

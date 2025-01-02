@@ -25,11 +25,13 @@ module Stan.Functions.Containers
 import qualified Stan.Functions.Constraints as SFC
 
 import qualified Stan.Language.Types as SLT
-import qualified Stan.Language.TypedList as SLTL
-import Stan.Language.TypedList (TypedList(..))
+--import qualified Stan.Language.Types as SLTL
+import Stan.Language.Types (TypedList(..))
 import qualified Stan.Language.Functions as SLF
+import qualified Stan.Language.Expression as SLE
 import qualified Stan.Language.Expressions as SLE
 
+import Data.Nat (Nat(S, Z))
 import Data.Type.Nat (SNatI)
 import Prelude hiding (Nat)
 
@@ -102,16 +104,16 @@ rep_array = simpleFunction "rep_array"
 
 -}
 -- this pleases me
-rep_array' :: (SFC.GenSType t, SLTL.GenTypeList (SLTL.SameTypeList SLT.EInt n), SNatI n) => SLF.Function (SLT.EArray n t) (t ': SLTL.SameTypeList SLT.EInt n)
+rep_array' :: (SFC.GenSType t, SLT.GenSTypeList (SLT.SameTypeList SLT.EInt n), SNatI n) => SLF.Function (SLT.EArray n t) (t ': SLT.SameTypeList SLT.EInt n)
 rep_array' = SLF.simpleFunction "rep_array"
 
-rep_array1 :: SFC.GenSType t => SLE.UExpr t -> SLE.IntE -> SLE.UExpr (SLT.EArray (SLT.S SLT.Z) t)
+rep_array1 :: SFC.GenSType t => SLE.UExpr t -> SLE.IntE -> SLE.UExpr (SLT.EArray (S Z) t)
 rep_array1 x n = SLE.functionE rep_array' (x :> n :> TNil)
 
-rep_array2 ::  SFC.GenSType t => SLE.UExpr t -> SLE.IntE -> SLE.IntE -> SLE.UExpr (SLT.EArray (SLT.S (SLT.S SLT.Z)) t)
+rep_array2 ::  SFC.GenSType t => SLE.UExpr t -> SLE.IntE -> SLE.IntE -> SLE.UExpr (SLT.EArray (S (S Z)) t)
 rep_array2 x n m = SLE.functionE rep_array' (x :> n :> m :> TNil)
 
-rep_array3 ::  SFC.GenSType t => SLE.UExpr t -> SLE.IntE -> SLE.IntE -> SLE.IntE -> SLE.UExpr (SLT.EArray (SLT.S (SLT.S (SLT.S SLT.Z))) t)
+rep_array3 ::  SFC.GenSType t => SLE.UExpr t -> SLE.IntE -> SLE.IntE -> SLE.IntE -> SLE.UExpr (SLT.EArray (S (S (S Z))) t)
 rep_array3 x n m l = SLE.functionE rep_array' (x :> n :> m :> l :> TNil)
 
 

@@ -24,8 +24,9 @@ module Stan.Functions.Numeric
 
 import qualified Stan.Functions.Constraints as SFC
 import qualified Stan.Language.Types as SLT
-import Stan.Language.TypedList (TypedList(..))
+import Stan.Language.Types (TypedList(..))
 import qualified Stan.Language.Functions as SLF
+import qualified Stan.Language.Expression as SLE
 import qualified Stan.Language.Expressions as SLE
 
 vectorizedRealFunction :: SFC.VectorizedReal t => Text -> SLE.UExpr t -> SLE.UExpr t
@@ -43,6 +44,7 @@ log1m = vectorizedRealFunction "log1m"
 atanh = vectorizedRealFunction "atanh"
 inv = vectorizedRealFunction "inv"
 abs = vectorizedRealFunction "abs"
+
 -- vectorized log of real-valued binomial coefficient
 -- see: https://mc-stan.org/docs/functions-reference/betafun.html
 lChoose = vectorizedRealFunction "lChoose"

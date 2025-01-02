@@ -23,9 +23,10 @@ module Stan.Functions.Probability
   where
 import qualified Stan.Functions.Constraints as SFC
 import qualified Stan.Language.Types as SLT
-import Stan.Language.TypedList (TypedList(..))
+import Stan.Language.Types (TypedList(..))
 import qualified Stan.Language.Functions as SLF
 import qualified Stan.Language.Indexing as SLI
+import qualified Stan.Language.Expression as SLE
 import qualified Stan.Language.Expressions as SLE
 
 import Prelude hiding (Nat)
