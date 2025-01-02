@@ -6,16 +6,12 @@
 {-# LANGUAGE PolyKinds #-}
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE ScopedTypeVariables #-}
-{-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE TypeFamilies #-}
-{-# LANGUAGE TypeOperators #-}
 {-# LANGUAGE UndecidableInstances #-}
 {-# LANGUAGE AllowAmbiguousTypes #-}
-{-# LANGUAGE TypeSynonymInstances #-}
-{-# OPTIONS_GHC -fwarn-incomplete-patterns #-}
-{-# LANGUAGE StandaloneKindSignatures #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE FlexibleInstances #-}
+{-# OPTIONS_GHC -fwarn-incomplete-patterns #-}
 
 module Stan.Language.Types.StanType
   (
@@ -32,8 +28,6 @@ import qualified Stan.Language.Types.TypedList as SLTT
 import Data.Type.Nat (SNat(..))
 import qualified Data.Type.Nat as DT
 import Stan.Language.Recursion (hfmap)
-
-import qualified Data.Text as Text
 
 data StanType :: SLTE.EType -> Type where
   StanInt :: StanType SLTE.EInt
@@ -84,9 +78,7 @@ stanTypeName = \case
   StanCholeskyFactorCorr -> "cholesky_factor_corr"
   StanCovMatrix -> "cov_matrix"
   StanCholeskyFactorCov -> "cholesky_factor_cov"
-  StanTuple ts -> "tuple("
-                  <> Text.intercalate ", " (reverse (SLTT.foldTypedList (\st ts' -> stanTypeName st : ts') [] ts))
-                  <> ")"
+  StanTuple _ts -> "tuple"
 
 eTypeFromStanType :: StanType t -> SLTE.EType
 eTypeFromStanType = \case

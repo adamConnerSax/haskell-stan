@@ -100,7 +100,7 @@ as = addStmt
 addStmts :: Traversable f => f SLS.UStmt -> CodeWriter ()
 addStmts = traverse_ addStmt
 
-declareW :: Text -> SLSS.DeclSpec t -> CodeWriter (UExpr t)
+declareW :: Text -> SLS.DeclSpec UExpr t -> CodeWriter (UExpr t)
 declareW t ds = do
   addStmt $ SLSS.declare t ds
   return $ namedE t (sTypeFromStanType $ SLSS.declType ds)
@@ -110,7 +110,7 @@ declareNW nds = do
   addStmt $ SLSS.declareN nds
   return $ namedE (SLSS.declName nds) (sTypeFromStanType $ SLSS.declType $ SLSS.decl nds)
 
-declareRHSW :: Text -> SLSS.DeclSpec t -> UExpr t -> CodeWriter (UExpr t)
+declareRHSW :: Text -> SLS.DeclSpec UExpr t -> UExpr t -> CodeWriter (UExpr t)
 declareRHSW t ds rhs = do
   addStmt $ SLSS.declareAndAssign t ds rhs
   return $ namedE t (sTypeFromStanType $ SLSS.declType ds)

@@ -30,11 +30,13 @@ import Stan.Language.Types
     StanType(..),
     TypedList,
     AllGenSTypes,
+    VecToSameTypedListF,
+    SameTypedListToVecF, SameTypeList, GenSTypeList
     )
 import Stan.Language.Indexing
     ( Sliced,
       N0,
-      DeclIndexVecF
+      DeclIndexVecF (..)
     )
 import Stan.Language.Operations ( BinaryResultT, SBinaryOp)
 import Stan.Language.Functions
@@ -46,6 +48,8 @@ import Stan.Language.Functions
 import Prelude hiding (Nat)
 import Relude.Extra
 import qualified Data.Functor.Foldable as RS
+import qualified Data.Vec.Lazy as Vec
+import qualified Data.Type.Nat as DT
 
 type family ForEachSlice (a :: EType) :: EType where
   ForEachSlice EInt = EInt -- required for looping over ranges. But Ick.
@@ -85,6 +89,57 @@ instance SLR.HTraversable VarModifier where
     VarMultiplier x -> VarMultiplier <$> nat x
   hmapM = SLR.htraverse
 
+data VarModifiers :: (EType -> Type) -> EType -> Type where
+  Modifiers :: [VarModifier r t] -> VarModifiers r t
+  NoModifiers :: VarModifiers r t
+
+instance Semigroup (VarModifiers r t) where
+  Modifiers a <> Modifiers b = Modifiers $ a <> b
+  Modifiers a <> NoModifiers = Modifiers a
+  NoModifiers <> Modifiers a = Modifiers a
+  NoModifiers <> NoModifiers = NoModifiers
+
+instance SLR.HFunctor VarModifiers where
+  hfmap f = \case
+    Modifiers ms -> Modifiers $ fmap (SLR.hfmap f) ms
+    NoModifiers -> NoModifiers
+
+instance SLR.HTraversable VarModifiers where
+  htraverse nat = \case
+    Modifiers ms -> Modifiers <$> traverse (SLR.htraverse nat) ms
+    NoModifiers -> pure NoModifiers
+  hmapM = SLR.htraverse
+
+{-
+type family VarModifierType (r :: EType -> Type) (e :: EType) :: Type where
+  VarModifierType _ (ETuple _) = ()
+  VarModifierType _ EString = ()
+  VarModifierType _ EVoid = ()
+  VarModifierType _ EBool = ()
+  VarModifierType r t = VarModifier r (ScalarType t)
+-}
+type VecToTListC f n = VecToSameTypedListF f EInt n
+type TListToVecC f n = SameTypedListToVecF f EInt n
+
+data DeclSpec :: (EType -> Type) -> EType -> Type  where
+  DeclSpec :: StanType t -> DeclIndexVecF r t -> VarModifiers r (ScalarType t) -> DeclSpec r t
+  ArraySpec :: (forall f. VecToTListC f n, forall f.TListToVecC f n, GenSTypeList (SameTypeList EInt n))
+    => DT.SNat (DT.S n) -> Vec.Vec (DT.S n) (r EInt) -> DeclSpec r t -> DeclSpec r (EArray (DT.S n) t)
+  TupleSpec :: TypedList (DeclSpec r) ts -> DeclSpec r (ETuple ts)
+
+instance SLR.HFunctor DeclSpec where
+  hfmap f = \case
+    DeclSpec st dv vm -> DeclSpec st (DeclIndexVecF $ Vec.map f $ unDeclIndexVecF dv) (SLR.hfmap f vm)
+    ArraySpec n dv ds -> ArraySpec n (Vec.map f dv) (SLR.hfmap f ds)
+    TupleSpec dss -> TupleSpec $ SLR.hfmap (SLR.hfmap f) dss
+
+instance SLR.HTraversable DeclSpec where
+  htraverse nat = \case
+    DeclSpec st dv vm -> (DeclSpec st . DeclIndexVecF <$> traverse nat (unDeclIndexVecF dv)) <*> SLR.htraverse nat vm
+    ArraySpec n dv ds -> ArraySpec n <$> traverse nat dv <*> SLR.htraverse nat ds
+    TupleSpec dss -> TupleSpec <$> SLR.htraverse (SLR.htraverse nat) dss
+  hmapM = SLR.htraverse
+
 data StmtBlock = FunctionsStmts
                | DataStmts
                | TDataStmts
@@ -97,8 +152,8 @@ data GroupType = Bracketed | UnBracketed | Scoping deriving stock (Show, Eq)
 
 -- Statements
 data Stmt :: (EType -> Type) -> Type where
-  SDeclare ::  Text -> StanType et -> DeclIndexVecF r et -> [VarModifier r (ScalarType et)] -> Stmt r
-  SDeclAssign :: Text -> StanType et -> DeclIndexVecF r et -> [VarModifier r (ScalarType et)] -> r et -> Stmt r
+  SDeclare ::  Text -> DeclSpec r et -> Stmt r
+  SDeclAssign :: Text -> DeclSpec r et -> r et -> Stmt r
   SAssign :: r t -> r t -> Stmt r
   SOpAssign :: (ta ~ BinaryResultT op ta tb) => SBinaryOp op -> r ta -> r tb -> Stmt r
   STarget :: r EReal -> Stmt r
@@ -120,8 +175,8 @@ data Stmt :: (EType -> Type) -> Type where
   SContext :: (SLA.ASTCtxt -> SLA.ASTCtxt) -> Stmt r
 
 data StmtF :: (EType -> Type) -> Type -> Type where
-  SDeclareF ::  Text -> StanType et -> DeclIndexVecF r et -> [VarModifier r (ScalarType et)] -> StmtF r a
-  SDeclAssignF :: Text -> StanType et -> DeclIndexVecF r et -> [VarModifier r (ScalarType et)] -> r et -> StmtF r a
+  SDeclareF ::  Text -> DeclSpec r et -> StmtF r a
+  SDeclAssignF :: Text -> DeclSpec r et -> r et -> StmtF r a
   SAssignF :: r t -> r t -> StmtF r a
   SOpAssignF :: (ta ~ BinaryResultT op ta tb) => SBinaryOp op -> r ta -> r tb -> StmtF r a
   STargetF :: r EReal -> StmtF r a
@@ -152,8 +207,8 @@ instance Semigroup (Stmt a) where
 
 instance Functor (StmtF f) where
   fmap f x = case x of
-    SDeclareF txt st divf vms -> SDeclareF txt st divf vms
-    SDeclAssignF txt st divf vms rhse -> SDeclAssignF txt st divf vms rhse
+    SDeclareF txt ds -> SDeclareF txt ds
+    SDeclAssignF txt ds rhse -> SDeclAssignF txt ds rhse
     SAssignF ft ft' -> SAssignF ft ft'
     SOpAssignF op ft ft' -> SOpAssignF op ft ft'
     STargetF f' -> STargetF f'
@@ -200,8 +255,8 @@ instance Foldable (StmtF f) where
 
 instance Traversable (StmtF f) where
   traverse g = \case
-    SDeclareF txt st divf vms -> pure $ SDeclareF txt st divf vms
-    SDeclAssignF txt st divf vms fet -> pure $ SDeclAssignF txt st divf vms fet
+    SDeclareF txt ds -> pure $ SDeclareF txt ds
+    SDeclAssignF txt ds fet -> pure $ SDeclAssignF txt ds fet
     SAssignF ft ft' -> pure $ SAssignF ft ft'
     SOpAssignF op ft ft' -> pure $ SOpAssignF op ft ft'
     STargetF f -> pure $ STargetF f
@@ -224,8 +279,8 @@ instance Traversable (StmtF f) where
 
 instance Functor (RS.Base (Stmt f)) => RS.Recursive (Stmt f) where
   project = \case
-    SDeclare txt st divf vms -> SDeclareF txt st divf vms
-    SDeclAssign txt st divf vms fet -> SDeclAssignF txt st divf vms fet
+    SDeclare txt ds -> SDeclareF txt ds
+    SDeclAssign txt ds fet -> SDeclAssignF txt ds fet
     SAssign ft ft' -> SAssignF ft ft'
     SOpAssign op ft ft' -> SOpAssignF op ft ft'
     STarget f -> STargetF f
@@ -248,8 +303,8 @@ instance Functor (RS.Base (Stmt f)) => RS.Recursive (Stmt f) where
 
 instance Functor (RS.Base (Stmt f)) => RS.Corecursive (Stmt f) where
   embed = \case
-    SDeclareF txt st divf vms -> SDeclare txt st divf vms
-    SDeclAssignF txt st divf vms fet -> SDeclAssign txt st divf vms fet
+    SDeclareF txt ds -> SDeclare txt ds
+    SDeclAssignF txt ds fet -> SDeclAssign txt ds fet
     SAssignF ft ft' -> SAssign ft ft'
     SOpAssignF op ft ft' -> SOpAssign op ft ft'
     STargetF f -> STarget f
@@ -272,8 +327,8 @@ instance Functor (RS.Base (Stmt f)) => RS.Corecursive (Stmt f) where
 
 instance SLR.HFunctor StmtF where
   hfmap nat = \case
-    SDeclareF txt st divf vms -> SDeclareF txt st (SLR.hfmap nat divf) (fmap (SLR.hfmap nat) vms)
-    SDeclAssignF txt st divf vms rhe -> SDeclAssignF txt st (SLR.hfmap nat divf) (fmap (SLR.hfmap nat) vms) (nat rhe)
+    SDeclareF txt ds -> SDeclareF txt (SLR.hfmap nat ds)
+    SDeclAssignF txt ds rhe -> SDeclAssignF txt (SLR.hfmap nat ds) (nat rhe)
     SAssignF lhe rhe -> SAssignF (nat lhe) (nat rhe)
     SOpAssignF op lhe rhe -> SOpAssignF op (nat lhe) (nat rhe)
     STargetF rhe -> STargetF (nat rhe)
@@ -296,8 +351,8 @@ instance SLR.HFunctor StmtF where
 
 instance SLR.HTraversable StmtF where
   htraverse natM = \case
-    SDeclareF txt st indexEs vms -> SDeclareF txt st <$> SLR.htraverse natM indexEs <*> traverse (SLR.htraverse natM) vms
-    SDeclAssignF txt st indexEs vms rhe -> SDeclAssignF txt st <$> SLR.htraverse natM indexEs <*> traverse (SLR.htraverse natM) vms <*> natM rhe
+    SDeclareF txt ds -> SDeclareF txt <$> SLR.htraverse natM ds
+    SDeclAssignF txt ds rhe -> SDeclAssignF txt <$> SLR.htraverse natM ds <*> natM rhe
     SAssignF lhe rhe -> SAssignF <$> natM lhe <*> natM rhe
     SOpAssignF op lhe rhe -> SOpAssignF op <$> natM lhe <*> natM rhe
     STargetF re -> STargetF <$> natM re

@@ -21,7 +21,9 @@ module Stan.Language.Statements
   )
   where
 
+import qualified Stan.Language.Recursion as SLR
 import qualified Stan.Language.Statement as SLS
+import Stan.Language.Statement (DeclSpec(..))
 import qualified Stan.Language.ASTContext as SLA
 import qualified Stan.Language.Expression as SLE
 import Stan.Language.Expressions
@@ -39,18 +41,17 @@ import Stan.Language.Types
       ScalarType,
       StanType(..),
       TypedList(TNil, (:>)),
-      VecToSameTypedListF,
-      SameTypedListToVecF,
       GenSTypeList,
       SameTypeList,
       AllGenSTypes,
       vecToSameTypedListF,
       zipTypedListsWith,
+      VecToSameTypedListF
     )
 import Stan.Language.Indexing
     ( Vec(..),
       DeclDimension,
-      DeclIndexVecF(DeclIndexVecF),
+      DeclIndexVecF(DeclIndexVecF, unDeclIndexVecF),
       N1,
       s1,
       N2,
@@ -77,144 +78,135 @@ import qualified Data.Map.Strict as Map
 
 type StanName = Text
 
-type VecToTListC f n = VecToSameTypedListF f EInt n
-type TListToVecC f n = SameTypedListToVecF f EInt n
 
 --type VecToTListAC n t = VecToSameTypedListF SLE.UExpr EInt (n `DT.Plus` DeclDimension t)
 
-data DeclSpec t where
-  DeclSpec :: StanType t -> Vec (DeclDimension t) (SLE.UExpr EInt) -> [SLS.VarModifier SLE.UExpr (ScalarType t)] -> DeclSpec t
-  ArraySpec :: (forall f. VecToTListC f n, forall f.TListToVecC f n, GenSTypeList (SameTypeList EInt n))
-    => SNat (DT.S n) -> Vec (DT.S n) (SLE.UExpr EInt) -> DeclSpec t -> DeclSpec (EArray (DT.S n) t)
-  TupleSpec :: TypedList StanType ts -> DeclSpec (ETuple ts)
 
-data NamedDeclSpec t = NamedDeclSpec StanName (DeclSpec t)
+data NamedDeclSpec t = NamedDeclSpec StanName (DeclSpec SLE.UExpr t)
 
 declName :: NamedDeclSpec t -> StanName
 declName (NamedDeclSpec n _) = n
 
-decl :: NamedDeclSpec t -> DeclSpec t
+decl :: NamedDeclSpec t -> DeclSpec SLE.UExpr t
 decl (NamedDeclSpec _ ds) = ds
 
-declType :: DeclSpec t -> StanType t
+declType :: DeclSpec SLE.UExpr t -> StanType t
 declType (DeclSpec st _ _) = st
 declType (ArraySpec n _ ds) = StanArray n (declType ds)
-declType (TupleSpec ts) = StanTuple ts
+declType (TupleSpec ts) = StanTuple $ SLR.hfmap declType ts
 
-declDims :: DeclSpec t -> Vec (DeclDimension t) (SLE.UExpr EInt)
-declDims (DeclSpec _ dims _) = dims
+declDims :: DeclSpec SLE.UExpr t -> Vec (DeclDimension t) (SLE.UExpr EInt)
+declDims (DeclSpec _ dims _) = unDeclIndexVecF dims
 declDims (ArraySpec _ dims ds) = dims Vec.++ declDims ds
 declDims (TupleSpec _) = VNil
 
-declVMS :: DeclSpec t -> [SLS.VarModifier SLE.UExpr (ScalarType t)]
+{-
+declVMS :: DeclSpec t -> SLS.VarModifiers SLE.UExpr (ScalarType t)
 declVMS (DeclSpec _ _ vms) = vms
 declVMS (ArraySpec _ _ ids) = declVMS ids
 declVMS (TupleSpec _) = []
+-}
 
-replaceDeclVMs :: [SLS.VarModifier SLE.UExpr (ScalarType t)] -> DeclSpec t -> DeclSpec t
+replaceDeclVMs :: SLS.VarModifiers r (ScalarType t) -> DeclSpec r t -> DeclSpec r t
 replaceDeclVMs vms = \case
   DeclSpec st vdims _-> DeclSpec st vdims vms
   ArraySpec n arrDims ds -> ArraySpec n arrDims (replaceDeclVMs vms ds)
-  TupleSpec sts -> TupleSpec sts
+  TupleSpec _sts -> error "Can't replace constraints on a tuple. Need to do it one item at a time?" --TupleSpec sts
 
-addVMs :: [SLS.VarModifier SLE.UExpr (ScalarType t)] -> DeclSpec t -> DeclSpec t
+addVMs :: SLS.VarModifiers r (ScalarType t) -> DeclSpec r t -> DeclSpec r t
 addVMs vms' = \case
   DeclSpec st vdims vms -> DeclSpec st vdims (vms <> vms')
   ArraySpec n arrDims ds -> ArraySpec n arrDims (addVMs vms' ds)
-  TupleSpec sts -> TupleSpec sts
+  TupleSpec _sts -> error "Can't add constraints to a tuple. Need to do it one item at a time?" --TupleSpec sts
 
-intSpec :: DeclSpec EInt
-intSpec = DeclSpec StanInt VNil []
+intSpec :: DeclSpec SLE.UExpr EInt
+intSpec = DeclSpec StanInt (DeclIndexVecF VNil) SLS.NoModifiers
 
-realSpec :: DeclSpec EReal
-realSpec = DeclSpec StanReal VNil []
+realSpec :: DeclSpec SLE.UExpr EReal
+realSpec = DeclSpec StanReal (DeclIndexVecF VNil) SLS.NoModifiers
 
-complexSpec :: DeclSpec EComplex
-complexSpec = DeclSpec StanComplex VNil []
+complexSpec :: DeclSpec SLE.UExpr EComplex
+complexSpec = DeclSpec StanComplex (DeclIndexVecF VNil) SLS.NoModifiers
 
-vectorSpec :: SLE.UExpr EInt -> DeclSpec ECVec
-vectorSpec ie = DeclSpec StanVector (ie ::: VNil) []
+vectorSpec :: SLE.UExpr EInt -> DeclSpec SLE.UExpr ECVec
+vectorSpec ie = DeclSpec StanVector (DeclIndexVecF $ ie ::: VNil) SLS.NoModifiers
 
-rowVectorSpec :: SLE.UExpr EInt -> DeclSpec ERVec
-rowVectorSpec ie = DeclSpec StanRowVector (ie ::: VNil) []
+rowVectorSpec :: SLE.UExpr EInt -> DeclSpec SLE.UExpr ERVec
+rowVectorSpec ie = DeclSpec StanRowVector (DeclIndexVecF $ ie ::: VNil) SLS.NoModifiers
 
-orderedSpec :: SLE.UExpr EInt -> DeclSpec ECVec
-orderedSpec ie = DeclSpec StanOrdered (ie ::: VNil) []
+orderedSpec :: SLE.UExpr EInt -> DeclSpec SLE.UExpr ECVec
+orderedSpec ie = DeclSpec StanOrdered (DeclIndexVecF $ ie ::: VNil) SLS.NoModifiers
 
-positiveOrderedSpec :: SLE.UExpr EInt -> DeclSpec ECVec
-positiveOrderedSpec ie = DeclSpec StanPositiveOrdered (ie ::: VNil) []
+positiveOrderedSpec :: SLE.UExpr EInt -> DeclSpec SLE.UExpr ECVec
+positiveOrderedSpec ie = DeclSpec StanPositiveOrdered (DeclIndexVecF $ ie ::: VNil) SLS.NoModifiers
 
-simplexSpec :: SLE.UExpr EInt -> DeclSpec ECVec
-simplexSpec ie = DeclSpec StanSimplex (ie ::: VNil) []
+simplexSpec :: SLE.UExpr EInt -> DeclSpec SLE.UExpr ECVec
+simplexSpec ie = DeclSpec StanSimplex (DeclIndexVecF $ ie ::: VNil) SLS.NoModifiers
 
-unitVectorSpec :: SLE.UExpr EInt -> DeclSpec ECVec
-unitVectorSpec ie = DeclSpec StanUnitVector (ie ::: VNil) []
+unitVectorSpec :: SLE.UExpr EInt -> DeclSpec SLE.UExpr ECVec
+unitVectorSpec ie = DeclSpec StanUnitVector (DeclIndexVecF $ ie ::: VNil) SLS.NoModifiers
 
-matrixSpec :: SLE.UExpr EInt -> SLE.UExpr EInt -> DeclSpec EMat
-matrixSpec re ce = DeclSpec StanMatrix (re ::: ce ::: VNil) []
+matrixSpec :: SLE.UExpr EInt -> SLE.UExpr EInt -> DeclSpec SLE.UExpr EMat
+matrixSpec re ce = DeclSpec StanMatrix (DeclIndexVecF $ re ::: ce ::: VNil) SLS.NoModifiers
 
-sqMatrixSpec :: SLE.UExpr EInt -> DeclSpec ESqMat
-sqMatrixSpec ne = DeclSpec StanSqMatrix (ne ::: VNil) []
+sqMatrixSpec :: SLE.UExpr EInt -> DeclSpec SLE.UExpr ESqMat
+sqMatrixSpec ne = DeclSpec StanSqMatrix (DeclIndexVecF $ ne ::: VNil) SLS.NoModifiers
 
-corrMatrixSpec :: SLE.UExpr EInt -> DeclSpec ESqMat
-corrMatrixSpec rce = DeclSpec StanCorrMatrix (rce ::: VNil) []
+corrMatrixSpec :: SLE.UExpr EInt -> DeclSpec SLE.UExpr ESqMat
+corrMatrixSpec rce = DeclSpec StanCorrMatrix (DeclIndexVecF $ rce ::: VNil) SLS.NoModifiers
 
-covMatrixSpec :: SLE.UExpr EInt -> DeclSpec ESqMat
-covMatrixSpec rce = DeclSpec StanCovMatrix (rce ::: VNil) []
+covMatrixSpec :: SLE.UExpr EInt -> DeclSpec SLE.UExpr ESqMat
+covMatrixSpec rce = DeclSpec StanCovMatrix (DeclIndexVecF $ rce ::: VNil) SLS.NoModifiers
 
-choleskyFactorCorrSpec :: SLE.UExpr EInt -> DeclSpec ESqMat
-choleskyFactorCorrSpec rce = DeclSpec StanCholeskyFactorCorr (rce ::: VNil) []
+choleskyFactorCorrSpec :: SLE.UExpr EInt -> DeclSpec SLE.UExpr ESqMat
+choleskyFactorCorrSpec rce = DeclSpec StanCholeskyFactorCorr (DeclIndexVecF $ rce ::: VNil) SLS.NoModifiers
 
-choleskyFactorCovSpec :: SLE.UExpr EInt -> DeclSpec ESqMat
-choleskyFactorCovSpec rce = DeclSpec StanCholeskyFactorCov (rce ::: VNil) []
+choleskyFactorCovSpec :: SLE.UExpr EInt -> DeclSpec SLE.UExpr ESqMat
+choleskyFactorCovSpec rce = DeclSpec StanCholeskyFactorCov (DeclIndexVecF $ rce ::: VNil) SLS.NoModifiers
 
-arraySpec :: (forall f.VecToTListC f n, forall f.TListToVecC f n, GenSTypeList (SameTypeList EInt n))
-          => SNat (DT.S n) -> Vec (DT.S n) (SLE.UExpr EInt) -> DeclSpec t -> DeclSpec (EArray (DT.S n) t)
+arraySpec :: (forall f.SLS.VecToTListC f n, forall f . SLS.TListToVecC f n, GenSTypeList (SameTypeList EInt n))
+          => SNat (DT.S n) -> Vec (DT.S n) (SLE.UExpr EInt) -> DeclSpec SLE.UExpr t -> DeclSpec SLE.UExpr (EArray (DT.S n) t)
 arraySpec = ArraySpec --(DeclSpec t tIndices vms) = DeclSpec (StanArray n t) (arrIndices Vec.++ tIndices) vms
 
-array1Spec :: SLE.UExpr EInt -> DeclSpec t -> DeclSpec (EArray N1 t)
+array1Spec :: SLE.UExpr EInt -> DeclSpec SLE.UExpr t -> DeclSpec SLE.UExpr (EArray N1 t)
 array1Spec se = arraySpec s1 (se ::: VNil)
 
-array2Spec ::  SLE.UExpr EInt -> SLE.UExpr EInt -> DeclSpec t -> DeclSpec (EArray N2 t)
+array2Spec ::  SLE.UExpr EInt -> SLE.UExpr EInt -> DeclSpec SLE.UExpr t -> DeclSpec SLE.UExpr (EArray N2 t)
 array2Spec i1 i2 = arraySpec s2 (i1 ::: i2 ::: VNil)
 
-intArraySpec :: SLE.UExpr EInt -> DeclSpec EIndexArray
+intArraySpec :: SLE.UExpr EInt -> DeclSpec SLE.UExpr EIndexArray
 intArraySpec se = arraySpec s1 (se ::: VNil) intSpec
 
 -- 1d int array with a lower bount of 1
-indexArraySpec :: SLE.UExpr EInt -> DeclSpec EIndexArray
-indexArraySpec se = arraySpec s1 (se ::: VNil) (addVMs [lowerM $ intE 1] intSpec)
+indexArraySpec :: SLE.UExpr EInt -> DeclSpec SLE.UExpr EIndexArray
+indexArraySpec se = arraySpec s1 (se ::: VNil) (addVMs (SLS.Modifiers [lowerM $ intE 1]) intSpec)
 
 -- 1d int array with a lower bound of 0
-countArraySpec :: SLE.UExpr EInt -> DeclSpec EIndexArray
-countArraySpec se = arraySpec s1 (se ::: VNil) (addVMs [lowerM $ intE 0] intSpec)
+countArraySpec :: SLE.UExpr EInt -> DeclSpec SLE.UExpr EIndexArray
+countArraySpec se = arraySpec s1 (se ::: VNil) (addVMs (SLS.Modifiers [lowerM $ intE 0]) intSpec)
 
-tuple2Spec :: StanType t1 -> StanType t2 -> DeclSpec (ETuple [t1, t2])
-tuple2Spec st1 st2 = TupleSpec (st1 :> st2 :> TNil)
+tuple2Spec :: DeclSpec SLE.UExpr t1 -> DeclSpec SLE.UExpr t2 -> DeclSpec SLE.UExpr (ETuple [t1, t2])
+tuple2Spec ds1 ds2 = TupleSpec (ds1 :> ds2 :> TNil)
 
-tuple3Spec :: StanType t1 -> StanType t2 -> StanType t3 -> DeclSpec (ETuple [t1, t2, t3])
-tuple3Spec st1 st2 st3 = TupleSpec (st1 :> st2 :> st3 :> TNil)
+tuple3Spec :: DeclSpec SLE.UExpr t1 -> DeclSpec SLE.UExpr t2 -> DeclSpec SLE.UExpr t3 -> DeclSpec SLE.UExpr (ETuple [t1, t2, t3])
+tuple3Spec ds1 ds2 ds3 = TupleSpec (ds1 :> ds2 :> ds3 :> TNil)
 
 
 -- functions for ease of use and exporting.  Monomorphised to UStmt, etc.
-declare' :: Text -> StanType t -> Vec (DeclDimension t) (SLE.UExpr EInt) -> [SLS.VarModifier SLE.UExpr (ScalarType t)] -> SLS.UStmt
-declare' vn vt iDecls = SLS.SDeclare vn vt (DeclIndexVecF iDecls)
+declare' :: Text -> StanType t -> Vec (DeclDimension t) (SLE.UExpr EInt) -> SLS.VarModifiers SLE.UExpr (ScalarType t) -> SLS.UStmt
+declare' vn vt iDecls vms = SLS.SDeclare vn $ DeclSpec vt (DeclIndexVecF iDecls) vms
 
-declare :: Text -> DeclSpec t -> SLS.UStmt
-declare vn (DeclSpec st indices vms) = declare' vn st indices vms
-declare vn ds@(ArraySpec _ arrDims ids) = declare' vn (declType ds) (arrDims Vec.++ declDims ids) $ declVMS ids
-declare vn (TupleSpec sts) = declare' vn (StanTuple sts) VNil []
+declare :: Text -> DeclSpec SLE.UExpr t -> SLS.UStmt
+declare  = SLS.SDeclare
 
 declareN :: NamedDeclSpec t -> SLS.UStmt
 declareN (NamedDeclSpec n ds) = declare n ds
 
-declareAndAssign' :: Text -> StanType t -> Vec (DeclDimension t) (SLE.UExpr EInt) -> [SLS.VarModifier SLE.UExpr (ScalarType t)] -> SLE.UExpr t -> SLS.UStmt
-declareAndAssign' vn vt iDecls vms = SLS.SDeclAssign vn vt (DeclIndexVecF iDecls) vms
+declareAndAssign' :: Text -> StanType t -> Vec (DeclDimension t) (SLE.UExpr EInt) -> SLS.VarModifiers SLE.UExpr (ScalarType t) -> SLE.UExpr t -> SLS.UStmt
+declareAndAssign' vn vt iDecls vms rhs = SLS.SDeclAssign vn (DeclSpec vt (DeclIndexVecF iDecls) vms) rhs
 
-declareAndAssign :: Text -> DeclSpec t -> SLE.UExpr t -> SLS.UStmt
-declareAndAssign vn (DeclSpec vt indices vms) = declareAndAssign' vn vt indices vms
-declareAndAssign vn ads@(ArraySpec _ arrDims ids) = declareAndAssign' vn (declType ads) (arrDims Vec.++ declDims ids) $ declVMS ids
-declareAndAssign vn (TupleSpec sts) = declareAndAssign' vn (StanTuple sts) VNil []
+declareAndAssign :: Text -> DeclSpec SLE.UExpr t -> SLE.UExpr t -> SLS.UStmt
+declareAndAssign = SLS.SDeclAssign
 
 declareAndAssignN :: NamedDeclSpec t -> SLE.UExpr t -> SLS.UStmt
 declareAndAssignN (NamedDeclSpec vn ds) = declareAndAssign vn ds
@@ -353,7 +345,7 @@ function fd argNames bodyF = scoped $ SLS.SFunction fd argNames $ grouped [bodyS
 
 simpleFunctionBody :: Function rt pts
                    -> StanName
-                   -> (ExprList pts -> DeclSpec rt)
+                   -> (ExprList pts -> DeclSpec SLE.UExpr rt)
                    -> (SLE.UExpr rt -> ExprList pts -> [SLS.UStmt])
                    -> ExprList pts
                    -> (NonEmpty SLS.UStmt, SLE.UExpr rt)

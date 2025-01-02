@@ -23,7 +23,6 @@ import Prelude hiding (Nat)
 
 import qualified Stan.Language.ASTContext as SLA
 import Stan.Language.Types ( EType(EInt, EArray)
-                           , StanType
                            , sTypeFromStanType
                            , SType(..), GenSType(..), AllGenSTypes, sTypeName
                            )
@@ -34,7 +33,9 @@ import Stan.Language.Statement
       Stmt(..),
       StmtF(..),
       ForEachSlice,
-      UStmt)
+      UStmt,
+      DeclSpec)
+import Stan.Language.Statements (declType)
 import Stan.Language.Recursion
     ( HFunctor(..),
       type (~>),
@@ -121,9 +122,9 @@ toLExprAlg = \case
 doLookups :: NatM LookupM UExpr LExpr
 doLookups = iCataM toLExprAlg
 
-ucDeclare :: VarName -> StanType t -> LookupM ()
-ucDeclare varName stanType =
-  modify $ SLA.modifyVarCtxt $ SLA.addTypedVarToInnerScope varName $ sTypeFromStanType stanType
+ucDeclare :: VarName -> DeclSpec UExpr t -> LookupM ()
+ucDeclare varName ds =
+  modify $ SLA.modifyVarCtxt $ SLA.addTypedVarToInnerScope varName $ sTypeFromStanType $ declType ds
 
 ucAddIntCounterToLoopBodyScope :: VarName -> LookupM ()
 ucAddIntCounterToLoopBodyScope vn = modify $ SLA.modifyVarCtxt $ SLA.addTypedVarToInnerScope vn SInt
@@ -159,8 +160,8 @@ doLookupsInCStatement = RS.anaM contextualLookup --(\x -> htraverse doLookups (R
 
 updateContextA :: UStmt -> LookupM ()--StmtF r a)
 updateContextA = \case
-  SDeclare varName stanType _ _ -> ucDeclare varName stanType
-  SDeclAssign varName stanType _ _ _ -> ucDeclare varName stanType
+  SDeclare varName declSpec -> ucDeclare varName declSpec
+  SDeclAssign varName declSpec _ -> ucDeclare varName declSpec
   SFor loopCounter _ _ _ -> ucAddIntCounterToLoopBodyScope loopCounter
   SForEach loopCounter ce _ -> ucAddTypedCounterToLoopBodyScope loopCounter ce
   SFunction _ typedArgs _  -> do

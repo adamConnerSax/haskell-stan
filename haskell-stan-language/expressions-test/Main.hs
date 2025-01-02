@@ -148,7 +148,7 @@ main = do
       nStates = namedSizeE "States"
       nPredictors = namedSizeE "Predictors"
 
-      stDeclare2 = declare "A" $ arraySpec s2 (n ::: l ::: VNil) (addVMs [lowerM $ realE 2] $ matrixSpec nStates nPredictors )
+      stDeclare2 = declare "A" $ arraySpec s2 (n ::: l ::: VNil) (addVMs (Modifiers [lowerM $ realE 2]) $ matrixSpec nStates nPredictors )
   cmnt "Declarations"
   writeStmtCode ctxt0 $ grouped  $ [declare_n, declare_l, stDeclare1]
   cmnt "Next should fail missing an index"
@@ -156,20 +156,26 @@ main = do
   cmnt "Next should succeed"
   writeStmtCode ctxt0 $ grouped  [SContext (insertSizeBinding "States" statesLE . insertSizeBinding "Predictors" predictorsLE) , declare_n, declare_l, stDeclare2]
 
-  let stDeclAssign1 = declareAndAssign "M" (addVMs [upperM $ realE 8] $ matrixSpec l n) (namedE "q" SMat)
+  let stDeclAssign1 = declareAndAssign "M" (addVMs (Modifiers [upperM $ realE 8]) $ matrixSpec l n) (namedE "q" SMat)
   writeStmtCode ctxt0 $ grouped   [declare_n, declare_l, declare_q, stDeclAssign1]
 
   writeStmtCode ctxt0 $ declareAndAssign "v1" (vectorSpec (intE 2)) (vectorE [1,2])
   writeStmtCode ctxtWithVars $ declareAndAssign "v2" (vectorSpec (intE 2)) (rangeIndexE s0 (Just $ intE 2) (Just $ intE 3) v)
   writeStmtCode ctxt0 $ declareAndAssign "A" (matrixSpec (intE 2) (intE 2)) (matrixE [(2 ::: 3 ::: VNil), (4 ::: 5 ::: VNil)])
-  writeStmtCode ctxt0 $ declareAndAssign "B" (arraySpec s2 (intE 2 ::: intE 2 ::: VNil) $ addVMs [lowerM $ realE 0] realSpec)
+  writeStmtCode ctxt0 $ declareAndAssign "B" (arraySpec s2 (intE 2 ::: intE 2 ::: VNil) $ addVMs (Modifiers [lowerM $ realE 0]) realSpec)
     (arrayE $ NestedVec2 ((realE 2 ::: realE 3 ::: VNil) ::: (realE 4 ::: realE 5 ::: VNil) :::  VNil))
 
-  writeStmtCode ctxt0 $ declareAndAssign "C" (arraySpec s2 (intE 2 ::: intE 2 ::: VNil) (addVMs [lowerM $ realE 0 , multiplierM $ realE 3] $ vectorSpec (intE 2) ))
+  writeStmtCode ctxt0 $ declareAndAssign "C" (arraySpec s2 (intE 2 ::: intE 2 ::: VNil) (addVMs (Modifiers [lowerM $ realE 0 , multiplierM $ realE 3]) $ vectorSpec (intE 2) ))
     (arrayE $ NestedVec2 ((vectorE [1,2] ::: vectorE [3,4] ::: VNil) ::: (vectorE [4,5] ::: vectorE [5, 6] ::: VNil) :::  VNil))
+  writeStmtCode ctxt0 $ declare "D" (arraySpec s2 (intE 2 ::: intE 2 ::: VNil) (addVMs (Modifiers [lowerM $ realE 0 , multiplierM $ realE 3]) $ arraySpec s2 (intE 2 ::: intE 2 ::: VNil) realSpec))
   cmnt "Tuples"
   writeStmtCode ctxt0 $ grouped [declare_n, declare_x
-                                , declareAndAssign "t" (tuple2Spec StanInt StanReal) $ tupleE (n :> x :> TNil)]
+                                , declareAndAssign "t" (tuple2Spec intSpec realSpec) $ tupleE (n :> x :> TNil)]
+  writeStmtCode ctxt0 $ grouped [declare_n, declare_x
+                                , declareAndAssign "t" (tuple2Spec (addVMs (Modifiers [lowerM $ intE 0]) intSpec) realSpec) $ tupleE (n :> x :> TNil)]
+  writeStmtCode ctxt0 $ grouped [declare "t" (tuple3Spec intSpec realSpec $ arraySpec s2 (intE 2 ::: intE 2 ::: VNil) realSpec) ]
+  writeStmtCode ctxt0 $ grouped [declare "t" (arraySpec s2 (intE 2 ::: intE 2 ::: VNil) (tuple2Spec intSpec realSpec))]
+
   cmnt "Add to target, two ways."
   let normalDistVec = Density "normal" SCVec (SCVec :> (SCVec :> TNil))
       declare_m = declare "m" $ vectorSpec $ namedE "n" SInt

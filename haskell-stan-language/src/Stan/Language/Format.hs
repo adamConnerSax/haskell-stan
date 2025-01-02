@@ -67,14 +67,16 @@ preferOpBreak prefix op rhs = PP.flatAlt
 
 stmtToCodeAlg :: SLS.StmtF (K CodePP) (Either Text CodePP) -> Either Text CodePP
 stmtToCodeAlg = \case
-  SLS.SDeclareF txt st divf vms -> Right $ lineLayout
-                               $ stanDeclHead st (unK <$> Vec.toList (unDeclIndexVecF divf)) vms <> PP.softline
-                               <> PP.pretty txt <> PP.semi
-  SLS.SDeclAssignF txt st divf vms rhs -> Right $ lineLayout
-                                      $ preferOpBreak
-                                      (stanDeclHead st (unK <$> Vec.toList (unDeclIndexVecF divf)) vms <+> PP.pretty txt)
-                                      PP.equals
-                                      (unK rhs <> PP.semi)
+  SLS.SDeclareF txt ds -> Right
+                          $ lineLayout
+                          $ stanDeclHead ds <> PP.softline
+                          <> PP.pretty txt <> PP.semi
+  SLS.SDeclAssignF txt ds rhs -> Right
+                                          $ lineLayout
+                                          $ preferOpBreak
+                                          (stanDeclHead ds <+> PP.pretty txt)
+                                          PP.equals
+                                          (unK rhs <> PP.semi)
   SLS.SAssignF lhs rhs -> Right $ lineLayout $ preferOpBreak (unK lhs) PP.equals (unK rhs <> PP.semi)
   SLS.SOpAssignF op lhs rhs -> Right $ lineLayout $ preferOpBreak (unK lhs) (opDoc op <> PP.equals) (unK rhs <> PP.semi)
   SLS.STargetF rhs -> Right $ lineLayout $ preferOpBreak "target" "+=" $ unK rhs <> PP.semi
@@ -112,26 +114,44 @@ indexCodeL :: [CodePP] -> CodePP
 indexCodeL [] = ""
 indexCodeL x = PP.brackets $ PP.hsep $ PP.punctuate "," x
 
-stanDeclHead :: forall t . StanType t -> [CodePP] -> [SLS.VarModifier (K CodePP) (ScalarType t)] -> CodePP
-stanDeclHead st il vms = case st of
-  StanArray sn arrayType -> arrayDeclHead (fromIntegral $ DTN.snatToNatural sn) arrayType
-  StanSqMatrix -> PP.pretty (stanTypeName st) <> varModifiersToCode vms <> indexCodeL (il <> il) -- otherwise we only get one index
-  _ -> PP.pretty (stanTypeName st) <> varModifiersToCode vms <> indexCodeL il
-  where
-    vmToCode = \case
-      SLS.VarLower x -> "lower" <> PP.equals <> unK x
-      SLS.VarUpper x -> "upper" <> PP.equals <> unK x
-      SLS.VarOffset x -> "offset" <> PP.equals <> unK x
-      SLS.VarMultiplier x -> "multiplier" <> PP.equals <> unK x
-    varModifiersToCode varModifierList =
-      if null varModifierList
-      then mempty
-      else PP.langle <> (PP.hsep $ PP.punctuate  (PP.comma <> PP.space) $ fmap vmToCode varModifierList) <> PP.rangle
-    arrayDeclHead :: (ScalarType t ~ ScalarType t') => Int -> StanType t' -> CodePP
-    arrayDeclHead ad declArrayType = case declArrayType of
-      StanArray innerDeclArrayDim innerDeclArrayType -> arrayDeclHead (ad + (fromIntegral $ DTN.snatToNatural innerDeclArrayDim)) innerDeclArrayType
-      _ -> let (adl, sdl) = List.splitAt ad il
-           in "array" <> indexCodeL adl <+> stanDeclHead declArrayType sdl vms
+varModifiersToCode :: SLS.VarModifiers (K CodePP) t -> CodePP
+varModifiersToCode = \case
+  SLS.NoModifiers -> mempty
+  SLS.Modifiers varModifierList ->
+    if null varModifierList
+    then mempty
+    else PP.langle <> (PP.hsep $ PP.punctuate  (PP.comma <> PP.space) $ fmap varModifierToCode varModifierList) <> PP.rangle
+
+varModifierToCode :: SLS.VarModifier (K CodePP) t -> CodePP
+varModifierToCode = \case
+    SLS.VarLower x -> "lower" <> PP.equals <> unK x
+    SLS.VarUpper x -> "upper" <> PP.equals <> unK x
+    SLS.VarOffset x -> "offset" <> PP.equals <> unK x
+    SLS.VarMultiplier x -> "multiplier" <> PP.equals <> unK x
+
+declIndexList :: DeclIndexVecF (K CodePP) t -> [CodePP]
+declIndexList (DeclIndexVecF v) = arrayIndexList v
+
+arrayIndexList :: Vec n (K CodePP t) -> [CodePP]
+arrayIndexList v = unK <$> Vec.toList v
+
+
+stanDeclHead :: forall t . SLS.DeclSpec (K CodePP) t -> CodePP
+stanDeclHead = \case
+  SLS.DeclSpec st iv vms -> case st of
+    StanSqMatrix -> PP.pretty (stanTypeName st) <> varModifiersToCode vms <> indexCodeL (declIndexList iv <> declIndexList iv) -- otherwise we only get one index
+    _ -> PP.pretty (stanTypeName st) <> varModifiersToCode vms <> indexCodeL (declIndexList iv)
+
+  SLS.ArraySpec _sn iv ds -> arrayDeclHead iv ds
+    where
+      arrayDeclHead :: forall t' n' . (ScalarType t ~ ScalarType t') => Vec (DTN.S n') (K CodePP EInt) -> SLS.DeclSpec (K CodePP) t' -> CodePP
+      arrayDeclHead iv' arrayDS = case arrayDS of -- handle nested arrays by making one larger array
+        SLS.ArraySpec _innerDim innerIV innerArrayDS -> arrayDeclHead (iv' Vec.++ innerIV) innerArrayDS
+        _ -> "array" <> indexCodeL (arrayIndexList iv') <+> stanDeclHead arrayDS
+  SLS.TupleSpec dss -> "tuple" <> PP.parens (tupleDecls dss)
+    where
+      tupleDecls :: TypedList (SLS.DeclSpec (K CodePP)) ts -> CodePP
+      tupleDecls = formatTupleDecls . typedKToList . hfmap (K . stanDeclHead)
 
 -- add brackets and indent the lines of code
 bracketBlock :: Traversable f => f CodePP -> CodePP
@@ -252,6 +272,12 @@ withLeadingEmpty im = imWLE where
 
 iExprToCode :: IExprCode -> CodePP
 iExprToCode = RS.cata iExprToDocAlg
+
+formatTupleDecls :: [CodePP] -> CodePP
+formatTupleDecls cs = PP.align . PP.group
+                      $ PP.flatAlt
+                      (PP.encloseSep mempty mempty PP.comma cs)
+                      (PP.encloseSep mempty mempty (PP.comma <> PP.space) cs)
 
 formatFunctionArgs :: [CodePP] -> CodePP
 formatFunctionArgs cs = PP.align . PP.group
