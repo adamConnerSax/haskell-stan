@@ -212,7 +212,7 @@ main = do
     euclideanDistance = Function "eDist" SReal (SCVec :> SCVec :> SArray s1 SInt :> TNil)
     eDistArgList = Arg "fa1" :> Arg "fa2" :> DataArg "fa3" :> TNil
     eDistBody :: ExprList [ECVec, ECVec, EArray N1 EInt] -> (UStmt, UExpr EReal)
-    eDistBody (x1 :> x2 :> _ :> TNil) = first grouped $ writerL $ do
+    eDistBody (x1 :> x2 :> _ :> TNil) = cwStmt $ do
       r <- declareRHSW "r" realSpec $ tr (x1 `eMinus` x2) `times` (x1 `eMinus` x2)
       pure r
     funcStmt = function euclideanDistance eDistArgList eDistBody
@@ -254,11 +254,11 @@ main = do
                                                                 , stmtWhile
                                                                 , ln 1 `assign` (foldl' plusE (ln 2) $ fmap ln [3..20])])
 
-  let formatS1' = for "q" (SpecificIn $ namedE "votes" SCVec) $ \sie -> writeStmt_ $ do
-        addStmt $ sie `assign` realE 2
-        addStmt $ x `assign` (x `plus` y)
-        addStmt $ stmtWhile
-        addStmt $ ln 1 `assign` (foldl' plusE (ln 2) $ fmap ln [3..20])
+  let formatS1' = for "q" (SpecificIn $ namedE "votes" SCVec) $ \sie -> cwStmt_ $ do
+        as $ sie `assign` realE 2
+        as $ x `assign` (x `plus` y)
+        as $ stmtWhile
+        as $ ln 1 `assign` (foldl' plusE (ln 2) $ fmap ln [3..20])
 
   writeStmtAsText 80 $ grouped $ fmap rdecl [1..20] <> [declare_x, declare_y, declare_n, declare_l, declare "votes" $ vectorSpec $ intE 3, formatS1']
 
@@ -268,7 +268,7 @@ main = do
     fArgList = Arg "x1" :> Arg "x2" :> DataArg "m" :> Arg "ThisIsALongName" :> Arg "AsIsThisNameAlsoLong" :> TNil
     fBody :: ExprList [ECVec, ECVec, EArray N1 EInt, EInt, EInt] -> (UStmt, UExpr EReal)
     fBody (x1 :> x2 :> _ :> _ :> _ :> TNil) =
-      writeStmt $ declareRHSW "r" realSpec $ (tr (x1 `eMinus` x2) `times` (x1 `eMinus` x2))
+      cwStmt $ declareRHSW "r" realSpec $ (tr (x1 `eMinus` x2) `times` (x1 `eMinus` x2))
     funcStmt = function f fArgList fBody
   writeStmtAsText 80 funcStmt
 

@@ -18,12 +18,12 @@ module Stan.Language.CodeWriter
     CodeWriter
   , MaybeCW
   , asCW
-  , writeStmt
-  , writeStmt_
-  , writerL
-  , writerL_
+  , cwStmt
+  , cwStmt_
+  , cwStmtList
+  , cwStmtList_
+  , as
   , addStmt
-  , (+%)
   , addStmts
   , declareW
   , declareNW
@@ -78,22 +78,24 @@ instance W.MonadWriter [SLS.UStmt] MaybeCW where
     NoCW (a, _) -> NoCW a
     NeedsCW cw -> NeedsCW $ W.pass cw
 
-writerL :: CodeWriter a -> ([SLS.UStmt], a)
-writerL (CodeWriter w) = (stmts, a)
+cwStmtList :: CodeWriter a -> ([SLS.UStmt], a)
+cwStmtList (CodeWriter w) = (stmts, a)
   where (a, stmts) = W.runWriter w
 
-writeStmt :: CodeWriter a -> (SLS.UStmt, a)
-writeStmt = first SLSS.grouped . writerL
+cwStmt :: CodeWriter a -> (SLS.UStmt, a)
+cwStmt = first SLSS.grouped . cwStmtList
 
-writerL_ :: CodeWriter a -> [SLS.UStmt]
-writerL_ = fst . writerL
+cwStmtList_ :: CodeWriter a -> [SLS.UStmt]
+cwStmtList_ = fst . cwStmtList
 
-writeStmt_ :: CodeWriter a -> SLS.UStmt
-writeStmt_ = SLSS.grouped . writerL_
+cwStmt_ :: CodeWriter a -> SLS.UStmt
+cwStmt_ = SLSS.grouped . cwStmtList_
 
-addStmt, (+%) :: SLS.UStmt -> CodeWriter ()
+addStmt :: SLS.UStmt -> CodeWriter ()
 addStmt = W.tell . pure
-(+%) = W.tell . pure
+
+as :: SLS.UStmt -> CodeWriter ()
+as = addStmt
 
 addStmts :: Traversable f => f SLS.UStmt -> CodeWriter ()
 addStmts = traverse_ addStmt

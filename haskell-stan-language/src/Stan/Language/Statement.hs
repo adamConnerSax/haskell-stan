@@ -147,6 +147,9 @@ type instance RS.Base (Stmt f) = StmtF f
 type LStmt = Stmt SLE.LExpr
 type UStmt = Stmt SLE.UExpr
 
+instance Semigroup (Stmt a) where
+  s1 <> s2 = SGroup UnBracketed [s1, s2]
+
 instance Functor (StmtF f) where
   fmap f x = case x of
     SDeclareF txt st divf vms -> SDeclareF txt st divf vms
