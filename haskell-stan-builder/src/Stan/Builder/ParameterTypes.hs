@@ -139,12 +139,13 @@ mapped :: (UExpr t -> UExpr t') -> Parameter t -> Parameter t'
 mapped = MappedP
 
 type Parameters ts = SLT.TypedList Parameter ts
+type ParameterTags ts = SLT.TypedList ParameterTag ts
 
-tagsAsExprs :: SLT.TypedList ParameterTag ts -> ExprList ts
+tagsAsExprs :: ParameterTags ts -> ExprList ts
 tagsAsExprs = hfmap parameterTagExpr
 {-# INLINEABLE tagsAsExprs #-}
 
-tagsAsParams :: SLT.TypedList ParameterTag ts -> Parameters ts
+tagsAsParams :: ParameterTags ts -> Parameters ts
 tagsAsParams = hfmap build
 {-# INLINEABLE tagsAsParams #-}
 
@@ -271,7 +272,6 @@ lookupParameterExpressions ps eMap = htraverse f ps where
           Just e -> Right e
           Nothing -> Left $ taggedParameterName ttn <> " not found in expression map.  Dependency ordering issue??"
       MappedP g p' -> g <$> f p'
---    MappedP g p -> g <$> f p
 
 lookupTDataExpressions :: SLT.TypedList TData ts -> DM.DMap ParameterTag UExpr -> Either Text (SLT.TypedList UExpr ts)
 lookupTDataExpressions tds = lookupParameterExpressions (hfmap (BuildP . parameterTagFromTData) tds)

@@ -29,13 +29,15 @@ module Stan.Language.CodeWriter
   , declareNW
   , declareRHSW
   , declareRHSNW
+  , cwFunction
+  , cwFunction1
   )
   where
 
 import qualified Stan.Language.Statement as SLS
 import qualified Stan.Language.Statements as SLSS
 import Stan.Language.Expression (UExpr )
-import Stan.Language.Expressions (namedE)
+import Stan.Language.Expressions (namedE, ExprList)
 import Stan.Language.Types ( sTypeFromStanType)
 import Control.Monad.Writer.Strict as W
 
@@ -119,3 +121,9 @@ declareRHSNW :: SLSS.NamedDeclSpec t -> UExpr t -> CodeWriter (UExpr t)
 declareRHSNW nds rhs = do
   addStmt $ SLSS.declareAndAssignN nds rhs
   return $ namedE (SLSS.declName nds) (sTypeFromStanType $ SLSS.declType $ SLSS.decl nds)
+
+cwFunction :: (ExprList ts -> CodeWriter ()) -> ExprList ts -> SLS.UStmt
+cwFunction f e = cwStmt_ (f e)
+
+cwFunction1 :: (UExpr t -> CodeWriter ()) -> UExpr t -> SLS.UStmt
+cwFunction1 f e = cwStmt_ (f e)

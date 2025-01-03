@@ -109,14 +109,6 @@ instance SLR.HTraversable VarModifiers where
     NoModifiers -> pure NoModifiers
   hmapM = SLR.htraverse
 
-{-
-type family VarModifierType (r :: EType -> Type) (e :: EType) :: Type where
-  VarModifierType _ (ETuple _) = ()
-  VarModifierType _ EString = ()
-  VarModifierType _ EVoid = ()
-  VarModifierType _ EBool = ()
-  VarModifierType r t = VarModifier r (ScalarType t)
--}
 type VecToTListC f n = VecToSameTypedListF f EInt n
 type TListToVecC f n = SameTypedListToVecF f EInt n
 

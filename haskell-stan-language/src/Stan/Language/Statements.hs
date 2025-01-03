@@ -13,7 +13,6 @@
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE TypeOperators #-}
 {-# LANGUAGE UndecidableInstances #-}
-{-# LANGUAGE GeneralizedNewtypeDeriving #-}
 
 module Stan.Language.Statements
   (
@@ -50,8 +49,6 @@ import Stan.Language.Types
     )
 import Stan.Language.Indexing
     ( Vec(..),
---      DeclDimension,
---      DeclIndexVecF(DeclIndexVecF, unDeclIndexVecF),
       N1,
       s1,
       N2,
@@ -183,6 +180,10 @@ indexArraySpec se = arraySpec s1 (se ::: VNil) (addVMs (SLS.Modifiers [lowerM $ 
 -- 1d int array with a lower bound of 0
 countArraySpec :: SLE.UExpr EInt -> DeclSpec SLE.UExpr EIndexArray
 countArraySpec se = arraySpec s1 (se ::: VNil) (addVMs (SLS.Modifiers [lowerM $ intE 0]) intSpec)
+
+-- arbitrary sized tuple
+tupleSpec :: TypedList (DeclSpec SLE.UExpr) ts -> DeclSpec SLE.UExpr (ETuple ts)
+tupleSpec = TupleSpec
 
 tuple2Spec :: DeclSpec SLE.UExpr t1 -> DeclSpec SLE.UExpr t2 -> DeclSpec SLE.UExpr (ETuple [t1, t2])
 tuple2Spec ds1 ds2 = TupleSpec (ds1 :> ds2 :> TNil)
@@ -332,7 +333,7 @@ continue = SLS.SContinue
 function :: AllGenSTypes args => Function rt args -> TypedList (FuncArg Text) args -> (TypedList SLE.UExpr args -> (SLS.UStmt, SLE.UExpr rt)) -> SLS.UStmt
 function fd argNames bodyF = scoped $ SLS.SFunction fd argNames $ grouped [bodyS, SLS.SReturn ret]
   where
-    argTypes = {- typeListToTypedListOfTypes $ -} functionArgTypes fd
+    argTypes = functionArgTypes fd
     argExprs = zipTypedListsWith (namedE . funcArgName) argNames argTypes
     (bodyS, ret) = bodyF argExprs
 
