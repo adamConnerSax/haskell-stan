@@ -45,7 +45,9 @@ import Stan.Language.Types
       AllGenSTypes,
       vecToSameTypedListF,
       zipTypedListsWith,
-      VecToSameTypedListF
+      VecToSameTypedListF,
+      VarName,
+      FunctionName
     )
 import Stan.Language.Indexing
     ( Vec(..),
@@ -73,11 +75,9 @@ import Prelude hiding (Nat)
 --import Relude.Extra
 import qualified Data.Map.Strict as Map
 
-type StanName = Text
+data NamedDeclSpec t = NamedDeclSpec VarName (DeclSpec SLE.UExpr t)
 
-data NamedDeclSpec t = NamedDeclSpec StanName (DeclSpec SLE.UExpr t)
-
-declName :: NamedDeclSpec t -> StanName
+declName :: NamedDeclSpec t -> VarName
 declName (NamedDeclSpec n _) = n
 
 decl :: NamedDeclSpec t -> DeclSpec SLE.UExpr t
@@ -338,7 +338,7 @@ function fd argNames bodyF = scoped $ SLS.SFunction fd argNames $ grouped [bodyS
     (bodyS, ret) = bodyF argExprs
 
 simpleFunctionBody :: Function rt pts
-                   -> StanName
+                   -> FunctionName
                    -> (ExprList pts -> DeclSpec SLE.UExpr rt)
                    -> (SLE.UExpr rt -> ExprList pts -> [SLS.UStmt])
                    -> ExprList pts
@@ -376,12 +376,13 @@ groupedWithBrackets :: Traversable f => f SLS.UStmt -> SLS.UStmt
 groupedWithBrackets = SLS.SGroup SLS.Bracketed
 
 insertIndexBinding :: SLE.IndexKey -> SLE.LExpr EIndexArray -> SLA.ASTCtxt -> SLA.ASTCtxt
-insertIndexBinding k ie (SLA.ASTCtxt vlc (SLA.IndexLookupCtxt a b)) =
-  SLA.ASTCtxt vlc $ SLA.IndexLookupCtxt a (Map.insert k ie b)
+insertIndexBinding ik ie = SLA.modifyIndexCtxt $ \(SLA.IndexLookupCtxt a b) -> SLA.IndexLookupCtxt a (Map.insert ik ie b)
 
 insertSizeBinding :: SLE.IndexKey -> SLE.LExpr EInt -> SLA.ASTCtxt -> SLA.ASTCtxt
-insertSizeBinding k ie (SLA.ASTCtxt vlc (SLA.IndexLookupCtxt a b)) =
-  SLA.ASTCtxt vlc $ SLA.IndexLookupCtxt (Map.insert k ie a) b
+insertSizeBinding ik ia = SLA.modifyIndexCtxt $ \(SLA.IndexLookupCtxt a b) -> SLA.IndexLookupCtxt (Map.insert ik ia a) b
+
+insertIndexAndSize :: SLE.IndexKey ->  SLE.LExpr EIndexArray -> SLE.LExpr EInt ->  SLA.ASTCtxt -> SLA.ASTCtxt
+insertIndexAndSize ik ie ia = insertIndexBinding ik ie . insertSizeBinding ik ia
 
 lowerM :: SLE.UExpr t -> SLS.VarModifier SLE.UExpr t
 lowerM = SLS.VarLower

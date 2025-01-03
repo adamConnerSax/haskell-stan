@@ -57,7 +57,7 @@ type VarName = Text
 
 -- Expression
 data LExprF :: (EType -> Type) -> EType -> Type where
-  LNamed :: Text -> SType t -> LExprF r t
+  LNamed :: VarName -> SType t -> LExprF r t
   LInt :: Int -> LExprF r EInt
   LReal :: Double -> LExprF r EReal
   LComplex :: Double -> Double -> LExprF r EComplex
@@ -78,13 +78,13 @@ data LExprF :: (EType -> Type) -> EType -> Type where
 
 type LExpr = SLR.IFix LExprF
 
-lNamedE :: Text -> SType t -> LExpr t
+lNamedE :: VarName -> SType t -> LExpr t
 lNamedE name  = SLR.IFix . LNamed name
 
-namedLIndex :: Text -> LExpr EIndexArray
+namedLIndex :: VarName -> LExpr EIndexArray
 namedLIndex t = lNamedE t (SArray s1 SInt)
 
-namedLSize :: Text -> LExpr EInt
+namedLSize :: VarName -> LExpr EInt
 namedLSize t = lNamedE t SInt
 
 lIntE :: Int -> LExpr EInt
@@ -144,6 +144,8 @@ data UExprF :: (EType -> Type) -> EType -> Type where
   UIndex :: IndexKey -> UExprF r EIndexArray
   UIndexSize :: IndexKey -> UExprF r EInt
   UVarExpr :: VarName -> SType t -> LExprF r t -> UExprF r t
+  UFunction :: Function rt args -> LExprF r rt -> UExprF r rt
+  UDensity :: Density gt args -> LExprF r EReal -> UExprF r EReal
 
 type UExpr = SLR.IFix UExprF
 
@@ -153,6 +155,8 @@ instance SLR.HFunctor UExprF where
     UIndex txt -> UIndex txt
     UIndexSize txt -> UIndexSize txt
     UVarExpr vn st e -> UVarExpr vn st $ SLR.hfmap nat e
+    UFunction f e -> UFunction f $ SLR.hfmap nat e
+    UDensity d e -> UDensity d $ SLR.hfmap nat e
 
 instance SLR.HTraversable UExprF where
   htraverse nat = \case
@@ -160,6 +164,8 @@ instance SLR.HTraversable UExprF where
     UIndex txt -> pure $ UIndex txt
     UIndexSize txt -> pure $ UIndexSize txt
     UVarExpr vn st e -> UVarExpr vn st <$> SLR.htraverse nat e
+    UFunction f e -> UFunction f <$> SLR.htraverse nat e
+    UDensity d e -> UDensity d <$> SLR.htraverse nat e
   hmapM = SLR.htraverse
 
 
@@ -308,6 +314,8 @@ uExprToSameTypeLExpr = SLR.iCata f where
     UIndex _ -> lNamedE "" (SArray s1 SInt)
     UIndexSize _ -> lNamedE "" SInt
     UVarExpr _ _ le -> SLR.IFix le
+    UFunction _ le -> SLR.IFix le
+    UDensity _ le -> SLR.IFix le
 
 exprTypeIs :: UExpr t -> SType t' -> Bool
 exprTypeIs ue = lExprTypeIs (uExprToSameTypeLExpr ue)

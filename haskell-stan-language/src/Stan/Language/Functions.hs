@@ -29,9 +29,8 @@ import Stan.Language.Types
 import Prelude hiding (Nat)
 --import           Data.Kind (Type)
 
-
 data Function :: EType -> [EType] -> Type  where
-  Function :: Text
+  Function :: FunctionName
            -> SType t
            -> STypeList args
            -> Function t args
@@ -42,7 +41,7 @@ data Function :: EType -> [EType] -> Type  where
 
 -- Can't pattern match on the arg-mapping function in "where" or "let" since then args' would escape its scope.
 -- But we can do this
-withFunction :: (Text -> SType t -> STypeList args -> r)
+withFunction :: (FunctionName -> SType t -> STypeList args -> r)
                 -> Function t args
                 -> r
 withFunction f (Function t st tl) = f t st tl
@@ -60,7 +59,7 @@ functionArgTypes (Function _ _ al) = al
 functionArgTypes (IdentityFunction t) = t :> TNil
 
 data Density :: EType -> [EType] -> Type where
-  Density :: Text -- name
+  Density :: FunctionName -- name
           -> SType t -- givens type
           -> STypeList args -- argument types
           -> Density t args
@@ -71,7 +70,7 @@ densityAsFunction (Density n gt ats) = Function n SReal (gt :> ats)
 densityFunctionArgTypes :: Density gt args -> STypeList (gt ': args)
 densityFunctionArgTypes (Density _ gt al) = gt :> al
 
-withDensity :: (Text -> SType t -> STypeList args -> r)
+withDensity :: (FunctionName -> SType t -> STypeList args -> r)
             -> Density t args
             -> r
 withDensity f (Density dn st tl) = f dn st tl
@@ -84,9 +83,9 @@ data FuncArg :: Type -> k -> Type where
   Arg :: a -> FuncArg a r
   DataArg :: a -> FuncArg a r
 
-type TypedArgNames = TypedList (FuncArg Text)
+type TypedArgNames = TypedList (FuncArg VarName)
 
-funcArgName :: FuncArg Text a -> Text
+funcArgName :: FuncArg Text a -> VarName
 funcArgName = \case
   Arg txt -> txt
   DataArg txt -> txt

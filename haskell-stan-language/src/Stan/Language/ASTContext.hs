@@ -25,11 +25,13 @@ import Stan.Language.Types
     ( EType(..),
       GenSType(..),
       SType,
+      STypeList,
       sTypeName,
       TypedList,
       AllGenSTypes,
       sTypedFoldTypedList,
-      oneTyped
+      oneTyped,
+      FunctionName
     )
 import Stan.Language.Functions
     (Function,
@@ -108,17 +110,26 @@ data IndexLookupCtxt = IndexLookupCtxt { sizes :: IndexSizeMap, indexes :: Index
 emptyIndexLookupCtxt :: IndexLookupCtxt
 emptyIndexLookupCtxt = IndexLookupCtxt mempty mempty
 
+data FunctionNameStatus = FunctionName | FunctionNameAvailable
+type FunctionTypeMap = Map FunctionName (Some.Some SType, Some.Some STypeList)
+
+newtype FunctionCtxt = FunctionCtxt { functionNames :: FunctionTypeMap }
+
 data ASTCtxt =
   ASTCtxt
   { varCtxt :: VarLookupCtxt
   , indexCtxt :: IndexLookupCtxt
+  , functionCtxt :: FunctionCtxt
   }
 
 emptyLookupCtxt :: ASTCtxt
-emptyLookupCtxt = ASTCtxt emptyVarLookupCtxt emptyIndexLookupCtxt
+emptyLookupCtxt = ASTCtxt emptyVarLookupCtxt emptyIndexLookupCtxt (FunctionCtxt Map.empty)
 
 modifyVarCtxt :: (VarLookupCtxt -> VarLookupCtxt) -> ASTCtxt -> ASTCtxt
-modifyVarCtxt f (ASTCtxt vlc ilc) = ASTCtxt (f vlc) ilc
+modifyVarCtxt f (ASTCtxt vlc ilc fc) = ASTCtxt (f vlc) ilc fc
 
 modifyIndexCtxt :: (IndexLookupCtxt -> IndexLookupCtxt) -> ASTCtxt -> ASTCtxt
-modifyIndexCtxt f (ASTCtxt vlc ilc) = ASTCtxt vlc $ f ilc
+modifyIndexCtxt f (ASTCtxt vlc ilc fc) = ASTCtxt vlc (f ilc ) fc
+
+modifyFunctionCtxt :: (FunctionCtxt -> FunctionCtxt) -> ASTCtxt -> ASTCtxt
+modifyFunctionCtxt f (ASTCtxt vlc ilc fc) = ASTCtxt vlc ilc (f fc)

@@ -24,10 +24,10 @@ import Prelude hiding (Nat)
 import qualified Stan.Language.ASTContext as SLA
 import Stan.Language.Types ( EType(EInt, EArray)
                            , sTypeFromStanType
-                           , SType(..), GenSType(..), AllGenSTypes, sTypeName
+                           , SType(..), GenSType(..), AllGenSTypes, sTypeName, STypeList, FunctionName
                            )
 import Stan.Language.Expression ( IndexKey, VarName, LExpr, LExprF (..), UExpr, UExprF(..), lNamedE )
-import Stan.Language.Functions (TypedArgNames, funcArgName)
+import Stan.Language.Functions (Function(..), Density, TypedArgNames, funcArgName, withFunction, withDensity)
 import Stan.Language.Statement
     ( LStmt,
       Stmt(..),
@@ -57,9 +57,11 @@ import Stan.Language.Format
 import qualified Data.Functor.Foldable.Monadic as RS
 import qualified Data.Functor.Foldable as RS
 import Data.Type.Nat (Nat(S, Z))
+import Data.Type.Equality ((:~:)(Refl), TestEquality(testEquality))
 --import Control.Monad.State.Strict (withStateT)
 
 import qualified Data.Map.Strict as Map
+import qualified Data.Some as Some
 
 import qualified Prettyprinter as PP
 
@@ -83,8 +85,6 @@ import qualified Prettyprinter as PP
 -}
 
 --type IndexKey = Text
-data Context = Context {
-                       }
 
 type LookupM = StateT SLA.ASTCtxt (Either Text)
 type ReaderM = ReaderT SLA.ASTCtxt (Either Text)
@@ -112,12 +112,33 @@ lookupVar vn st = do
       lift $ Left $ "variable name \"" <> vn <> "\" used but not declared."
     SLA.WrongType dt -> lift $ Left $ "variable name \"" <> vn <> "\" previously declared with type \"" <> dt <> " but used with type \"" <> sTypeName st <> "\""
 
+newFunction :: Function t ts -> LookupM ()
+newFunction = \case
+  IdentityFunction _ -> lift $ Left "Evaluate: attempt to add new identity function!"
+  Function fn rt ats -> do
+    (SLA.FunctionCtxt fcm) <- gets SLA.functionCtxt
+    case Map.lookup fn fcm of
+      Nothing -> do
+        let fcm' = Map.insert fn (Some.Some rt, Some.Some ats) fcm
+        modify $ SLA.modifyFunctionCtxt $ const $ SLA.FunctionCtxt fcm'
+        pure ()
+      Just _ -> lift $ Left $ "function name \"" <> fn <> "\" previously declared."
+
+
+{-
+For now, function lookup at call time is unimplemented because we'd need to pre-load all supported built-in functions.
+Lookup functions exist below, should we choose to implement.
+Typing is also tricky since many functions we support can be called at multiple types. We'd need an entry here for each.
+-}
+
 toLExprAlg :: IAlgM LookupM UExprF LExpr
 toLExprAlg = \case
   UL le -> pure $ IFix le
   UIndex ik -> lookupIndex ik
   UIndexSize ik -> lookupSize ik
   UVarExpr name sType _le -> lookupVar name sType
+  UFunction _f le -> pure $ IFix le
+  UDensity _d le -> pure $ IFix le
 
 doLookups :: NatM LookupM UExpr LExpr
 doLookups = iCataM toLExprAlg
@@ -164,8 +185,9 @@ updateContextA = \case
   SDeclAssign varName declSpec _ -> ucDeclare varName declSpec
   SFor loopCounter _ _ _ -> ucAddIntCounterToLoopBodyScope loopCounter
   SForEach loopCounter ce _ -> ucAddTypedCounterToLoopBodyScope loopCounter ce
-  SFunction _ typedArgs _  -> do
+  SFunction f typedArgs _  -> do
     ucAddArgsToFunctionBodyScope typedArgs
+    newFunction f
 --    ucAddReturnToFunctionBodyScope re
 --  SBlockF stBlock body -> case stBlock of
 --    ModelStmts -> modify (modifyVarCtxt enterNewScope)
@@ -261,6 +283,9 @@ doLookupsE = iCataM $ \case
   UIndex ik -> lookupIndexE ik
   UIndexSize ik -> lookupSizeE ik
   UVarExpr name sType _le -> lookupVarE name sType --pure $ IFix $ EL le
+  UFunction _f le -> pure $ IFix $ EL le
+  UDensity _d le -> pure $ IFix $ EL le
+
 
 eExprToIExprCode :: EExpr ~> K IExprCode
 eExprToIExprCode = iCata $ \case
@@ -275,6 +300,46 @@ eStmtToCode = RS.hylo stmtToCodeAlg (hfmap eExprToCode . RS.project)
 
 eStatementToCodeE :: SLA.ASTCtxt -> UStmt -> Either Text CodePP
 eStatementToCodeE ctxt0 x = doLookupsEInStatementE ctxt0 x >>= eStmtToCode
+
+-- currently unused because we'd need to preload all supported built-in functions
+calledFunction :: Function t ts -> LookupM ()
+calledFunction f = case f of
+  IdentityFunction _ ->  pure ()
+  _ -> flip withFunction f $ \fn rt ats -> do
+    (SLA.FunctionCtxt fcm) <- gets SLA.functionCtxt
+    case Map.lookup fn fcm of
+      Nothing -> lift $ Left $ "Function \"" <> fn <> "\" called but no function by that name exists."
+      Just (rtS, atsS) -> testFunctionTypes fn rt ats rtS atsS
+
+calledDensity :: Density t ts -> LookupM ()
+calledDensity d = flip withDensity d $ \fn gt ats -> do
+    (SLA.FunctionCtxt fcm) <- gets SLA.functionCtxt
+    case Map.lookup fn fcm of
+      Nothing -> lift $ Left $ "Density \"" <> fn <> "\" called but no function by that name exists."
+      Just (gtS, atsS) -> testDensityTypes fn gt ats gtS atsS
+
+testFunctionTypes :: FunctionName -> SType t -> STypeList ts -> Some.Some SType -> Some.Some STypeList -> LookupM ()
+testFunctionTypes fn rt ats rtS atsS =
+  Some.withSome rtS
+  $ \rt' ->
+      Some.withSome atsS
+      $ \ats' -> case testEquality rt rt' of
+                   Nothing -> lift $ Left $ "Function \"" <> fn <> "\" called and exists but return types don't match."
+                   Just Refl -> case testEquality ats ats' of
+                     Nothing -> lift $ Left $ "Function \"" <> fn <> "\" called and exists but argument types don't match."
+                     Just Refl -> pure ()
+
+testDensityTypes :: FunctionName -> SType t -> STypeList ts -> Some.Some SType -> Some.Some STypeList -> LookupM ()
+testDensityTypes fn gt ats gtS atsS =
+  Some.withSome gtS
+  $ \gt' ->
+      Some.withSome atsS
+      $ \ats' -> case testEquality gt gt' of
+                   Nothing -> lift $ Left $ "Density \"" <> fn <> "\" called and exists but given types don't match."
+                   Just Refl -> case testEquality ats ats' of
+                     Nothing -> lift $ Left $ "Density \"" <> fn <> "\" called and exists but argument types don't match."
+                     Just Refl -> pure ()
+
 
 {-
 contextualLookupE :: forall r a . UStmt -> LookupM (RS.Base EStmt UStmt)

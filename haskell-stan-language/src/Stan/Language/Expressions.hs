@@ -53,7 +53,7 @@ import qualified Data.Vec.Lazy as Vec
 import qualified Data.Type.Nat as DT
 import Data.Type.Nat (Nat(Z, S), SNat (SZ, SS))
 
-namedE :: Text -> SType t -> SLE.UExpr t
+namedE :: SLE.VarName -> SType t -> SLE.UExpr t
 namedE name st = SLR.IFix $ SLE.UVarExpr name st $ SLE.LNamed name st
 
 intE :: Int -> SLE.UExpr EInt
@@ -83,10 +83,10 @@ tupleE :: TypedList SLE.UExpr ts -> SLE.UExpr (ETuple ts)
 tupleE = SLR.IFix . SLE.UL . SLE.LTuple
 
 functionE :: Function rt args -> TypedList SLE.UExpr args -> SLE.UExpr rt
-functionE f al = SLR.IFix $ SLE.UL $ SLE.LFunction f al
+functionE f al = SLR.IFix $ SLE.UFunction f $ SLE.LFunction f al
 
 densityE :: Density gt args -> SLE.UExpr gt -> TypedList SLE.UExpr args -> SLE.UExpr EReal
-densityE d ge al = SLR.IFix $ SLE.UL $ SLE.LDensity d ge al
+densityE d ge al = SLR.IFix $ SLE.UDensity d $ SLE.LDensity d ge al
 
 unaryOpE :: SUnaryOp op -> SLE.UExpr t -> SLE.UExpr (UnaryResultT op t)
 unaryOpE op e = SLR.IFix $ SLE.UL $ SLE.LUnaryOp op e

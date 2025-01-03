@@ -36,9 +36,9 @@ module Stan.Language.CodeWriter
 
 import qualified Stan.Language.Statement as SLS
 import qualified Stan.Language.Statements as SLSS
-import Stan.Language.Expression (UExpr )
+import Stan.Language.Expression (UExpr)
 import Stan.Language.Expressions (namedE, ExprList)
-import Stan.Language.Types ( sTypeFromStanType)
+import Stan.Language.Types (sTypeFromStanType)
 import Control.Monad.Writer.Strict as W
 
 import Prelude hiding (Nat)
