@@ -75,14 +75,14 @@ withPhantomP (PhantomP p) f = f p
 -- return the list of parameters in order we can build them.
 depOrderedPParameters :: PT.BParameterCollection -> [PhantomP]
 depOrderedPParameters pc =  (\(pp, _, _) -> pp) . vToBuildInfo <$> Gr.topSort pGraph where
-  parameterNameM :: PT.Parameter t -> Maybe SLS.StanName
+  parameterNameM :: PT.Parameter t -> Maybe SLT.VarName
   parameterNameM = \case
     PT.GivenP _ -> Nothing
     PT.BuildP ttn -> Just $ PT.taggedParameterName ttn
     PT.MappedP _ p -> parameterNameM p
-  bParameterNames :: PT.Parameters ts -> [SLS.StanName]
+  bParameterNames :: PT.Parameters ts -> [SLT.VarName]
   bParameterNames = catMaybes . SLT.typedKToList . hfmap (K . parameterNameM)
-  dSumToGBuildInfo :: DM.DSum PT.ParameterTag PT.BuildParameter -> (PhantomP, SLS.StanName, [SLS.StanName])
+  dSumToGBuildInfo :: DM.DSum PT.ParameterTag PT.BuildParameter -> (PhantomP, SLT.VarName, [SLT.VarName])
   dSumToGBuildInfo (_ DM.:=> bp) = (PhantomP bp, PT.bParameterName bp, PT.withBPDeps bp bParameterNames)
   (pGraph, vToBuildInfo, _) = Gr.graphFromEdges . fmap dSumToGBuildInfo . DM.toList $ PT.pdm pc
 --  orderedVList = Gr.topSort pGraph

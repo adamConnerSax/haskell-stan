@@ -32,11 +32,25 @@ import qualified Data.Dependent.HashMap as DHash
 import qualified Data.Map.Strict as Map
 import qualified Data.Set as Set
 
+import qualified Effectful as Eff
+import Effectful ((:>), Eff)
+import qualified Effectful.State.Static.Local as EffS
+import Stan.Language.Program (stmtAsText)
+
+addStmtToCodeEff :: SBC.SingleStateEff SBC.StanCode es => SLS.UStmt -> Eff es ()
+addStmtToCodeEff stmt = do
+  cb <- getBlockEff
+  f <- SBC.effBuildEither $ SLP.addStmtToBlock cb stmt
+  modifyCodeEff f
+
 addStmtToCode :: SLS.UStmt -> SBC.StanBuilderM md gq ()
-addStmtToCode stmt = do
-  cb <- getBlock
-  f <- SBC.stanBuildEither $ SLP.addStmtToBlock cb stmt
-  modifyCode f
+addStmtToCode = SBC.viaStanBuilder . addStmtToCodeEff
+{-
+  do
+    cb <- getBlock
+    f <- SBC.stanBuildEither $ SLP.addStmtToBlock cb stmt
+    modifyCode f
+-}
 
 addStmtsToCode :: Traversable f => f SLS.UStmt -> SBC.StanBuilderM md gq ()
 addStmtsToCode stmts = do
@@ -67,6 +81,11 @@ addScopedFromCodeWriter (SLC.CodeWriter cw) = addStmtsToCode [SLS.scoped $ SLS.g
 modifyCode' :: (SLP.StanProgram -> SLP.StanProgram) -> SBC.BuilderState md gq -> SBC.BuilderState md gq
 modifyCode' f bs = let (SBC.StanCode currentBlock oldProg) = SBC.code bs in bs { SBC.code = SBC.StanCode currentBlock $ f oldProg }
 
+modifyCodeEff :: (EffS.State SBC.StanCode :> es)
+              => (SLP.StanProgram -> SLP.StanProgram)
+              -> Eff es ()
+modifyCodeEff f = EffS.modify $ \(SBC.StanCode cb p) -> SBC.StanCode cb (f p)
+
 modifyCode :: (SLP.StanProgram -> SLP.StanProgram) -> SBC.StanBuilderM md gq ()
 modifyCode f = modify $ modifyCode' f
 
@@ -76,8 +95,14 @@ modifyCodeE fE = SBC.stanBuildEither fE >>= modifyCode
 setBlock' :: SLP.StanBlock -> SBC.BuilderState md gq -> SBC.BuilderState md gq
 setBlock' b bs = bs { SBC.code = (SBC.code bs) { SBC.curBlock = b} } -- lenses!
 
+setBlockEff :: EffS.State SBC.StanCode :> es => SLP.StanBlock -> Eff es ()
+setBlockEff b = EffS.modify $ \(SBC.StanCode _ p) -> SBC.StanCode b p
+
 setBlock :: SLP.StanBlock -> SBC.StanBuilderM md gq ()
 setBlock = modify . setBlock'
+
+getBlockEff :: EffS.State SBC.StanCode :> es => Eff es SLP.StanBlock
+getBlockEff = EffS.gets SBC.curBlock
 
 getBlock :: SBC.StanBuilderM md gq SLP.StanBlock
 getBlock = gets (SBC.curBlock . SBC.code)
@@ -98,14 +123,14 @@ inBlock b m = do
   varScopeBlock oldBlock
   return x
 
-isDeclared :: SLS.StanName -> SBC.StanBuilderM md gq Bool
+isDeclared :: SLT.VarName -> SBC.StanBuilderM md gq Bool
 isDeclared sn  = do
   sd <- SBC.declaredVars <$> get
   case varLookup sd sn of
     Left _ -> return False
     Right _ -> return True
 
-isDeclaredAllScopes :: SLS.StanName -> SBC.StanBuilderM md gq Bool
+isDeclaredAllScopes :: SLT.VarName -> SBC.StanBuilderM md gq Bool
 isDeclaredAllScopes sn  = do
   sd <- SBC.declaredVars <$> get
   case varLookupAllScopes sd sn of
@@ -114,7 +139,7 @@ isDeclaredAllScopes sn  = do
 
 
 -- return True if variable is new, False if already declared
-declare :: SLS.StanName -> SLT.StanType t -> SBC.StanBuilderM md gq Bool
+declare :: SLT.VarName -> SLT.StanType t -> SBC.StanBuilderM md gq Bool
 declare sn st = do
 --  let sv = SME.StanVar sn st
   sd <- SBC.declaredVars <$> get
@@ -141,7 +166,7 @@ setDeclarationsNE dmNE SBC.GQScope sd = sd { SBC.gqScope = dmNE}
 declarationsInScope :: SBC.ScopedDeclarations -> NonEmpty SBC.DeclarationMap
 declarationsInScope sd = declarationsNE (SBC.currentScope sd) sd
 
-addVarInScope :: SLS.StanName -> SLT.StanType t -> SBC.StanBuilderM md gq (SLE.UExpr t)
+addVarInScope :: SLT.VarName -> SLT.StanType t -> SBC.StanBuilderM md gq (SLE.UExpr t)
 addVarInScope sn st = do
   let newSD sd = do
         _ <- alreadyDeclared sd sn st
@@ -158,7 +183,7 @@ addVarInScope sn st = do
       put newBS
       pure $ SLE.namedE sn (SLT.sTypeFromStanType st)
 
-varLookupInScope :: SBC.ScopedDeclarations -> SBC.VariableScope -> SLS.StanName -> Either Text SLT.EType
+varLookupInScope :: SBC.ScopedDeclarations -> SBC.VariableScope -> SLT.VarName -> Either Text SLT.EType
 varLookupInScope sd sc sn = go $ toList dNE where
   dNE = declarationsNE sc sd
   go [] = Left $ "\"" <> sn <> "\" not declared/in scope (stan scope=" <> show sc <> ")."
@@ -166,10 +191,10 @@ varLookupInScope sd sc sn = go $ toList dNE where
     Nothing -> go xs
     Just et -> pure et
 
-varLookup :: SBC.ScopedDeclarations -> SLS.StanName -> Either Text SLT.EType
+varLookup :: SBC.ScopedDeclarations -> SLT.VarName -> Either Text SLT.EType
 varLookup sd = varLookupInScope sd (SBC.currentScope sd)
 
-varLookupAllScopes :: SBC.ScopedDeclarations -> SLS.StanName -> Either Text SLT.EType
+varLookupAllScopes :: SBC.ScopedDeclarations -> SLT.VarName -> Either Text SLT.EType
 varLookupAllScopes sd sn =
   case varLookupInScope sd SBC.GlobalScope sn of
     Right x -> Right x
@@ -178,7 +203,7 @@ varLookupAllScopes sd sn =
       Left _ -> varLookupInScope sd SBC.GQScope sn
 
 
-alreadyDeclared :: SBC.ScopedDeclarations -> SLS.StanName -> SLT.StanType t  -> Either Text ()
+alreadyDeclared :: SBC.ScopedDeclarations -> SLT.VarName -> SLT.StanType t  -> Either Text ()
 alreadyDeclared sd sn st =
   case varLookup sd sn of
     Right et ->  if et == SLT.eTypeFromStanType st
@@ -187,7 +212,7 @@ alreadyDeclared sd sn st =
                       <> ")already declared (with different type=" <> show et <> ")!"
     Left _ -> pure ()
 
-alreadyDeclaredAllScopes :: SBC.ScopedDeclarations -> SLS.StanName -> SLT.StanType t -> Either Text ()
+alreadyDeclaredAllScopes :: SBC.ScopedDeclarations -> SLT.VarName -> SLT.StanType t -> Either Text ()
 alreadyDeclaredAllScopes sd sn st =
   case varLookupAllScopes sd sn of
     Right et ->  if et == SLT.eTypeFromStanType st

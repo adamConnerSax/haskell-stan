@@ -63,12 +63,12 @@ import Stan.Language.Types (sTypeToEType)
 
   -- ultimately, we should not expose this constructor.  So to get one of these you have to add a Builder to the DMap.
 data ParameterTag :: SLT.EType -> Type where
-  ParameterTag :: SLT.SType t -> SLS.StanName -> ParameterTag t
+  ParameterTag :: SLT.SType t -> SLT.VarName -> ParameterTag t
 
 taggedParameterType :: ParameterTag t -> SLT.SType t
 taggedParameterType (ParameterTag st _) = st
 
-taggedParameterName :: ParameterTag t -> SLS.StanName
+taggedParameterName :: ParameterTag t -> SLT.VarName
 taggedParameterName (ParameterTag _ n ) = n
 
 instance GC.GEq ParameterTag where
@@ -223,7 +223,7 @@ withBPDeps (UntransformedP _ _ ps _) f = f ps
 withBPDeps (TransformedP _ _ pq _ _ pr _) f = f pq <> f pr
 --withBPDeps (ModelP _ _ pq _ ) f = f pq
 
-data BParameterCollection = BParameterCollection { pdm :: DM.DMap ParameterTag BuildParameter, usedNames :: Set SLS.StanName }
+data BParameterCollection = BParameterCollection { pdm :: DM.DMap ParameterTag BuildParameter, usedNames :: Set SLT.VarName }
 
 --type BuildParameters ts = TE.TypedList BuildParameter ts
 
@@ -245,7 +245,7 @@ setNamedDecl x = \case
 -}
 --  TransformedDiffTypeP _ y z a b c d -> TransformedDiffTypeP x y z a b c d
 
-bParameterName :: BuildParameter t -> SLS.StanName
+bParameterName :: BuildParameter t -> SLT.VarName
 bParameterName = SLS.declName . getNamedDecl
 
 bParameterStanType :: BuildParameter t -> SLT.StanType t

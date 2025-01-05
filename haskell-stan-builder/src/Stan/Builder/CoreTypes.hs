@@ -7,6 +7,7 @@
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TypeFamilies #-}
+{-# LANGUAGE TypeOperators #-}
 
 module Stan.Builder.CoreTypes
   (
@@ -20,7 +21,7 @@ import qualified Stan.Language.Program as SLP
 import qualified Stan.Language.Format as SLF
 import qualified Stan.Language.ASTContext as SLA
 import qualified Stan.Language.Expression as SLE
-import qualified Stan.Language.Statements as SLS -- was TE
+--import qualified Stan.Language.Statements as SLS -- was TE
 import qualified Stan.Builder.ParameterTypes as SBPT
 
 import Prelude hiding (All)
@@ -39,6 +40,13 @@ import qualified Data.GADT.Show as GADT
 import qualified Data.Dependent.Sum as DSum
 import qualified Data.Dependent.Map as DM
 
+import qualified Effectful as Eff
+import Effectful ((:>), Eff)
+import qualified Effectful.State.Static.Local as EffS
+import qualified Effectful.Fail as EffF
+import qualified Effectful.Dispatch.Dynamic as EffD
+
+
 type FunctionsBlock = T.Text
 type DataBlock = T.Text
 type TransformedDataBlock = T.Text
@@ -46,6 +54,80 @@ type ParametersBlock = T.Text
 type TransformedParametersBlock = T.Text
 type ModelBlock = T.Text
 type GeneratedQuantitiesBlock = T.Text
+
+
+data RowBuilders md gq = RowBuilders { modelRBs :: !(RowInfos md), gqRBs :: !(RowInfos gq) }
+data ConstJsonFolds = ConstJsonFolds { modelCJ :: JSONSeriesFold (), gqCJ :: JSONSeriesFold () }
+type FunctionNames = Set.Set SLT.FunctionName
+
+type StanBuilderC md gq es = (EffF.Fail :> es
+                             , EffS.State (RowBuilders md gq) :> es
+                             , EffS.State ConstJsonFolds :> es
+                             , EffS.State FunctionNames :> es
+                             , EffS.State SBPT.BParameterCollection :> es
+                             , EffS.State StanCode :> es
+                             )
+
+type StanBuilderEff md gq a = Eff [EffS.State StanCode
+                                  , EffS.State SBPT.BParameterCollection
+                                  , EffS.State (Set Text)
+                                  , EffS.State ConstJsonFolds
+                                  , EffS.State (RowBuilders md gq)
+                                  , EffF.Fail
+                                  ]
+                              a
+
+type SingleStateEff s es = (EffS.State s :> es, EffF.Fail :> es)
+{-
+getRowBuilders :: (EffS.State (RowBuilders md gq) :> es) => Eff es (RowBuilders md gq)
+getRowBuilders = EffS.get
+
+putRowBuilders :: (EffS.State (RowBuilders md gq) :> es) => RowBuilders md gw -> Eff es ()
+putRowBuilders = EffS.put
+
+getConstJsonFolds :: (EffS.State ConstJsonFolds :> es) => Eff es ConstJsonFolds
+getConstJsonFolds = EffS.get
+
+putConstJsonFolds :: (EffS.State ConstJsonFolds :> es) => Eff es ConstJsonFolds
+putConstJsonFolds = EffS.get
+
+getFunctionNames :: (EffS.State FunctionNames :> es) => Eff es FunctionNames
+getFunctionNames = EffS.get
+
+getParameterCollection :: (EffS.State SBPT.BParameterCollection :> es) => Eff es SBPT.BParameterCollection
+getParameterCollection = EffS.get
+
+getStanCode :: (EffS.State StanCode :> es) => Eff es StanCode
+getStanCode = EffS.get
+-}
+
+
+viaStanBuilder :: StanBuilderEff md gq a -> StanBuilderM md gq a
+viaStanBuilder ma = do
+  (BuilderState dv ib mrb gqrb cmj cgqj hf pc c) <- get
+  let effRes
+        = Eff.runPureEff
+          . EffF.runFail
+          . EffS.runState (RowBuilders mrb gqrb)
+          . EffS.runState (ConstJsonFolds cmj cgqj)
+          . EffS.runState hf
+          . EffS.runState pc
+          $ EffS.runState c ma
+  case effRes of
+    Left msg -> stanBuildError $ "From Eff section: " <> toText msg
+    Right (((((a, c'), pc'), hf'), cjf'), rb') -> do
+      let (ConstJsonFolds cmj' cgqj') = cjf'
+          (RowBuilders mrb' gqrb') = rb'
+      put (BuilderState dv ib mrb' gqrb' cmj' cgqj' hf' pc' c')
+      pure a
+
+f :: (EffS.State FunctionNames :> es) => Eff es ()
+f = undefined
+
+g :: StanBuilderM md gq ()
+g = viaStanBuilder f
+
+--runEffViaStanBuilder :: StanBuilderEff md gq () ->
 
 newtype StanBuilderM md gq a = StanBuilderM { unStanBuilderM :: ExceptT Text (State (BuilderState md gq)) a }
                              deriving newtype (Functor, Applicative, Monad, MonadState (BuilderState md gq))
@@ -66,10 +148,21 @@ stanBuildError t = do
   StanBuilderM $ ExceptT (pure $ Left $ t <> "\nBuilder:\n" <> builderText)
 
 stanBuildMaybe :: Text -> Maybe a -> StanBuilderM md gq a
-stanBuildMaybe msg = maybe (stanBuildError msg) return
+stanBuildMaybe msg = maybe (stanBuildError msg) pure
 
 stanBuildEither :: Either Text a -> StanBuilderM md gq a
-stanBuildEither = either stanBuildError return
+stanBuildEither = either stanBuildError pure
+
+effBuildError :: EffF.Fail :> es => Text -> Eff es a
+effBuildError = EffD.send . EffF.Fail . toString
+
+effBuildMaybe :: EffF.Fail :> es => Text -> Maybe a -> Eff es a
+effBuildMaybe msg = maybe (effBuildError msg) pure
+
+effBuildEither :: EffF.Fail :> es => Either Text a -> Eff es a
+effBuildEither = either effBuildError pure
+
+
 
 data BuilderState md gq = BuilderState { declaredVars :: !ScopedDeclarations
                                        , indexBindings :: !SLA.IndexLookupCtxt
@@ -180,7 +273,7 @@ data StanCode = StanCode { curBlock :: SLP.StanBlock
 
 data VariableScope = GlobalScope | ModelScope | GQScope deriving stock (Show, Eq, Ord)
 
-newtype DeclarationMap = DeclarationMap (Map SLS.StanName SLT.EType) deriving stock (Show)
+newtype DeclarationMap = DeclarationMap (Map SLT.VarName SLT.EType) deriving stock (Show)
 data ScopedDeclarations = ScopedDeclarations { currentScope :: VariableScope
                                              , globalScope :: NonEmpty DeclarationMap
                                              , modelScope :: NonEmpty DeclarationMap
@@ -303,14 +396,14 @@ type DataSetGroupIntMaps = DHash.DHashMap RowTypeTag GroupIntMaps
 displayDataSetGroupIntMaps :: DataSetGroupIntMaps -> Text
 displayDataSetGroupIntMaps = DHash.foldrWithKey g ""
   where
---    h = DHash.foldrWithKey (\gtt _ t -> t <> ", " <> taggedGroupName gtt) ""
-    g rtt gims {-(GroupIntMaps gim)-} t = t <> "rtt=" <> dataSetName rtt <> " (idt=" <> show (inputDataType rtt) <> "): " <> displayGroupIntMaps gims <> "\n"
+    g rtt gims t = t <> "rtt=" <> dataSetName rtt <> " (idt=" <> show (inputDataType rtt) <> "): " <> displayGroupIntMaps gims <> "\n"
 
 displayGroupIntMaps :: GroupIntMaps k -> Text
 displayGroupIntMaps (GroupIntMaps gim) = h gim where
   h = DHash.foldrWithKey (\gtt _ t -> t <> ", " <> taggedGroupName gtt) ""
 
-data GroupIndexAndIntMapMakers d r = GroupIndexAndIntMapMakers (ToFoldable d r) (GroupIndexMakers r) (GroupIntMapBuilders r)
+data GroupIndexAndIntMapMakers d r =
+  GroupIndexAndIntMapMakers (ToFoldable d r) (GroupIndexMakers r) (GroupIntMapBuilders r)
 
 data IndexMap r k = IndexMap
                     { rowToGroupIndex :: IntIndex r,
