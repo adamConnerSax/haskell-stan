@@ -6,6 +6,8 @@ module Stan.Language
   , module Stan.Language.Statements
   , module Stan.Language.Operations
   , module Stan.Language.Functions
+  , module Stan.Language.Program
+  , module Stan.Language.CodeWriter
   )
   where
 
@@ -15,3 +17,5 @@ import Stan.Language.Expressions
 import Stan.Language.Statements
 import Stan.Language.Operations
 import Stan.Language.Functions
+import Stan.Language.Program
+import Stan.Language.CodeWriter

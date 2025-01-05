@@ -123,21 +123,24 @@ addStmtToBlock' addF sb s = do
   let f sp =
         let p = unStanProgram sp
         in StanProgram $ p // [(sb, p ! sb `addF` s)]
-  case s of
-    SLS.SFunction {} -> if sb == SBFunctions
-                       then Right f
-                       else Left "Functions and only functions can appear in the function block."
-    _ -> if sb `elem` [SBData, SBDataGQ, SBParameters]
-      then case s of
-             SLS.SDeclare {} -> Right f
-             SLS.SComment {} -> Right f
---             SLS.SPrint {} -> Right f
---             SLS.SReject {} -> Right f
-             _ -> Left $ "Statement other than declaration or comment in data or parameters block: \n"
-               <> (case stmtAsText s of
-                     Left err -> "Error trying to render statement (" <> err <> ")"
-                     Right st -> st)
-      else Right f
+  _ <- checkStmtBlock sb s
+  pure f
+
+checkStmtBlock :: StanBlock -> SLS.UStmt -> Either Text SLS.UStmt
+checkStmtBlock sb s = case s of
+  SLS.SFunction {} -> if sb == SBFunctions
+                      then pure s
+                      else Left "Functions and only functions can appear in the function block."
+  _ -> if sb `elem` [SBData, SBDataGQ, SBParameters]
+       then case s of
+              SLS.SDeclare {} -> pure s
+              SLS.SComment {} -> pure s
+              SLS.SGroup SLS.UnBracketed stmts -> SLS.SGroup SLS.UnBracketed <$> traverse (checkStmtBlock sb) stmts
+              _ ->  Left $ "Statement other than declaration or comment in " <> show sb <> " block: \n"
+                    <> (case stmtAsText s of
+                          Left err -> "Error trying to render statement (" <> err <> ")"
+                          Right st -> st)
+       else pure s
 
 addStmtToBlock :: StanBlock -> SLS.UStmt -> Either Text (StanProgram -> StanProgram)
 addStmtToBlock = addStmtToBlock' (\stmts s -> stmts ++ [s])
