@@ -1,3 +1,4 @@
+{-# LANGUAGE AllowAmbiguousTypes #-}
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE FlexibleInstances #-}
@@ -58,6 +59,7 @@ type GeneratedQuantitiesBlock = T.Text
 
 data RowBuilders md gq = RowBuilders { modelRBs :: !(RowInfos md), gqRBs :: !(RowInfos gq) }
 data ConstJsonFolds = ConstJsonFolds { modelCJ :: JSONSeriesFold (), gqCJ :: JSONSeriesFold () }
+
 type FunctionNames = Set.Set SLT.FunctionName
 
 type StanBuilderC md gq es = (EffF.Fail :> es
@@ -76,35 +78,38 @@ type StanBuilderEff md gq a = Eff [EffS.State StanCode
                                   , EffF.Fail
                                   ]
                               a
-
-type SingleStateEff s es = (EffS.State s :> es, EffF.Fail :> es)
 {-
-getRowBuilders :: (EffS.State (RowBuilders md gq) :> es) => Eff es (RowBuilders md gq)
-getRowBuilders = EffS.get
-
-putRowBuilders :: (EffS.State (RowBuilders md gq) :> es) => RowBuilders md gw -> Eff es ()
-putRowBuilders = EffS.put
-
-getConstJsonFolds :: (EffS.State ConstJsonFolds :> es) => Eff es ConstJsonFolds
-getConstJsonFolds = EffS.get
-
-putConstJsonFolds :: (EffS.State ConstJsonFolds :> es) => Eff es ConstJsonFolds
-putConstJsonFolds = EffS.get
-
-getFunctionNames :: (EffS.State FunctionNames :> es) => Eff es FunctionNames
-getFunctionNames = EffS.get
-
-getParameterCollection :: (EffS.State SBPT.BParameterCollection :> es) => Eff es SBPT.BParameterCollection
-getParameterCollection = EffS.get
-
-getStanCode :: (EffS.State StanCode :> es) => Eff es StanCode
-getStanCode = EffS.get
+runGroupBuilderEff :: forall md gq a . md -> gq -> StanBuilderGEff md gq a -> StanBuilderEff md gq a
+runGroupBuilderEff md gq m = do
+  (a, gbs) <- EffS.runState (GroupBuilderS DHash.empty DHash.empty) m
+  let modelRowInfos = DHash.mapWithKey (buildRowInfo md) $ gbModelS gbs
+      gqRowInfos = DHash.mapWithKey (buildRowInfo gq) $ gbGQS gbs
+  EffS.put @(RowBuilders md gq) $ RowBuilders modelRowInfos gqRowInfos
+  pure a
 -}
 
+runStanBuilderEff :: StanBuilderEff md gq a -> Either Text (BuilderState md gq, a)
+runStanBuilderEff m = do
+  let effRes =  Eff.runPureEff
+                . EffF.runFail
+                . EffS.runState (RowBuilders  DHash.empty DHash.empty)
+                . EffS.runState (ConstJsonFolds mempty mempty)
+                . EffS.runState Set.empty
+                . EffS.runState (SBPT.BParameterCollection mempty mempty)
+                . EffS.runState (StanCode SLP.SBData SLP.emptyStanProgram)
+                $ m
+  case effRes of
+    Left err -> Left $ toText err
+    Right ((((((a, c), pc), hf), cjf), rb)) -> do
+      let (RowBuilders mRBs gqRBs) = rb
+          (ConstJsonFolds mCJFs gqCJFs) = cjf
+      pure (BuilderState mRBs gqRBs mCJFs gqCJFs hf pc c, a)
+
+type StateAndFailEff s es = (EffS.State s :> es, EffF.Fail :> es)
 
 viaStanBuilder :: StanBuilderEff md gq a -> StanBuilderM md gq a
 viaStanBuilder ma = do
-  (BuilderState dv ib mrb gqrb cmj cgqj hf pc c) <- get
+  (BuilderState {-dv ib -} mrb gqrb cmj cgqj hf pc c) <- get
   let effRes
         = Eff.runPureEff
           . EffF.runFail
@@ -112,20 +117,15 @@ viaStanBuilder ma = do
           . EffS.runState (ConstJsonFolds cmj cgqj)
           . EffS.runState hf
           . EffS.runState pc
-          $ EffS.runState c ma
+          . EffS.runState c
+          $ ma
   case effRes of
     Left msg -> stanBuildError $ "From Eff section: " <> toText msg
     Right (((((a, c'), pc'), hf'), cjf'), rb') -> do
       let (ConstJsonFolds cmj' cgqj') = cjf'
           (RowBuilders mrb' gqrb') = rb'
-      put (BuilderState dv ib mrb' gqrb' cmj' cgqj' hf' pc' c')
+      put (BuilderState {-dv ib -} mrb' gqrb' cmj' cgqj' hf' pc' c')
       pure a
-
-f :: (EffS.State FunctionNames :> es) => Eff es ()
-f = undefined
-
-g :: StanBuilderM md gq ()
-g = viaStanBuilder f
 
 --runEffViaStanBuilder :: StanBuilderEff md gq () ->
 
@@ -141,6 +141,7 @@ runStanBuilder md gq sgb sb =
   let builderState = runStanGroupBuilder sgb md gq
       (resE, bs) = usingState builderState . runExceptT $ unStanBuilderM sb
   in fmap (bs,) resE
+
 
 stanBuildError :: Text -> StanBuilderM md gq a
 stanBuildError t = do
@@ -164,22 +165,22 @@ effBuildEither = either effBuildError pure
 
 
 
-data BuilderState md gq = BuilderState { declaredVars :: !ScopedDeclarations
-                                       , indexBindings :: !SLA.IndexLookupCtxt
-                                       , modelRowBuilders :: !(RowInfos md)
-                                       , gqRowBuilders :: !(RowInfos gq)
-                                       , constModelJSON :: JSONSeriesFold ()  -- json for things which are attached to no data set.
-                                       , constGQJSON :: JSONSeriesFold ()
-                                       , hasFunctions :: !(Set.Set Text)
-                                       , parameterCollection :: SBPT.BParameterCollection
-                                       , code :: !StanCode
-                                       }
+data BuilderState md gq = BuilderState { --declaredVars :: !ScopedDeclarations
+--                                       , indexBindings :: !SLA.IndexLookupCtxt
+  modelRowBuilders :: !(RowInfos md)
+  , gqRowBuilders :: !(RowInfos gq)
+  , constModelJSON :: JSONSeriesFold ()  -- json for things which are attached to no data set.
+  , constGQJSON :: JSONSeriesFold ()
+  , hasFunctions :: !(Set.Set Text)
+  , parameterCollection :: SBPT.BParameterCollection
+  , code :: !StanCode
+  }
 
 initialBuilderState :: RowInfos md -> RowInfos gq -> BuilderState md gq
 initialBuilderState modelRowInfos gqRowInfos =
   BuilderState
-  initialScopedDeclarations
-  SLA.emptyIndexLookupCtxt
+--  initialScopedDeclarations
+--  SLA.emptyIndexLookupCtxt
   modelRowInfos
   gqRowInfos
   mempty
@@ -190,16 +191,18 @@ initialBuilderState modelRowInfos gqRowInfos =
 
 dumpBuilderState :: BuilderState md gq -> Text
 dumpBuilderState bs = -- (BuilderState dvs ibs ris js hf c) =
-  "Declared Vars: " <> show (declaredVars bs)
-  <> "\n index-bindings: " <> SLF.printLookupCtxt (indexBindings bs)
-  <> "\n model row-info-keys: " <> show (DHash.keys $ modelRowBuilders bs)
+--  "Declared Vars: " <> show (declaredVars bs)
+--  <> "\n index-bindings: " <> SLF.printLookupCtxt (indexBindings bs)
+  "\n model row-info-keys: " <> show (DHash.keys $ modelRowBuilders bs)
   <> "\n gq row-info-keys: " <> show (DHash.keys $ gqRowBuilders bs)
   <> "\n functions: " <> show (hasFunctions bs)
   <> "\n parameterCollection (keys)" <> show (DM.keys $ SBPT.pdm $ parameterCollection bs)
 
+{-
 initialScopedDeclarations :: ScopedDeclarations
 initialScopedDeclarations = let x = one (DeclarationMap Map.empty)
                             in ScopedDeclarations GlobalScope x x x
+-}
 
 type RowInfoMakers d = DHash.DHashMap RowTypeTag (GroupIndexAndIntMapMakers d)
 data GroupBuilderS md gq = GroupBuilderS { gbModelS :: RowInfoMakers md, gbGQS :: RowInfoMakers gq}
@@ -229,10 +232,38 @@ runStanGroupBuilder sgb md gq =
 buildRowInfo :: d -> RowTypeTag r -> GroupIndexAndIntMapMakers d r -> RowInfo d r
 buildRowInfo d rtt (GroupIndexAndIntMapMakers tf@(ToFoldable f) ims imbs) = Foldl.fold fld $ f d  where
   gisFld = indexBuildersForDataSetFold ims
-  uBindings = Map.insert (dataSetName rtt) (SLE.namedLIndex ("N_" <> dataSetName rtt))
-                $ useBindingsFromGroupIndexMakers rtt ims
-  fld = RowInfo tf uBindings <$> gisFld <*> pure imbs <*> pure mempty
+--  uBindings = Map.insert (dataSetName rtt) (SLE.namedLIndex ("N_" <> dataSetName rtt))
+--                $ useBindingsFromGroupIndexMakers rtt ims
+  fld = RowInfo tf {- uBindings -} <$> gisFld <*> pure imbs <*> pure mempty
 
+addModelDataEff :: forall md gq es r . (Typeable r, EffF.Fail :> es, EffS.State (RowBuilders md gq) :> es)
+                => md -> Text -> GroupIndexAndIntMapMakers md r -> Eff es (RowTypeTag r)
+addModelDataEff d name gimm = do
+  rowBuilders <- EffS.get @(RowBuilders md gq)
+  let rtt = RowTypeTag ModelData name
+      rowInfos = modelRBs rowBuilders
+  case DHash.lookup rtt rowInfos of
+    Just _ -> effBuildError $ "Attempt to add data of matching type and name (\"" <> name <> "\" to model-data row builders."
+    Nothing -> do
+      let newInfo = buildRowInfo d rtt gimm
+          newRowInfos = DHash.insert rtt newInfo rowInfos
+      EffS.put $ rowBuilders { modelRBs = newRowInfos}
+      pure rtt
+
+addGQDataEff :: forall md gq es r . (Typeable r, EffF.Fail :> es, EffS.State (RowBuilders md gq) :> es)
+             => gq -> Text -> GroupIndexAndIntMapMakers gq r -> Eff es (RowTypeTag r)
+addGQDataEff d name gimm = do
+  rowBuilders <- EffS.get @(RowBuilders md gq)
+  let rtt = RowTypeTag ModelData name
+      rowInfos = gqRBs rowBuilders
+  case DHash.lookup rtt rowInfos of
+    Just _ -> effBuildError $ "Attempt to add data of matching type and name (\"" <> name <> "\" to generated-quantity-data row builders."
+    Nothing -> do
+      let newInfo = buildRowInfo d rtt gimm
+          newRowInfos = DHash.insert rtt newInfo rowInfos
+      EffS.put $ rowBuilders { gqRBs = newRowInfos}
+      pure rtt
+{-
 useBindingsFromGroupIndexMakers :: RowTypeTag r -> GroupIndexMakers r -> SLA.IndexArrayMap
 useBindingsFromGroupIndexMakers rtt (GroupIndexMakers gims) = Map.fromList l where
   l = g <$> DHash.toList gims
@@ -242,6 +273,7 @@ useBindingsFromGroupIndexMakers rtt (GroupIndexMakers gims) = Map.fromList l whe
         indexName = dsn <> "_" <> gn
         indexExpr = SLE.namedLIndex indexName
     in (gn, indexExpr)
+-}
 
 intMapsForDataSetFoldM :: GroupIntMapBuilders r -> Foldl.FoldM (Either Text) r (GroupIntMaps r)
 intMapsForDataSetFoldM (GroupIntMapBuilders imbs) = GroupIntMaps <$> DHash.traverse unDataToIntMap imbs
@@ -270,7 +302,7 @@ makeIndexMapF (FoldToIndex fld h) = fmap (mapToIndexMap h) fld
 data StanCode = StanCode { curBlock :: SLP.StanBlock
                          , program :: SLP.StanProgram
                          }
-
+{-
 data VariableScope = GlobalScope | ModelScope | GQScope deriving stock (Show, Eq, Ord)
 
 newtype DeclarationMap = DeclarationMap (Map SLT.VarName SLT.EType) deriving stock (Show)
@@ -279,6 +311,7 @@ data ScopedDeclarations = ScopedDeclarations { currentScope :: VariableScope
                                              , modelScope :: NonEmpty DeclarationMap
                                              , gqScope :: NonEmpty DeclarationMap
                                              } deriving stock (Show)
+-}
 
 data StanModel = StanModel
   { functionsBlock :: Maybe FunctionsBlock,
@@ -418,7 +451,7 @@ contraIndexMap f (IndexMap rgi ggi gigk rg) = IndexMap (contramap f rgi) ggi gig
 data RowInfo d r = RowInfo
                    {
                      toFoldable    :: ToFoldable d r
-                   , expressionBindings :: SLA.IndexArrayMap
+--                   , expressionBindings :: SLA.IndexArrayMap
                    , groupIndexes  :: GroupIndexes r
                    , groupIntMapBuilders  :: GroupIntMapBuilders r
                    , jsonSeries    :: JSONSeriesFold r
