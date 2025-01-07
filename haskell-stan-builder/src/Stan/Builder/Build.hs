@@ -16,7 +16,7 @@ module Stan.Builder.Build
   )
 where
 
-import qualified Stan.Builder.CoreTypes as SBC
+import qualified Stan.Builder.Core as SBC
 import qualified Stan.Language.Types as SLT
 import qualified Stan.Language.ASTContext as SLA
 import qualified Stan.Language.Expression as SLE
@@ -39,94 +39,73 @@ import qualified Effectful.Fail as EffF
 import qualified Stan.Language.Program as SLP
 --import Stan.Language.Program (stmtAsText)
 
-addToCurrentBlockEff :: SBC.StateAndFailEff SBC.StanCode es
+addToCurrentBlock :: SBC.StateAndFailEff SBC.StanCode es
                      => (SLP.StanBlock -> a -> Either Text (SLP.StanProgram -> SLP.StanProgram))
                      -> a
                      -> Eff es ()
-addToCurrentBlockEff g s = do
-  cb <- getBlockEff
-  f <- SBC.effBuildEither $ g cb s
-  modifyCodeEff f
+addToCurrentBlock g s = do
+  cb <- getBlock
+  f <- SBC.buildEither $ g cb s
+  modifyCode f
 
-addToBlockEff :: SBC.StateAndFailEff SBC.StanCode es
+addToBlock :: SBC.StateAndFailEff SBC.StanCode es
               => (SLP.StanBlock -> a -> Either Text (SLP.StanProgram -> SLP.StanProgram))
               -> SLP.StanBlock
               -> a
               -> Eff es ()
-addToBlockEff g ab s = do
-  f <- SBC.effBuildEither $ g ab s
-  modifyCodeEff f
+addToBlock g ab s = do
+  f <- SBC.buildEither $ g ab s
+  modifyCode f
 
-addStmtToCodeEff :: SBC.StateAndFailEff SBC.StanCode es => SLS.UStmt -> Eff es ()
-addStmtToCodeEff = addToCurrentBlockEff SLP.addStmtToBlock
+addStmtToCode :: SBC.StateAndFailEff SBC.StanCode es => SLS.UStmt -> Eff es ()
+addStmtToCode = addToCurrentBlock SLP.addStmtToBlock
 
-addStmtToBlockEff :: SBC.StateAndFailEff SBC.StanCode es => SLP.StanBlock -> SLS.UStmt -> Eff es ()
-addStmtToBlockEff b = addToBlockEff SLP.addStmtToBlock b
+addStmtToBlock :: SBC.StateAndFailEff SBC.StanCode es => SLP.StanBlock -> SLS.UStmt -> Eff es ()
+addStmtToBlock b = addToBlock SLP.addStmtToBlock b
 
-addStmtToCode :: SLS.UStmt -> SBC.StanBuilderM md gq ()
-addStmtToCode = SBC.viaStanBuilder . addStmtToCodeEff
 
-addStmtsToCodeEff :: (SBC.StateAndFailEff SBC.StanCode es , Traversable f)
+addStmtsToCode :: (SBC.StateAndFailEff SBC.StanCode es , Traversable f)
                   => f SLS.UStmt -> Eff es ()
-addStmtsToCodeEff = addToCurrentBlockEff SLP.addStmtsToBlock
+addStmtsToCode = addToCurrentBlock SLP.addStmtsToBlock
 
-addStmtsToCode :: Traversable f => f SLS.UStmt -> SBC.StanBuilderM md gq ()
-addStmtsToCode = SBC.viaStanBuilder . addStmtsToCodeEff
+addStmtsToBlock :: (SBC.StateAndFailEff SBC.StanCode es , Traversable f)
+                  => SLP.StanBlock -> f SLS.UStmt -> Eff es ()
+addStmtsToBlock sb = addToBlock SLP.addStmtsToBlock sb
 
-addStmtToCodeTopEff :: SBC.StateAndFailEff SBC.StanCode es =>  SLS.UStmt -> Eff es ()
-addStmtToCodeTopEff = addToCurrentBlockEff SLP.addStmtToBlockTop
 
-addStmtToCodeTop :: SLS.UStmt -> SBC.StanBuilderM md gq ()
-addStmtToCodeTop = SBC.viaStanBuilder . addStmtToCodeTopEff
+addStmtToCodeTop :: SBC.StateAndFailEff SBC.StanCode es =>  SLS.UStmt -> Eff es ()
+addStmtToCodeTop = addToCurrentBlock SLP.addStmtToBlockTop
 
-addStmtsToCodeTopEff :: (Traversable f, SBC.StateAndFailEff SBC.StanCode es) =>  f SLS.UStmt -> Eff es ()
-addStmtsToCodeTopEff = addToCurrentBlockEff SLP.addStmtsToBlockTop
+addStmtsToCodeTop :: (Traversable f, SBC.StateAndFailEff SBC.StanCode es) =>  f SLS.UStmt -> Eff es ()
+addStmtsToCodeTop = addToCurrentBlock SLP.addStmtsToBlockTop
 
-addStmtsToCodeTop :: Traversable f => f SLS.UStmt -> SBC.StanBuilderM md gq ()
-addStmtsToCodeTop = SBC.viaStanBuilder . addStmtsToCodeTopEff
-
-addFromCodeWriterEff :: SBC.StateAndFailEff SBC.StanCode es => SLC.CodeWriter a -> Eff es a
-addFromCodeWriterEff cw = addStmtsToCodeEff stmts >> return a
+addFromCodeWriter :: SBC.StateAndFailEff SBC.StanCode es => SLC.CodeWriter a -> Eff es a
+addFromCodeWriter cw = addStmtsToCode stmts >> return a
   where (stmts, a) = SLC.cwStmtList cw
 
-addFromCodeWriter :: SLC.CodeWriter a -> SBC.StanBuilderM md gq a
-addFromCodeWriter = SBC.viaStanBuilder . addFromCodeWriterEff
-
-addScopedFromCodeWriterEff :: SBC.StateAndFailEff SBC.StanCode es => SLC.CodeWriter a -> Eff es a
-addScopedFromCodeWriterEff cw = addStmtsToCodeEff [SLS.scoped $ SLS.grouped stmts] >> return a
+addScopedFromCodeWriter :: SBC.StateAndFailEff SBC.StanCode es => SLC.CodeWriter a -> Eff es a
+addScopedFromCodeWriter cw = addStmtsToCode [SLS.scoped $ SLS.grouped stmts] >> return a
   where (stmts, a) = SLC.cwStmtList cw
-
-addScopedFromCodeWriter :: SLC.CodeWriter a -> SBC.StanBuilderM md gq a
-addScopedFromCodeWriter = SBC.viaStanBuilder . addScopedFromCodeWriterEff
 
 modifyCode' :: (SLP.StanProgram -> SLP.StanProgram) -> SBC.BuilderState md gq -> SBC.BuilderState md gq
 modifyCode' f bs = let (SBC.StanCode currentBlock oldProg) = SBC.code bs in bs { SBC.code = SBC.StanCode currentBlock $ f oldProg }
 
-modifyCodeEff :: (EffS.State SBC.StanCode :> es)
+modifyCode :: (EffS.State SBC.StanCode :> es)
               => (SLP.StanProgram -> SLP.StanProgram)
               -> Eff es ()
-modifyCodeEff f = EffS.modify $ \(SBC.StanCode cb p) -> SBC.StanCode cb (f p)
+modifyCode f = EffS.modify $ \(SBC.StanCode cb p) -> SBC.StanCode cb (f p)
 
-modifyCode :: (SLP.StanProgram -> SLP.StanProgram) -> SBC.StanBuilderM md gq ()
-modifyCode f = modify $ modifyCode' f
-
-modifyCodeE :: Either Text (SLP.StanProgram -> SLP.StanProgram) -> SBC.StanBuilderM md gq ()
-modifyCodeE fE = SBC.stanBuildEither fE >>= modifyCode
+modifyCodeE :: (EffF.Fail :> es, EffS.State SBC.StanCode :> es) => Either Text (SLP.StanProgram -> SLP.StanProgram) -> Eff es ()
+modifyCodeE fE = SBC.buildEither fE >>= modifyCode
 
 setBlock' :: SLP.StanBlock -> SBC.BuilderState md gq -> SBC.BuilderState md gq
 setBlock' b bs = bs { SBC.code = (SBC.code bs) { SBC.curBlock = b} } -- lenses!
 
-setBlockEff :: EffS.State SBC.StanCode :> es => SLP.StanBlock -> Eff es ()
-setBlockEff b = EffS.modify $ \(SBC.StanCode _ p) -> SBC.StanCode b p
+setBlock :: EffS.State SBC.StanCode :> es => SLP.StanBlock -> Eff es ()
+setBlock b = EffS.modify $ \(SBC.StanCode _ p) -> SBC.StanCode b p
 
-setBlock :: SLP.StanBlock -> SBC.StanBuilderM md gq ()
-setBlock = modify . setBlock'
-
-getBlockEff :: EffS.State SBC.StanCode :> es => Eff es SLP.StanBlock
-getBlockEff = EffS.gets SBC.curBlock
-
-getBlock :: SBC.StanBuilderM md gq SLP.StanBlock
-getBlock = gets (SBC.curBlock . SBC.code)
+getBlock :: EffS.State SBC.StanCode :> es => Eff es SLP.StanBlock
+getBlock = EffS.gets SBC.curBlock
 
 --inBlock ::
 
@@ -246,16 +225,25 @@ alreadyDeclaredAllScopes sd sn st =
     Left _ -> pure ()
 -}
 
-withRowInfoEff :: forall md gq es y r . EffS.State (SBC.RowBuilders md gq) :> es
-               => Eff es y
-               -> (forall x . SBC.RowInfo x r -> Eff es y)
-               -> SBC.RowTypeTag r
-               -> Eff es y
-withRowInfoEff missing presentF rtt = do
+withRowInfo :: forall x es y r . EffS.State (SBC.RowInfos x) :> es
+            => Eff es y
+            -> (forall x . SBC.RowInfo x r -> Eff es y)
+            -> SBC.RowTypeTag r
+            -> Eff es y
+withRowInfo missing presentF rtt = EffS.get @(SBC.RowInfos x) >>= maybe missing presentF . DHash.lookup rtt
+
+{-
+withRowInfo' :: forall md gq es y r . EffS.State (SBC.RowBuilders md gq) :> es
+            => Eff es y
+            -> (forall x . SBC.RowInfo x r -> Eff es y)
+            -> SBC.RowTypeTag r
+            -> Eff es y
+withRowInfo' missing presentF rtt = do
   case SBC.inputDataType rtt of
     SBC.ModelData -> EffS.gets @(SBC.RowBuilders md gq) SBC.modelRBs >>= maybe missing presentF . DHash.lookup rtt
     SBC.GQData -> EffS.gets @(SBC.RowBuilders md gq) SBC.gqRBs >>= maybe missing presentF . DHash.lookup rtt
-
+-}
+{-
 withRowInfo :: SBC.StanBuilderM md gq y -> (forall x . SBC.RowInfo x r -> SBC.StanBuilderM md gq y) -> SBC.RowTypeTag r -> SBC.StanBuilderM md gq y
 withRowInfo missing presentF rtt = do
   case SBC.inputDataType rtt of
@@ -266,7 +254,7 @@ withRowInfo missing presentF rtt = do
       rowInfos <- SBC.gqRowBuilders <$> get
       maybe missing presentF $ DHash.lookup rtt rowInfos
 
-{-
+
 getDataSetBindingsEff :: SBC.StateAndFailEff (SBC.RowBuilders md gq) es => SBC.RowTypeTag r -> Eff es SLA.IndexArrayMap
 getDataSetBindingsEff rtt = withRowInfoEff err (pure . SBC.expressionBindings) rtt where
   idt = SBC.inputDataType rtt
@@ -382,29 +370,28 @@ modifyFunctionNames f bs = bs { SBC.hasFunctions = f (SBC.hasFunctions bs)}
 --(BuilderState dv vbs mrb gqrb cj hf c) = BuilderState dv vbs mrb gqrb cj (f hf) c
 
 
-{-
-addFunctionsOnce :: Text -> SBC.StanBuilderM md gq () -> SBC.StanBuilderM md gq ()
-addFunctionsOnce functionsName fCode = do
---  (BuilderState vars ibs rowBuilders cj fsNames code) <- get
-  fsNames <- gets SBC.hasFunctions
-  Control.Monad.unless (functionsName `Set.member` fsNames) $ do
-    inBlock SLP.SBFunctions fCode
-    modify $ modifyFunctionNames $ Set.insert functionsName
--}
 
-addFunctionOnceEff :: (SLT.AllGenSTypes ats, EffF.Fail :> es, EffS.State SBC.FunctionNames :> es, EffS.State SBC.StanCode :> es)
+addFunctionCodeOnce :: (EffF.Fail :> es, EffS.State SBC.FunctionNames :> es, EffS.State SBC.StanCode :> es) => Text -> SLS.UStmt -> Eff es ()
+addFunctionCodeOnce functionsName fCode = do
+  fNames <- EffS.get
+  Control.Monad.unless (functionsName `Set.member` fNames) $ do
+    addStmtToBlock SLP.SBFunctions fCode
+    EffS.modify $ Set.insert functionsName
+
+
+addFunctionOnce :: (SLT.AllGenSTypes ats, EffF.Fail :> es, EffS.State SBC.FunctionNames :> es, EffS.State SBC.StanCode :> es)
                 => SLF.Function rt ats
                 -> SLF.TypedArgNames ats
                 -> (SLE.ExprList ats -> (SLS.UStmt, SLE.UExpr rt))
                 -> Eff es (SLF.Function rt ats)
-addFunctionOnceEff f@(SLF.Function fn _ _) argNames fBF = do
+addFunctionOnce f@(SLF.Function fn _ _) argNames fBF = do
   fNames <- EffS.get
   unless (fn `Set.member` fNames) $ do
-    addStmtToBlockEff SLP.SBFunctions $ SLS.function f argNames fBF
+    addStmtToBlock SLP.SBFunctions $ SLS.function f argNames fBF
     EffS.modify (Set.insert fn)
   pure f
 
-addFunctionOnceEff f@(SLF.IdentityFunction _) _ _ = pure f
+addFunctionOnce f@(SLF.IdentityFunction _) _ _ = pure f
 
 {-
 addFunctionOnce :: SLT.AllGenSTypes ats
@@ -421,15 +408,15 @@ addFunctionOnce f@(SLF.Function fn _ _) argNames fBF = do
 addFunctionOnce f@(SLF.IdentityFunction _) _ _ = pure f
 -}
 
-addDensityOnceEff :: (SLT.AllGenSTypes ats, SLT.GenSType gt, EffF.Fail :> es, EffS.State SBC.FunctionNames :> es, EffS.State SBC.StanCode :> es)
-                  => SLF.Density gt ats
-                  -> SLF.TypedArgNames (gt ': ats)
-                  -> (SLE.ExprList (gt ': ats) -> (SLS.UStmt, SLE.UExpr SLT.EReal))
-                  -> Eff es (SLF.Density gt ats)
-addDensityOnceEff f@(SLF.Density fn _ _) argNames fBF = do
+addDensityOnce :: (SLT.AllGenSTypes ats, SLT.GenSType gt, EffF.Fail :> es, EffS.State SBC.FunctionNames :> es, EffS.State SBC.StanCode :> es)
+               => SLF.Density gt ats
+               -> SLF.TypedArgNames (gt ': ats)
+               -> (SLE.ExprList (gt ': ats) -> (SLS.UStmt, SLE.UExpr SLT.EReal))
+               -> Eff es (SLF.Density gt ats)
+addDensityOnce f@(SLF.Density fn _ _) argNames fBF = do
   fsNames <- EffS.get
   unless (fn `Set.member` fsNames) $ do
-    addStmtToBlockEff SLP.SBFunctions $  SLS.function (SLF.densityAsFunction f) argNames fBF
+    addStmtToBlock SLP.SBFunctions $  SLS.function (SLF.densityAsFunction f) argNames fBF
     EffS.modify (Set.insert fn)
   pure f
 
@@ -447,18 +434,19 @@ addDensityOnce f@(SLF.Density fn _ _) argNames fBF = do
   pure f
 -}
 
-getAndEmptyProgram :: SBC.StanBuilderM md gq SLP.StanProgram
+getAndEmptyProgram :: EffS.State SBC.StanCode :> es => Eff es SLP.StanProgram
 getAndEmptyProgram = do
-  (SBC.StanCode cb p) <- gets SBC.code
-  modify (\bs -> bs { SBC.code = SBC.StanCode cb SLP.emptyStanProgram})
+  (SBC.StanCode cb p) <- EffS.get
+  EffS.put $ SBC.StanCode cb SLP.emptyStanProgram
   pure p
 
-addProgramBelow :: SLP.StanProgram -> SBC.StanBuilderM md gq ()
+addProgramBelow :: EffS.State SBC.StanCode :> es => SLP.StanProgram -> Eff es ()
 addProgramBelow pBelow = do
-  (SBC.StanCode cb pTop) <- gets SBC.code
-  modify (\bs -> bs { SBC.code = SBC.StanCode cb $ pTop <> pBelow})
+  (SBC.StanCode cb pTop) <- EffS.get
+  EffS.put $
+    SBC.StanCode cb $ pTop <> pBelow
 
-addCodeAbove :: SBC.StanBuilderM md gq a -> SBC.StanBuilderM md gq a
+addCodeAbove :: EffS.State SBC.StanCode :> es => Eff es () -> Eff es ()
 addCodeAbove ma = do
   pBelow <- getAndEmptyProgram
   a <- ma

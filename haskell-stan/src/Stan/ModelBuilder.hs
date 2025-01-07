@@ -156,6 +156,7 @@ makeIndexMapF (GivenIndex m h) = pure $ mapToIndexMap h m
 makeIndexMapF (FoldToIndex fld h) = fmap (mapToIndexMap h) fld
 -}
 
+{- Moved to Stan.Builder.Groups
 makeIndexFromEnum :: forall k r . (Enum k, Bounded k, Ord k) => (r -> k) -> MakeIndex r k
 makeIndexFromEnum h = GivenIndex m h where
   allKs = [minBound..maxBound]
@@ -179,7 +180,7 @@ indexFold _ start =  Foldl.Fold step Set.empty done where
   done s = mapToInt where
     keyedList = zip (Set.toList s) [start..]
     mapToInt = Map.fromList keyedList
-
+-}
 -- For post-stratification
 newtype RowMap r k = RowMap (r -> k)
 type GroupRowMap r = DHash.DHashMap GroupTypeTag (RowMap r)
@@ -199,6 +200,7 @@ emptyGroupSet = DHash.empty
 addGroupToSet :: GroupTypeTag k -> GroupSet -> GroupSet
 addGroupToSet gtt gs = DHash.insert gtt Phantom gs
 
+{- Moved to Stan.Builder.Groups
 buildIntMapBuilderF :: (k -> Either Text Int) -> (r -> k) -> DataToIntMap r k --FL.FoldM (Either Text) r (IM.IntMap k)
 buildIntMapBuilderF eIntF keyF = DataToIntMap $ Foldl.FoldM step (return IntMap.empty) return where
   step im r = case eIntF $ keyF r of
@@ -217,7 +219,7 @@ dataToIntMapFromEnum keyF = dataToIntMapFromFoldable keyF [minBound..maxBound]
 dataToIntMapFromKeyedRow :: (r -> k) -> DataToIntMap r k
 dataToIntMapFromKeyedRow key = DataToIntMap $ Foldl.generalize fld where
   fld = fmap (IntMap.fromList . zip [1..]) $ Foldl.premap key Foldl.list
-
+-}
 
 addRowKeyIntMapToGroupBuilder :: RowTypeTag r -> GroupTypeTag k -> (r -> k) ->  StanGroupBuilderM md gq ()
 addRowKeyIntMapToGroupBuilder rtt gtt = addGroupIntMapForDataSet gtt rtt . dataToIntMapFromKeyedRow
@@ -365,11 +367,11 @@ buildGroupIndexes = do
         _ <- addColumnMJson rtt ndsF mIntF'
 --        _ <- addColumnMJson rtt indexName (SME.StanArray [SME.NamedDim dsName] SME.StanInt) "<lower=1>" mIntF
         addDeclBinding gName $ "J_" <> gName
-        return Nothing
+        pure Nothing
       buildRowFolds :: RowTypeTag r -> RowInfo d r -> StanBuilderM md gq (Maybe r)
       buildRowFolds rtt (RowInfo _ _ (GroupIndexes gis) _ _) = do
         _ <- DHash.traverseWithKey (buildIndexJSONFold rtt) gis
-        return Nothing
+        pure Nothing
   _ <- gets modelRowBuilders >>= DHash.traverseWithKey buildRowFolds
   _ <- gets gqRowBuilders >>= DHash.traverseWithKey buildRowFolds
   pure ()
@@ -789,6 +791,7 @@ stanGroupBuildError :: Text -> StanGroupBuilderM md gq a
 stanGroupBuildError t = StanGroupBuilderM $ ExceptT (pure $ Left t)
 -}
 
+{- Moved to Stan.Builder.Groups
 withRowInfoMakers :: (forall x. RowInfoMakers x -> StanGroupBuilderM md gq (Maybe (RowInfoMakers x), y)) -> InputDataType -> StanGroupBuilderM md gq y
 withRowInfoMakers f idt =
   case idt of
@@ -806,6 +809,7 @@ withRowInfoMakers f idt =
         Nothing -> return ()
         Just newRims -> modify $ modifyGBGQS $ const newRims
       return y
+
 
 getDataSetTag :: forall r md gq. Typeable r => InputDataType -> Text -> StanGroupBuilderM md gq (RowTypeTag r)
 getDataSetTag idt t = withRowInfoMakers f idt where
@@ -887,7 +891,7 @@ addGroupIntMapForDataSet gtt rtt mkIntMap = withRowInfoMakers f idt where
         Nothing -> do
           let newRims = DHash.insert rtt (GroupIndexAndIntMapMakers tf gims (GroupIntMapBuilders $ DHash.insert gtt mkIntMap gimbs)) rowInfoMakers
           return (Just newRims, ())
-
+-}
 {- Moved to Stan.Builder.CoreTypes
 -- This builds the indexes but not the IntMaps.  Those need to be built at the end.
 runStanGroupBuilder :: StanGroupBuilderM md gq () -> md -> gq -> BuilderState md gq

@@ -7,6 +7,7 @@
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TypeFamilies #-}
+{-# LANGUAGE TypeOperators #-}
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE TupleSections #-}
 
@@ -18,7 +19,7 @@ module Stan.Builder.Parameters
   where
 
 import Prelude hiding (All)
-import qualified Stan.Builder.CoreTypes as SBC
+import qualified Stan.Builder.Core as SBC
 import qualified Stan.Builder.Build as SB
 import qualified Stan.Builder.ParameterTypes as PT
 
@@ -50,18 +51,19 @@ import qualified Data.Dependent.Sum as DM
 import qualified Data.Graph as Gr
 import qualified Control.Foldl as FL
 
+import qualified Effectful as Eff
+import Effectful ((:>), Eff)
+import qualified Effectful.State.Static.Local as EffS
+import qualified Effectful.Fail as EffF
 -- put Builder in collection and return a tag to add to anything wanting to use the parameter as a dependency
 
-addBuildParameter :: PT.BuildParameter t -> SBC.StanBuilderM md gq (PT.Parameter t)
+type ParameterEffs es = (EffF.Fail :> es, EffS.State PT.BParameterCollection :> es)
+
+addBuildParameter :: ParameterEffs es => PT.BuildParameter t -> Eff es (PT.Parameter t)
 addBuildParameter bp = do
-  bpc <- gets SBC.parameterCollection
-  (bpc', ttn) <- SBC.stanBuildEither $ PT.addBuildParameterE bp bpc
-  isNew <- SB.declare (PT.bParameterName bp) (PT.bParameterStanType bp)
-  when (not isNew)
-    $ SBC.stanBuildError
-    $ "addBuildParameter: parameter name (\"" <> PT.bParameterName bp <> "\") already in use as variable."
-  let f bs = bs { SBC.parameterCollection = bpc'}
-  modify f
+  bpc <- EffS.get
+  (bpc', ttn) <- SBC.buildEither $ PT.addBuildParameterE bp bpc
+  EffS.put bpc'
   pure $ build ttn
 
 data PhantomP where
@@ -87,45 +89,46 @@ depOrderedPParameters pc =  (\(pp, _, _) -> pp) . vToBuildInfo <$> Gr.topSort pG
   (pGraph, vToBuildInfo, _) = Gr.graphFromEdges . fmap dSumToGBuildInfo . DM.toList $ PT.pdm pc
 --  orderedVList = Gr.topSort pGraph
 
-addDAGStmt :: SLS.UStmt -> SBC.StanBuilderM md gq ()
+{-
+addDAGStmt :: (EffF.Fail :> es, EffS.State SBC.StanCode :> es) => SLS.UStmt -> Eff es ()
 addDAGStmt = SB.addStmtToCode
 
-addDAGStmts :: Traversable f => f SLS.UStmt -> SBC.StanBuilderM md gq ()
+addDAGStmts :: (EffS.State SBC.StanCode :> es, Traversable f) => f SLS.UStmt -> Eff es ()
 addDAGStmts = SB.addStmtsToCode
-
-declareAndAddCode :: SLP.StanBlock -> SLS.NamedDeclSpec t -> PT.DeclCode t -> SBC.StanBuilderM md gq (SLE.UExpr t)
+-}
+declareAndAddCode :: (EffS.State SBC.StanCode :> es, EffF.Fail :> es) => SLP.StanBlock -> SLS.NamedDeclSpec t -> PT.DeclCode t -> Eff es (SLE.UExpr t)
 declareAndAddCode sb nds dc =
-  SB.inBlock sb
-  $ case dc of
-      PT.DeclRHS e -> do
-        addDAGStmt $ SLS.declareAndAssignN nds e
-        pure $ SLE.namedE (SLS.declName nds) (SLT.sTypeFromStanType $ SLS.declType $ SLS.decl nds)
-      PT.DeclCodeF sF -> do
-        let declS = SLS.declareN nds
-            v = SLE.namedE (SLS.declName nds) (SLT.sTypeFromStanType $ SLS.declType $ SLS.decl nds)
-        addDAGStmts $ declS : SLC.cwStmtList_ (sF v)
-        pure v
+  case dc of
+    PT.DeclRHS e -> do
+      SB.addStmtToBlock sb $ SLS.declareAndAssignN nds e
+      pure $ SLE.namedE (SLS.declName nds) (SLT.sTypeFromStanType $ SLS.declType $ SLS.decl nds)
+    PT.DeclCodeF sF -> do
+      let declS = SLS.declareN nds
+          v = SLE.namedE (SLS.declName nds) (SLT.sTypeFromStanType $ SLS.declType $ SLS.decl nds)
+      SB.addStmtsToBlock sb $ declS : SLC.cwStmtList_ (sF v)
+      pure v
 
-addParameterToCodeAndMap :: DM.DMap PT.ParameterTag SLE.UExpr
+addParameterToCodeAndMap :: (EffF.Fail :> es, EffS.State SBC.FunctionNames :> es, EffS.State SBC.StanCode :> es)
+                         => DM.DMap PT.ParameterTag SLE.UExpr
                          -> PhantomP
-                         -> SBC.StanBuilderM md gq (DM.DMap PT.ParameterTag SLE.UExpr)
+                         -> Eff es (DM.DMap PT.ParameterTag SLE.UExpr)
 addParameterToCodeAndMap eMap (PhantomP bp) = do
   vM <- case bp of
     PT.TransformedDataP (PT.TData nds ftds tds desF) -> do
-      traverse_ (\(PT.FunctionToDeclare n fs) -> SB.addFunctionsOnce n $ addDAGStmt fs) $ reverse ftds
-      tdEs <- SBC.stanBuildEither $ PT.lookupTDataExpressions tds eMap
-      fmap Just $ (declareAndAddCode SLP.SBTransformedData nds $ desF tdEs)
+      traverse_ (\(PT.FunctionToDeclare n fs) -> SB.addFunctionCodeOnce n fs) $ reverse ftds
+      tdEs <- SBC.buildEither $ PT.lookupTDataExpressions tds eMap
+      Just <$> (declareAndAddCode SLP.SBTransformedData nds $ desF tdEs)
     PT.UntransformedP nds ftds ps codeF -> do
-      traverse_ (\(PT.FunctionToDeclare n fs) -> SB.addFunctionsOnce n $ addDAGStmt fs) $ reverse ftds
-      psE <- SBC.stanBuildEither $ PT.lookupParameterExpressions ps eMap
-      SB.inBlock SLP.SBParameters $ addDAGStmt $ SLS.declareN nds --SB.stanDeclareN nds
+      traverse_ (\(PT.FunctionToDeclare n fs) -> SB.addFunctionCodeOnce n fs) $ reverse ftds
+      psE <- SBC.buildEither $ PT.lookupParameterExpressions ps eMap
+      SB.addStmtToBlock SLP.SBParameters $ SLS.declareN nds --SB.stanDeclareN nds
       let v =  SLE.namedE (SLS.declName nds) (SLT.sTypeFromStanType $ SLS.declType $ SLS.decl nds)
-      SB.inBlock SLP.SBModel $ addDAGStmts $ SLC.cwStmtList_ $ codeF psE v --TE.sample v d psE
+      SB.addStmtsToBlock SLP.SBModel $ SLC.cwStmtList_ $ codeF psE v --TE.sample v d psE
       pure $ Just v
     PT.TransformedP nds ftds pq tpl tpDesF pr codeF -> do
-      traverse_ (\(PT.FunctionToDeclare n fs) -> SB.addFunctionsOnce n $ addDAGStmt fs) $ reverse ftds
-      pqEs <- SBC.stanBuildEither $ PT.lookupParameterExpressions pq eMap
-      prEs <- SBC.stanBuildEither $ PT.lookupParameterExpressions pr eMap
+      traverse_ (\(PT.FunctionToDeclare n fs) -> SB.addFunctionCodeOnce n fs) $ reverse ftds
+      pqEs <- SBC.buildEither $ PT.lookupParameterExpressions pq eMap
+      prEs <- SBC.buildEither $ PT.lookupParameterExpressions pr eMap
       let modelBlockCodeAndVar = SLC.cwStmtList $ case tpDesF pqEs of
             PT.DeclRHS e -> do
               v' <- SLC.declareRHSNW nds e
@@ -139,24 +142,25 @@ addParameterToCodeAndMap eMap (PhantomP bp) = do
       case tpl of
         PT.TransformedParametersBlock -> do
           v <- declareAndAddCode SLP.SBTransformedParameters nds $ tpDesF pqEs
-          SB.inBlock SLP.SBModel $ addDAGStmts $ SLC.cwStmtList_ $ codeF prEs v
+          SB.addStmtsToBlock SLP.SBModel $ SLC.cwStmtList_ $ codeF prEs v
           pure $ Just v
         PT.ModelBlock -> do
           let (c, v) = modelBlockCodeAndVar
-          SB.inBlock SLP.SBModel $ addDAGStmts c
+          SB.addStmtsToBlock SLP.SBModel c
           pure $ Just v
         PT.ModelBlockLocal -> do
           let (c, _) = modelBlockCodeAndVar
-          SB.inBlock SLP.SBModel $ addDAGStmt $ SLS.scoped $ SLS.grouped c
+          SB.addStmtToBlock SLP.SBModel $ SLS.scoped $ SLS.grouped c
           pure Nothing -- we add nothing to the map since the expression we built here is local and can't be used elsewhere
 
   let newMapF = maybe id (PT.addBuiltExpressionToMap bp) vM
   pure $ newMapF eMap
 
 -- reverse here because we are adding from top, so
-addAllParametersInCollection :: forall md gq. PT.BParameterCollection -> SBC.StanBuilderM md gq ()
+addAllParametersInCollection :: forall es . (EffF.Fail :> es, EffS.State SBC.FunctionNames :> es, EffS.State SBC.StanCode :> es)
+                             => PT.BParameterCollection -> Eff es ()
 addAllParametersInCollection = FL.foldM makeFold . reverse . depOrderedPParameters
-  where makeFold :: FL.FoldM (SBC.StanBuilderM x y) PhantomP ()
+  where makeFold :: FL.FoldM (Eff es) PhantomP ()
         makeFold = FL.FoldM addParameterToCodeAndMap (pure DM.empty) (const $ pure ())
 
 rawName :: Text -> Text
@@ -167,10 +171,28 @@ rawName t = t <> "_raw"
 runStanBuilderDAG :: forall md gq a .
                      md
                   -> gq
+                  -> SBC.StanBuilderEff md gq a
+                  -> Either Text (SBC.BuilderState md gq, a)
+runStanBuilderDAG md gq sb =
+  let sb' :: SBC.StanBuilderEff md gq a
+      sb' = do
+        a <- sb
+        -- we need the parameter code to come before anything written assuming it exists
+        -- so, shenanigans
+        SB.addCodeAbove $ do
+          bpc <- EffS.get @PT.BParameterCollection
+          addAllParametersInCollection bpc
+        return a
+  in SBC.runStanBuilderEff md gq sb'
+
+{-
+runStanBuilderDAG' :: forall md gq a .
+                     md
+                  -> gq
                   -> SBC.StanGroupBuilderM md gq ()
                   -> SBC.StanBuilderM md gq a
                   -> Either Text (SBC.BuilderState md gq, a)
-runStanBuilderDAG md gq sgb sb =
+runStanBuilderDAG' md gq sgb sb =
   let sb' :: SBC.StanBuilderM md gq a
       sb' = do
         a <- sb
@@ -183,7 +205,7 @@ runStanBuilderDAG md gq sgb sb =
       builderState = SBC.runStanGroupBuilder sgb md gq
       (resE, bs) = usingState builderState . runExceptT $ SBC.unStanBuilderM sb'
   in fmap (bs,) resE
-
+-}
 exprListToParameters :: SLE.ExprList ts  -> PT.Parameters ts
 exprListToParameters = hfmap PT.GivenP
 
@@ -205,31 +227,35 @@ simpleTransformedP nds ftd ps tpl declCodeF = PT.TransformedP nds ftd ps tpl dec
 
 
 -- Only dependencies are parameters to prior density
-simpleParameterWA :: SLS.NamedDeclSpec t -> SLS.DensityWithArgs t -> SBC.StanBuilderM md gq (PT.Parameter t)
+simpleParameterWA :: ParameterEffs es
+                  => SLS.NamedDeclSpec t -> SLS.DensityWithArgs t -> Eff es (PT.Parameter t)
 simpleParameterWA nds = SLS.withDWA (\d as -> simpleParameter nds (exprListToParameters as) d)
 
 
-simpleParameter :: SLS.NamedDeclSpec t -> PT.Parameters ts -> SLF.Density t ts -> SBC.StanBuilderM md gq (PT.Parameter t)
+simpleParameter :: ParameterEffs es
+                => SLS.NamedDeclSpec t -> PT.Parameters ts -> SLF.Density t ts -> Eff es (PT.Parameter t)
 simpleParameter nds ps d = addBuildParameter $ PT.UntransformedP nds [] ps (\qs t -> SLC.addStmt $ SLS.sample t d qs)
 
 
-addCenteredHierarchical :: SLS.NamedDeclSpec t
+addCenteredHierarchical :: ParameterEffs es
+                        => SLS.NamedDeclSpec t
                         -> PT.Parameters args
                         -> SLF.Density t args
-                        -> SBC.StanBuilderM md gq (PT.Parameter t)
+                        -> Eff es (PT.Parameter t)
 addCenteredHierarchical nds ps d = addBuildParameter
                                   $ PT.UntransformedP nds [] ps
                                   $ \argEs e -> SLC.addStmt $ SLS.sample e d argEs
 
 
-addNonCenteredParameter :: SLS.NamedDeclSpec t
+addNonCenteredParameter :: ParameterEffs es
+                        => SLS.NamedDeclSpec t
                         -> PT.Parameters ts
                         -> PT.TransformedParameterLocation
                         -> SLS.DeclSpec SLE.UExpr t
                         -> SLF.Density t ts
                         -> PT.Parameters qs
                         -> (SLE.ExprList qs -> SLE.UExpr t -> SLE.UExpr t)
-                        -> SBC.StanBuilderM md gq (PT.Parameter t)
+                        -> Eff es (PT.Parameter t)
 addNonCenteredParameter nds ps tpl rawDS rawD qs eF = do
   let rawNDS = SLS.NamedDeclSpec (rawName $ SLS.declName nds) rawDS
   rawP <- simpleParameter rawNDS ps rawD
@@ -240,37 +266,41 @@ addNonCenteredParameter nds ps tpl rawDS rawD qs eF = do
 -- Only use if density uses constant args. E.g., stdNormal.
 -- If it uses named parameters,
 -- those should be dependencies, so use `nonCenteredParameters'
-simpleNonCentered :: SLS.NamedDeclSpec t
+simpleNonCentered :: ParameterEffs es
+                  => SLS.NamedDeclSpec t
                   -> PT.TransformedParameterLocation
                   -> SLS.DeclSpec SLE.UExpr t
                   -> SLS.DensityWithArgs t
                   -> PT.Parameters qs
                   -> (SLE.ExprList qs -> SLE.UExpr t -> SLE.UExpr t)
-                  -> SBC.StanBuilderM md gq (PT.Parameter t)
+                  -> Eff es (PT.Parameter t)
 simpleNonCentered nds tpl rawDS (SLS.DensityWithArgs d tsE) =
   addNonCenteredParameter nds (exprListToParameters tsE) tpl rawDS d
 
-addIndependentPriorP :: SLS.NamedDeclSpec t -> SLS.DensityWithArgs t -> SBC.StanBuilderM md gq (PT.Parameter t)
+addIndependentPriorP :: ParameterEffs es
+                     => SLS.NamedDeclSpec t -> SLS.DensityWithArgs t -> Eff es (PT.Parameter t)
 addIndependentPriorP nds (SLS.DensityWithArgs d dArgs) =
   addBuildParameter
   $ PT.UntransformedP nds [] (exprListToParameters dArgs)
   $ \argEs e -> SLC.addStmt $ SLS.sample e d argEs
 
-addNonCenteredHierarchicalS :: SLS.NamedDeclSpec t
+addNonCenteredHierarchicalS :: ParameterEffs es
+                            => SLS.NamedDeclSpec t
                             -> PT.TransformedParameterLocation
                             -> PT.Parameters ts
                             -> SLS.DensityWithArgs t
                             -> (SLE.ExprList ts -> SLE.UExpr t -> SLE.UExpr t)
-                            -> SBC.StanBuilderM md gq (PT.Parameter t)
+                            -> Eff es (PT.Parameter t)
 addNonCenteredHierarchicalS nds tpl ps (SLS.DensityWithArgs d dArgs) =
   addNonCenteredParameter nds (exprListToParameters dArgs) tpl (SLS.decl nds) d ps
 
-addTransformedHP :: SLS.NamedDeclSpec t
+addTransformedHP :: ParameterEffs es
+                 => SLS.NamedDeclSpec t
                  -> PT.TransformedParameterLocation
                  -> Maybe (SLS.VarModifiers SLE.UExpr (SLT.ScalarType t))
                  -> SLS.DensityWithArgs t
                  -> (SLE.UExpr t -> SLE.UExpr t)
-                 -> SBC.StanBuilderM md gq (PT.Parameter t)
+                 -> Eff es (PT.Parameter t)
 addTransformedHP nds tpl rawCsM rawPrior fromRawF = do
   case SLS.decl nds of
     SLS.ScalarSpec st _ -> do
@@ -294,11 +324,12 @@ addTransformedHP nds tpl rawCsM rawPrior fromRawF = do
       rawP <- addIndependentPriorP rawNDS rawPrior
       addBuildParameter $ simpleTransformedP nds [] (rawP :> TNil) tpl (\(e :> TNil) -> PT.DeclRHS $ fromRawF e) -- (ExprList qs -> DeclCode t)
 
-iidMatrixP :: SLS.NamedDeclSpec SLT.EMat
-          -> [PT.FunctionToDeclare]
-          -> PT.Parameters qs
-          -> SLF.Density SLT.ECVec qs
-          -> SBC.StanBuilderM md gq (PT.Parameter SLT.EMat)
+iidMatrixP :: ParameterEffs es
+           => SLS.NamedDeclSpec SLT.EMat
+           -> [PT.FunctionToDeclare]
+           -> PT.Parameters qs
+           -> SLF.Density SLT.ECVec qs
+           -> Eff es (PT.Parameter SLT.EMat)
 iidMatrixP nds ftd ps d = addBuildParameter $ iidMatrixBP nds ftd ps d
 
 
@@ -311,13 +342,14 @@ iidMatrixBP nds ftd ps d = PT.UntransformedP nds ftd ps
                            $ \qs m -> SLC.addStmt $ SLS.sample (SFC.to_vector m) d qs
 
 -- this puts the prior on the raw parameters
-withIIDRawMatrix :: SLS.NamedDeclSpec SLT.EMat
+withIIDRawMatrix :: ParameterEffs es
+                 => SLS.NamedDeclSpec SLT.EMat
                  -> PT.TransformedParameterLocation
                  -> Maybe (SLS.VarModifiers SLE.UExpr SLT.EReal) -- constraints on raw
                  -> SLS.DensityWithArgs SLT.ECVec -- prior density on raw
                  -> PT.Parameters qs
                  -> (SLE.ExprList qs -> SLE.MatrixE -> SLE.MatrixE)
-                 -> SBC.StanBuilderM md gq (PT.Parameter SLT.EMat)
+                 -> Eff es (PT.Parameter SLT.EMat)
 withIIDRawMatrix nds tpl rawCsM dwa qs f = do
   let (SLS.NamedDeclSpec _ ds) = nds
   case ds of
@@ -325,7 +357,7 @@ withIIDRawMatrix nds tpl rawCsM dwa qs f = do
        let rawNDS = SLS.NamedDeclSpec (rawName $ SLS.declName nds) $ SLS.addVMs (fromMaybe SLS.NoModifiers rawCsM) $ SLS.matrixSpec rowsE colsE
        rawP <- SLS.withDWA (\d tl -> iidMatrixP rawNDS [] (exprListToParameters tl) d) dwa
        addBuildParameter $ simpleTransformedP nds [] (rawP :> qs) tpl (\(rmE :> qsE) -> PT.DeclRHS $ f qsE rmE)
-     _ -> SBC.stanBuildError "Parameters: withIIDRawMatrix called with non-matrix type!"
+     _ -> SBC.buildError "Parameters: withIIDRawMatrix called with non-matrix type!"
 
 {-
 -- this puts the prior on the transformed matrix

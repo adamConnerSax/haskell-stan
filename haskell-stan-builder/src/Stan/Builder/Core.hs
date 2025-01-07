@@ -56,25 +56,32 @@ type TransformedParametersBlock = T.Text
 type ModelBlock = T.Text
 type GeneratedQuantitiesBlock = T.Text
 
+type family DataSource r :: Type
 
-data RowBuilders md gq = RowBuilders { modelRBs :: !(RowInfos md), gqRBs :: !(RowInfos gq) }
+--data RowBuilders md gq = RowBuilders { modelRBs :: !(RowInfos md), gqRBs :: !(RowInfos gq) }
 data ConstJsonFolds = ConstJsonFolds { modelCJ :: JSONSeriesFold (), gqCJ :: JSONSeriesFold () }
 
 type RowInfoMakers d = DHash.DHashMap RowTypeTag (GroupIndexAndIntMapMakers d)
 
-data GroupBuilders md gq = GroupBuilders { modelGBs :: RowInfoMakers md, gqGBs :: RowInfoMakers gq}
+--data GroupBuilders md gq = GroupBuilders { modelGBs :: RowInfoMakers md, gqGBs :: RowInfoMakers gq}
 
 type FunctionNames = Set.Set SLT.FunctionName
 
-type StanBuilderEff md gq a = Eff [EffS.State (GroupBuilders md gq)
-                                  , EffS.State (RowBuilders md gq)
-                                  , EffS.State SBPT.BParameterCollection
-                                  , EffS.State StanCode
-                                  , EffS.State (Set Text)
-                                  , EffS.State ConstJsonFolds
-                                  , EffF.Fail
-                                  ]
-                              a
+type StanBuilderEffs md gq =
+  [ EffS.State (RowInfoMakers md)
+  , EffS.State (RowInfos md)
+  , EffS.State (RowInfoMakers gq)
+  , EffS.State (RowInfos gq)
+  , EffS.State SBPT.BParameterCollection
+  , EffS.State StanCode
+  , EffS.State (Set Text)
+  , EffS.State ConstJsonFolds
+  , EffF.Fail
+  ]
+
+--type StanBuilderEffs md gq = EffS.State (RowInfoMakers md) ': EffS.State (RowInfoMakers gq) ': StanBuilderEffs' md gq
+
+type StanBuilderEff md gq a = Eff (StanBuilderEffs md gq) a
 {-
 runGroupBuilderEff :: forall md gq a . md -> gq -> StanBuilderGEff md gq a -> StanBuilderEff md gq a
 runGroupBuilderEff md gq m = do
@@ -83,18 +90,27 @@ runGroupBuilderEff md gq m = do
       gqRowInfos = DHash.mapWithKey (buildRowInfo gq) $ gbGQS gbs
   EffS.put @(RowBuilders md gq) $ RowBuilders modelRowInfos gqRowInfos
   pure a
--}
 
-runGroupBuilder :: (EffS.State (RowBuilders md gq) :> es)
-                => md -> gq -> Eff (EffS.State (GroupBuilders md gq) ': es) a -> Eff es a
-runGroupBuilder md gq m = do
-  (a, gbs) <- EffS.runState (GroupBuilders  DHash.empty DHash.empty) m
-  let mRBs = DHash.mapWithKey (buildRowInfo md) $ modelGBs gbs
-      gqRBs = DHash.mapWithKey (buildRowInfo gq) $ gqGBs gbs
-  EffS.put (RowBuilders mRBs gqRBs)
+
+runGroupBuilder :: forall es x a . (EffS.State (RowInfos x) :> es)
+                => x -> Eff (EffS.State (RowInfoMakers x) ': es) a -> Eff es a
+runGroupBuilder x m = do
+  (a, rowInfoMakers) <- EffS.runState DHash.empty m
+  let rowInfos = DHash.mapWithKey (buildRowInfo x) rowInfoMakers
+  EffS.put rowInfos
+  pure a
+-}
+--we need this because the above runs into all sorts of overlapping instances issues
+runGroupBuilder :: forall es x a .
+                    x -> Eff (EffS.State (RowInfoMakers x) ': EffS.State (RowInfos x) ': es) a -> Eff (EffS.State (RowInfos x) ': es) a
+runGroupBuilder x m = do
+  (a, rowInfoMakers) <- EffS.runState DHash.empty m
+  let rowInfos = DHash.mapWithKey (buildRowInfo x) rowInfoMakers
+  EffS.put rowInfos
   pure a
 
-runStanBuilderEff :: md -> gq -> StanBuilderEff md gq a -> Either Text (BuilderState md gq, a)
+
+runStanBuilderEff :: forall md gq a . md -> gq -> StanBuilderEff md gq a -> Either Text (BuilderState md gq, a)
 runStanBuilderEff md gq m = do
   let effRes =  Eff.runPureEff
                 . EffF.runFail
@@ -102,13 +118,15 @@ runStanBuilderEff md gq m = do
                 . EffS.runState Set.empty
                 . EffS.runState (StanCode SLP.SBData SLP.emptyStanProgram)
                 . EffS.runState (SBPT.BParameterCollection mempty mempty)
-                . EffS.runState (RowBuilders DHash.empty DHash.empty)
-                . runGroupBuilder md gq
+                . EffS.runState DHash.empty
+                . runGroupBuilder gq
+                . EffS.runState DHash.empty
+                . runGroupBuilder md
                 $ m
   case effRes of
     Left err -> Left $ toText err
-    Right ((((((a, rbs), pc), c), hf), cjf)) -> do
-      let (RowBuilders mRBs gqRBs) = rbs
+    Right ((((((a, mRBs), gqRBs), pc), c), hf), cjf) -> do
+      let --(RowBuilders mRBs gqRBs) = rbs
           (ConstJsonFolds mCJFs gqCJFs) = cjf
       pure (BuilderState mRBs gqRBs mCJFs gqCJFs hf pc c, a)
 
@@ -137,8 +155,8 @@ viaStanBuilder ma = do
 -}
 --runEffViaStanBuilder :: StanBuilderEff md gq () ->
 
-newtype StanBuilderM md gq a = StanBuilderM { unStanBuilderM :: ExceptT Text (State (BuilderState md gq)) a }
-                             deriving newtype (Functor, Applicative, Monad, MonadState (BuilderState md gq))
+--newtype StanBuilderM md gq a = StanBuilderM { unStanBuilderM :: ExceptT Text (State (BuilderState md gq)) a }
+--                             deriving newtype (Functor, Applicative, Monad, MonadState (BuilderState md gq))
 {-
 runStanBuilder :: md
                -> gq
@@ -150,7 +168,7 @@ runStanBuilder md gq sgb sb =
       (resE, bs) = usingState builderState . runExceptT $ unStanBuilderM sb
   in fmap (bs,) resE
 -}
-
+{-
 stanBuildError :: Text -> StanBuilderM md gq a
 stanBuildError t = do
   builderText <- dumpBuilderState <$> get
@@ -161,7 +179,7 @@ stanBuildMaybe msg = maybe (stanBuildError msg) pure
 
 stanBuildEither :: Either Text a -> StanBuilderM md gq a
 stanBuildEither = either stanBuildError pure
-
+-}
 buildError :: EffF.Fail :> es => Text -> Eff es a
 buildError = EffD.send . EffF.Fail . toString
 
@@ -242,19 +260,20 @@ buildRowInfo d rtt (GroupIndexAndIntMapMakers tf@(ToFoldable f) ims imbs) = Fold
 --                $ useBindingsFromGroupIndexMakers rtt ims
   fld = RowInfo tf {- uBindings -} <$> gisFld <*> pure imbs <*> pure mempty
 
-addModelDataEff :: forall md gq es r . (Typeable r, EffF.Fail :> es, EffS.State (GroupBuilders md gq) :> es)
-                => md -> Text -> ToFoldable md r -> Eff es (RowTypeTag r)
-addModelDataEff d name tf = do
-  groupBuilders <- EffS.get @(GroupBuilders md gq)
-  let rtt = RowTypeTag ModelData name
-      gBldrs = modelGBs groupBuilders
-  case DHash.lookup rtt gBldrs of
+
+addData :: forall es r . (Typeable r, EffF.Fail :> es, EffS.State (RowInfoMakers (DataSource r)) :> es)
+        => DataSource r -> Text -> InputDataType -> ToFoldable (DataSource r) r -> Eff es (RowTypeTag r)
+addData d name idt tf = do
+  rowInfoMakers <- EffS.get @(RowInfoMakers (DataSource r))
+  let rtt = RowTypeTag idt name
+  case DHash.lookup rtt rowInfoMakers of
     Just _ -> buildError $ "Attempt to add data of matching type and name (\"" <> name <> "\" to model-data."
     Nothing -> do
-      let newGBldr = DHash.insert rtt (GroupIndexAndIntMapMakers tf (GroupIndexMakers DHash.empty) (GroupIntMapBuilders DHash.empty)) gBldrs
-      EffS.put $ groupBuilders { modelGBs = newGBldr}
+      let newRowInfoMakers = DHash.insert rtt (GroupIndexAndIntMapMakers tf (GroupIndexMakers DHash.empty) (GroupIntMapBuilders DHash.empty)) rowInfoMakers
+      EffS.put newRowInfoMakers
       pure rtt
 
+{-
 addGQDataEff :: forall md gq es r . (Typeable r, EffF.Fail :> es, EffS.State (GroupBuilders md gq) :> es)
                 => gq -> Text -> ToFoldable gq r -> Eff es (RowTypeTag r)
 addGQDataEff d name tf = do
@@ -267,7 +286,7 @@ addGQDataEff d name tf = do
       let newGBldr = DHash.insert rtt (GroupIndexAndIntMapMakers tf (GroupIndexMakers DHash.empty) (GroupIntMapBuilders DHash.empty)) gBldrs
       EffS.put $ groupBuilders { gqGBs = newGBldr}
       pure rtt
-
+-}
 {-
 useBindingsFromGroupIndexMakers :: RowTypeTag r -> GroupIndexMakers r -> SLA.IndexArrayMap
 useBindingsFromGroupIndexMakers rtt (GroupIndexMakers gims) = Map.fromList l where

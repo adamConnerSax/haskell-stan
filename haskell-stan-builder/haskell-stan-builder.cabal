@@ -92,10 +92,11 @@ library
          , Relude.Extra)
   exposed-modules: Stan.Builder
                  , Stan.Builder.Build
-                 , Stan.Builder.CoreTypes
+                 , Stan.Builder.Core
                  , Stan.Builder.JSON
                  , Stan.Builder.ParameterTypes
                  , Stan.Builder.Parameters
+                 , Stan.Builder.Groups
   hs-source-dirs:   src
 
 executable builder-test
