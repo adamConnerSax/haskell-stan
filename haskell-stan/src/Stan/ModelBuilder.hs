@@ -325,7 +325,7 @@ groupIntMap (IndexMap _ _ im _) = im
 unIndexedRowInfo :: forall d r. ToFoldable d r -> Text -> RowInfo d r
 unIndexedRowInfo tf _  = RowInfo tf mempty (GroupIndexes DHash.empty) (GroupIntMapBuilders DHash.empty) mempty
 
-
+{- Moved to Stan.Builder.JSON -}
 addFoldToDBuilder :: forall d r.
                   RowTypeTag r
                   -> Stan.StanJSONF r Aeson.Series
@@ -1295,6 +1295,7 @@ typeForName sn = do
   dvs <- declaredVars <$> get
   stanBuildEither $ varLookup dvs sn
 
+{- moved to Stan.Builder.JSON
 addJson :: forall t r md gq .
         RowTypeTag r
         -> TE.NamedDeclSpec t
@@ -1313,7 +1314,7 @@ addJson rtt nds fld = do
     GQData -> modifyGQRowInfosA addFold bs
   put newBS
   return ve
-
+-}
 {-
   (BuilderState declared ib rowBuilders modelExprs code ims) <- get
 --  when (Set.member name un) $ stanBuildError $ "Duplicate name in json builders: \"" <> name <> "\""
@@ -1333,7 +1334,7 @@ addJsonOnce rtt nds fld = do
   if not alreadyDeclared'
     then addJson rtt nds fld
     else pure $ TE.namedE (TE.declName nds) (TE.sTypeFromStanType $ TE.declType $ TE.decl nds)
-
+{- moved to Stan.Builder.JSON
 addFixedIntJson :: InputDataType -> Text -> Maybe Int -> Int -> StanBuilderM md gq (TE.UExpr TE.EInt)
 addFixedIntJson idt tName mLower n = do
   let ds = TE.intSpec $ maybe [] (pure. TE.lowerM . TE.intE) mLower
@@ -1341,7 +1342,7 @@ addFixedIntJson idt tName mLower n = do
   _ <- inBlock codeBlock $ stanDeclare tName ds  -- this will error if we already declared
   modify $ addConstJson idt (JSONSeriesFold $ Stan.constDataF tName n)
   return $ TE.namedE tName TE.SInt
-
+-}
 addFixedIntJson' :: InputDataType
                  -> Text
                  -> Maybe Int

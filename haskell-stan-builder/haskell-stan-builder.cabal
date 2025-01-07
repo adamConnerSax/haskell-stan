@@ -94,6 +94,7 @@ library
                  , Stan.Builder.Build
                  , Stan.Builder.Core
                  , Stan.Builder.JSON
+                 , Stan.Builder.JSON.JSONUtils
                  , Stan.Builder.ParameterTypes
                  , Stan.Builder.Parameters
                  , Stan.Builder.Groups

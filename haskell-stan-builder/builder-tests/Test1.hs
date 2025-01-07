@@ -7,7 +7,7 @@
 {-# LANGUAGE TypeApplications     #-}
 {-# LANGUAGE TypeFamilies     #-}
 
-module Main where
+module Test1 where
 
 import qualified Stan.Language as SL
 import qualified Stan.Functions as SF

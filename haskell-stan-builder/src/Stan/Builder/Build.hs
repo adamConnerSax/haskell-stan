@@ -107,6 +107,15 @@ setBlock b = EffS.modify $ \(SBC.StanCode _ p) -> SBC.StanCode b p
 getBlock :: EffS.State SBC.StanCode :> es => Eff es SLP.StanBlock
 getBlock = EffS.gets SBC.curBlock
 
+inBlock ::  EffS.State SBC.StanCode :> es => SLP.StanBlock -> Eff es a -> Eff es a
+inBlock b m = do
+  oldBlock <- getBlock
+  setBlock b
+  a <- m
+  setBlock oldBlock
+  pure a
+
+
 --inBlock ::
 
 {-
@@ -356,6 +365,7 @@ modifyGQRowInfosA :: Applicative t
 modifyGQRowInfosA f bs = (\x -> bs {SBC.gqRowBuilders = x}) <$> f (SBC.gqRowBuilders bs)
 --(BuilderState dv vbs mrb gqrb cj hf c) = (\x -> BuilderState dv vbs mrb x cj hf c) <$> f gqrb
 
+{-
 modifyConstJson :: SBC.InputDataType -> (SBC.JSONSeriesFold () -> SBC.JSONSeriesFold ()) -> SBC.BuilderState md gq -> SBC.BuilderState md gq
 modifyConstJson idt f bs = case idt of
   SBC.ModelData -> bs { SBC.constModelJSON = f (SBC.constModelJSON bs)}
@@ -364,7 +374,7 @@ modifyConstJson idt f bs = case idt of
 
 addConstJson :: SBC.InputDataType -> SBC.JSONSeriesFold () -> SBC.BuilderState md gq -> SBC.BuilderState md gq
 addConstJson idt jf = modifyConstJson idt (<> jf)
-
+-}
 modifyFunctionNames :: (Set Text -> Set Text) -> SBC.BuilderState md gq -> SBC.BuilderState md gq
 modifyFunctionNames f bs = bs { SBC.hasFunctions = f (SBC.hasFunctions bs)}
 --(BuilderState dv vbs mrb gqrb cj hf c) = BuilderState dv vbs mrb gqrb cj (f hf) c
