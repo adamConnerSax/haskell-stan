@@ -19,10 +19,7 @@ where
 import qualified Stan.Builder.JSON.JSONUtils as SJ
 import qualified Stan.Language.Types as SLT
 import qualified Stan.Language.Program as SLP
-import qualified Stan.Language.Format as SLF
-import qualified Stan.Language.ASTContext as SLA
-import qualified Stan.Language.Expression as SLE
---import qualified Stan.Language.Statements as SLS -- was TE
+import qualified Stan.Language.Expressions as SLE
 import qualified Stan.Builder.ParameterTypes as SBPT
 
 import Prelude hiding (All)
@@ -31,7 +28,6 @@ import qualified Data.Aeson as Aeson
 import qualified Data.Dependent.HashMap as DHash
 import qualified Data.GADT.Compare as GADT
 import qualified Data.IntMap.Strict as IntMap
-import qualified Data.Map.Strict as Map
 import qualified Data.Set as Set
 import qualified Data.Some as Some
 import qualified Data.Text as T
@@ -41,7 +37,6 @@ import qualified Data.GADT.Show as GADT
 import qualified Data.Dependent.Sum as DSum
 import qualified Data.Dependent.Map as DM
 
-import qualified Effectful as Eff
 import Effectful ((:>), Eff)
 import qualified Effectful.State.Static.Local as EffS
 import qualified Effectful.Fail as EffF
@@ -58,7 +53,17 @@ type GeneratedQuantitiesBlock = T.Text
 
 type family DataSource r :: Type
 
-data ConstJsonFolds = ConstJsonFolds { modelCJ :: JSONSeriesFold (), gqCJ :: JSONSeriesFold () }
+type family SourceType (i :: InputDataT) :: Type
+
+data InputDataType (i :: InputDataT) where
+  ModelData :: InputDataType ModelDataT
+  GQData :: InputDataType GQDataT
+
+inputDataT :: InputDataType i -> InputDataT
+inputDataT ModelData = ModelDataT
+inputDataT GQData = GQDataT
+
+--data ConstJsonFolds = ConstJsonFolds { modelCJ :: JSONSeriesFold (), gqCJ :: JSONSeriesFold () }
 
 type RowInfoMakers d = DHash.DHashMap RowTypeTag (GroupIndexAndIntMapMakers d)
 
@@ -73,41 +78,14 @@ type StanBuilderEffs md gq =
   , EffS.State SBPT.BParameterCollection
   , EffS.State StanCode
   , EffS.State (Set Text)
-  , EffS.State ConstJsonFolds
+  , EffS.State (JSONConstFold md)
+  , EffS.State (JSONConstFold gq)
   , EffF.Fail
   ]
 
 
 type StanBuilderEff md gq a = Eff (StanBuilderEffs md gq) a
 
--- This weirdness avoids overlapping instances issues
-runGroupBuilder :: forall es x a .
-                    x -> Eff (EffS.State (RowInfoMakers x) ': EffS.State (RowInfos x) ': es) a -> Eff (EffS.State (RowInfos x) ': es) a
-runGroupBuilder x m = do
-  (a, rowInfoMakers) <- EffS.runState DHash.empty m
-  let rowInfos = DHash.mapWithKey (buildRowInfo x) rowInfoMakers
-  EffS.put rowInfos
-  pure a
-
-runStanBuilderEff :: forall md gq a . md -> gq -> StanBuilderEff md gq a -> Either Text (BuilderState md gq, a)
-runStanBuilderEff md gq m = do
-  let effRes =  Eff.runPureEff
-                . EffF.runFail
-                . EffS.runState (ConstJsonFolds mempty mempty)
-                . EffS.runState Set.empty
-                . EffS.runState (StanCode SLP.SBData SLP.emptyStanProgram)
-                . EffS.runState (SBPT.BParameterCollection mempty mempty)
-                . EffS.runState DHash.empty
-                . runGroupBuilder gq
-                . EffS.runState DHash.empty
-                . runGroupBuilder md
-                $ m
-  case effRes of
-    Left err -> Left $ toText err
-    Right ((((((a, mRBs), gqRBs), pc), c), hf), cjf) -> do
-      let --(RowBuilders mRBs gqRBs) = rbs
-          (ConstJsonFolds mCJFs gqCJFs) = cjf
-      pure (BuilderState mRBs gqRBs mCJFs gqCJFs hf pc c, a)
 
 type StateAndFailEff s es = (EffS.State s :> es, EffF.Fail :> es)
 
@@ -124,8 +102,8 @@ data BuilderState md gq = BuilderState { --declaredVars :: !ScopedDeclarations
 --                                       , indexBindings :: !SLA.IndexLookupCtxt
   modelRowBuilders :: !(RowInfos md)
   , gqRowBuilders :: !(RowInfos gq)
-  , constModelJSON :: JSONSeriesFold ()  -- json for things which are attached to no data set.
-  , constGQJSON :: JSONSeriesFold ()
+  , constModelJSON :: JSONConstFold md  -- json for things which are attached to no data set.
+  , constGQJSON :: JSONConstFold gq
   , hasFunctions :: !(Set.Set Text)
   , parameterCollection :: SBPT.BParameterCollection
   , code :: !StanCode
@@ -154,20 +132,11 @@ dumpBuilderState bs = -- (BuilderState dvs ibs ris js hf c) =
   <> "\n parameterCollection (keys)" <> show (DM.keys $ SBPT.pdm $ parameterCollection bs)
 
 
--- build a new RowInfo from the row index and IntMap builders
-buildRowInfo :: d -> RowTypeTag r -> GroupIndexAndIntMapMakers d r -> RowInfo d r
-buildRowInfo d rtt (GroupIndexAndIntMapMakers tf@(ToFoldable f) ims imbs) = Foldl.fold fld $ f d  where
-  gisFld = indexBuildersForDataSetFold ims
---  uBindings = Map.insert (dataSetName rtt) (SLE.namedLIndex ("N_" <> dataSetName rtt))
---                $ useBindingsFromGroupIndexMakers rtt ims
-  fld = RowInfo tf {- uBindings -} <$> gisFld <*> pure imbs <*> pure mempty
-
-
-addData :: forall es r . (Typeable r, EffF.Fail :> es, EffS.State (RowInfoMakers (DataSource r)) :> es)
-        => DataSource r -> Text -> InputDataType -> ToFoldable (DataSource r) r -> Eff es (RowTypeTag r)
-addData d name idt tf = do
+addData :: forall es r i . (Typeable r, EffF.Fail :> es, EffS.State (RowInfoMakers (DataSource r)) :> es, DataSource r ~ SourceType i)
+        => DataSource r -> Text -> InputDataType i  -> ToFoldable (DataSource r) r -> Eff es (RowTypeTag r)
+addData _d name idt tf = do
   rowInfoMakers <- EffS.get @(RowInfoMakers (DataSource r))
-  let rtt = RowTypeTag idt name
+  let rtt = RowTypeTag (inputDataT idt) name
   case DHash.lookup rtt rowInfoMakers of
     Just _ -> buildError $ "Attempt to add data of matching type and name (\"" <> name <> "\" to model-data."
     Nothing -> do
@@ -178,26 +147,8 @@ addData d name idt tf = do
 intMapsForDataSetFoldM :: GroupIntMapBuilders r -> Foldl.FoldM (Either Text) r (GroupIntMaps r)
 intMapsForDataSetFoldM (GroupIntMapBuilders imbs) = GroupIntMaps <$> DHash.traverse unDataToIntMap imbs
 
-indexBuildersForDataSetFold :: GroupIndexMakers r -> Foldl.Fold r (GroupIndexes r)
-indexBuildersForDataSetFold (GroupIndexMakers gims) = GroupIndexes <$> DHash.traverse makeIndexMapF gims
 
-mapLookupE :: Ord k => (k -> Text) -> Map k a -> k -> Either Text a
-mapLookupE errMsg m k = case Map.lookup k m of
-  Just a -> Right a
-  Nothing -> Left $ errMsg k
 
-toIntMap :: Map k Int -> IntMap k
-toIntMap = IntMap.fromList . fmap (\(a, b) -> (b, a)) . Map.toList
-
-mapToIndexMap :: Ord k => (r -> k) -> Map k Int -> IndexMap r k
-mapToIndexMap h m = indxMap where
-  lookupK = mapLookupE (const $ "key not found when building given index") m
-  intIndex = IntIndex (Map.size m) (lookupK . h)
-  indxMap = IndexMap intIndex lookupK (toIntMap m) h
-
-makeIndexMapF :: MakeIndex r k -> Foldl.Fold r (IndexMap r k)
-makeIndexMapF (GivenIndex m h) = pure $ mapToIndexMap h m
-makeIndexMapF (FoldToIndex fld h) = fmap (mapToIndexMap h) fld
 
 data StanCode = StanCode { curBlock :: SLP.StanBlock
                          , program :: SLP.StanProgram
@@ -217,8 +168,8 @@ data StanModel = StanModel
   }
   deriving stock (Show, Eq, Ord)
 
-data InputDataType = ModelData | GQData deriving stock (Show, Eq, Ord, Enum, Bounded, Generic)
-instance Hashable InputDataType
+data InputDataT = ModelDataT | GQDataT deriving stock (Show, Eq, Ord, Enum, Bounded, Generic)
+instance Hashable InputDataT
 
 data JSONSeriesFold row where
   JSONSeriesFold :: SJ.StanJSONF row Aeson.Series -> JSONSeriesFold row
@@ -229,19 +180,29 @@ instance Semigroup (JSONSeriesFold row) where
 instance Monoid (JSONSeriesFold row) where
   mempty = JSONSeriesFold $ pure mempty
 
+data JSONConstFold d where
+  JSONConstFold :: SJ.StanJSONF () Aeson.Series -> JSONConstFold d
+
+instance Semigroup (JSONConstFold d) where
+  (JSONConstFold a) <> (JSONConstFold b) = JSONConstFold (a <> b)
+
+instance Monoid (JSONConstFold d) where
+  mempty = JSONConstFold $ pure mempty
+
+
 -- f is existential here.  We supply the choice when we *construct* a ToFoldable
 data ToFoldable d row where
   ToFoldable :: Foldable f => (d -> f row) -> ToFoldable d row
 
 -- key for dependepent map.
 data RowTypeTag r where
-  RowTypeTag :: Typeable r => InputDataType -> Text -> RowTypeTag r
+  RowTypeTag :: Typeable r => InputDataT -> Text -> RowTypeTag r
 
 dataSetName :: RowTypeTag r -> Text
 dataSetName (RowTypeTag _ n) = n
 
-inputDataType :: RowTypeTag r -> InputDataType
-inputDataType (RowTypeTag idt _) = idt
+dataSetInputDataT :: RowTypeTag r -> InputDataT
+dataSetInputDataT (RowTypeTag idt _) = idt
 
 dataSetSizeName :: RowTypeTag r -> Text
 dataSetSizeName rtt = "N_" <> dataSetName rtt
@@ -261,29 +222,40 @@ instance Hashable.Hashable (Some.Some RowTypeTag) where
   hashWithSalt s (Some.Some (RowTypeTag idt n)) = Hashable.hashWithSalt s idt `Hashable.hashWithSalt` n
 
 data GroupTypeTag k where
-  GroupTypeTag :: Typeable k => Text -> GroupTypeTag k
+  GroupTypeTag :: Typeable k => Text -> SLE.IntE -> GroupTypeTag k
+
+groupIndexVarName :: RowTypeTag r -> GroupTypeTag k -> SLT.VarName
+groupIndexVarName rtt gtt = dataSetName rtt <> "_" <> taggedGroupName gtt
+{-# INLINEABLE groupIndexVarName #-}
 
 taggedGroupName :: GroupTypeTag k -> Text
-taggedGroupName (GroupTypeTag n) = n
+taggedGroupName (GroupTypeTag n _lE) = n
 
 groupSizeName :: GroupTypeTag k -> Text
 groupSizeName g = "J_" <> taggedGroupName g
 
+groupSizeE :: GroupTypeTag k -> SLE.IntE
+groupSizeE (GroupTypeTag _ lE) = lE
+
+--addEnumGroup :: (Enum k, Bounded k) => (EffS.State StanCode )Text -> GroupTypeTag k
+--addEnumGroup name size = GroupTypeTag name (TE.namedE ""size $ intE size)
+
 dataByGroupIndexName :: RowTypeTag r -> GroupTypeTag g -> Text
 dataByGroupIndexName rtt gtt = dataSetName rtt <> "_" <> taggedGroupName gtt
 
+-- should depend on length expressions as well. FIX
 instance GADT.GEq GroupTypeTag where
-  geq gta@(GroupTypeTag n1) gtb@(GroupTypeTag n2) =
+  geq gta@(GroupTypeTag n1 _lE1) gtb@(GroupTypeTag n2 _lE2) =
     case Reflection.eqTypeRep (Reflection.typeOf gta) (Reflection.typeOf gtb) of
       Just Reflection.HRefl -> if n1 == n2 then Just Reflection.Refl else Nothing
       _ -> Nothing
 
 instance GADT.GShow GroupTypeTag where
-  gshowsPrec _ (GroupTypeTag n) s = s ++ "GTT (name= " ++ toString n ++ ")"
+  gshowsPrec _ (GroupTypeTag n _) s = s ++ "GTT (name= " ++ toString n ++ ")"
 
 instance Hashable.Hashable (Some.Some GroupTypeTag) where
-  hash (Some.Some (GroupTypeTag n)) = Hashable.hash n
-  hashWithSalt m (Some.Some (GroupTypeTag n)) = hashWithSalt m n
+  hash (Some.Some (GroupTypeTag n _)) = Hashable.hash n
+  hashWithSalt m (Some.Some (GroupTypeTag n _)) = hashWithSalt m n
 
 data IntIndex row = IntIndex { i_Size :: Int, i_Index :: row -> Either Text Int }
 
@@ -318,15 +290,18 @@ type DataSetGroupIntMaps = DHash.DHashMap RowTypeTag GroupIntMaps
 displayDataSetGroupIntMaps :: DataSetGroupIntMaps -> Text
 displayDataSetGroupIntMaps = DHash.foldrWithKey g ""
   where
-    g rtt gims t = t <> "rtt=" <> dataSetName rtt <> " (idt=" <> show (inputDataType rtt) <> "): " <> displayGroupIntMaps gims <> "\n"
+    g rtt gims t = t <> "rtt=" <> dataSetName rtt <> " (idt=" <> show (dataSetInputDataT rtt) <> "): " <> displayGroupIntMaps gims <> "\n"
 
 displayGroupIntMaps :: GroupIntMaps k -> Text
 displayGroupIntMaps (GroupIntMaps gim) = h gim where
   h = DHash.foldrWithKey (\gtt _ t -> t <> ", " <> taggedGroupName gtt) ""
 
-data GroupIndexAndIntMapMakers d r =
-  GroupIndexAndIntMapMakers (ToFoldable d r) (GroupIndexMakers r) (GroupIntMapBuilders r)
-
+data GroupIndexAndIntMapMakers d r where
+  GroupIndexAndIntMapMakers :: DataSource r ~ d
+                            => ToFoldable d r
+                            -> GroupIndexMakers r
+                            -> GroupIntMapBuilders r
+                            -> GroupIndexAndIntMapMakers d r
 data IndexMap r k = IndexMap
                     { rowToGroupIndex :: IntIndex r,
                       groupKeyToGroupIndex :: k -> Either Text Int,
@@ -337,14 +312,25 @@ data IndexMap r k = IndexMap
 contraIndexMap :: (a -> b) -> IndexMap b k -> IndexMap a k
 contraIndexMap f (IndexMap rgi ggi gigk rg) = IndexMap (contramap f rgi) ggi gigk (rg . f)
 
-data RowInfo d r = RowInfo
-                   {
-                     toFoldable    :: ToFoldable d r
---                   , expressionBindings :: SLA.IndexArrayMap
-                   , groupIndexes  :: GroupIndexes r
-                   , groupIntMapBuilders  :: GroupIntMapBuilders r
-                   , jsonSeries    :: JSONSeriesFold r
-                   }
+data RowInfo d r where
+  RowInfo :: DataSource r ~ d
+          => ToFoldable d r
+          -> GroupIndexes r
+          -> GroupIntMapBuilders r
+          -> JSONSeriesFold r
+          -> RowInfo d r
+
+toFoldable :: RowInfo d r -> ToFoldable d r
+toFoldable (RowInfo tf _ _ _) = tf
+
+groupIndexes :: RowInfo d r -> GroupIndexes r
+groupIndexes (RowInfo _ gi _ _) = gi
+
+groupIntMapBuilders :: RowInfo d r -> GroupIntMapBuilders r
+groupIntMapBuilders (RowInfo _ _ gimb _) = gimb
+
+jsonSeries :: RowInfo d r -> JSONSeriesFold r
+jsonSeries (RowInfo _ _ _ jsf) = jsf
 
 -- the key is a name for the data-set.  The tag carries the toDataSet function
 type RowBuilder d = DSum.DSum RowTypeTag (RowInfo d)

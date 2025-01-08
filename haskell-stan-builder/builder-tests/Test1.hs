@@ -7,30 +7,41 @@
 {-# LANGUAGE TypeApplications     #-}
 {-# LANGUAGE TypeFamilies     #-}
 
-module Test1 where
+module Main where
 
 import qualified Stan.Language as SL
 import qualified Stan.Functions as SF
 import Stan.Functions.Operators
 import qualified Stan.Builder as SB
 
+import qualified Data.Aeson as A
 
 main :: IO ()
 main = do
-  case SB.runStanBuilderDAG modelData () stanBuilder of
+  let sb' = do
+        stanBuilder
+        modelJSONF <- SB.buildJSONFromDataM @ModelData
+        gqJSONF <- SB.buildJSONFromDataM @()
+        pure (modelJSONF, gqJSONF)
+--        modelIntMapsBuilder <- SB.
+  case SB.runStanBuilderDAG modelData () sb' of
     Left err -> putTextLn $ "Error in runStanBuilder: " <> err
-    Right (SB.BuilderState _ _ _ _ _ _ (SB.StanCode _ sp), _) -> do
+    Right (SB.BuilderState _ _ _ _ _ _ (SB.StanCode _ sp), (modelJSF, gqJSF)) -> do
       case SL.programAsText SL.All sp of
         Left err -> putTextLn $ "Error during AST -> Text: " <> err
         Right code -> putTextLn code
+      putTextLn $ "model JSON: "
+      putTextLn $ show $ fmap A.pairs $ modelJSF modelData
 
 data LetterCode = A | B | C deriving stock (Show, Eq, Ord, Enum, Bounded)
 
 data Row = Row { rowId :: Text, letterCode :: LetterCode, count :: Int, val1 :: Double, val2 :: Double}
 
-type instance SB.DataSource Row = ModelData
-
 data ModelData = ModelData { rows :: [Row]}
+
+type instance SB.DataSource Row = ModelData
+type instance SB.SourceType SB.ModelDataT = ModelData
+type instance SB.SourceType SB.GQDataT = ()
 
 modelData :: ModelData
 modelData = ModelData [Row "a1" A 12 1.1 1.2
@@ -39,12 +50,7 @@ modelData = ModelData [Row "a1" A 12 1.1 1.2
 
 stanBuilder :: SB.StanBuilderEff ModelData () ()
 stanBuilder = do
-  modelData <- SB.addData modelData "D1" SB.ModelData (SB.ToFoldable rows)
-  let letterGroup = SB.GroupTypeTag @LetterCode "LetterCode"
-  SB.addGroupIndexForData letterGroup modelData (SB.makeIndexByCounting show letterCode)
-  SB.addGroupIntMapForData letterGroup modelData (SB.dataToIntMapFromEnum letterCode)
-
-  SB.setBlock SL.SBData
-  SB.addStmtToCode $ SL.cwStmt_ $ do
-    x <- SL.declareW "x" SL.intSpec
-    pure ()
+  modelDataT <- SB.addData modelData "D1" SB.ModelData (SB.ToFoldable rows)
+  letterGroupT <- SB.addEnumGroup @LetterCode "LC"
+  SB.addGroupIndexForData letterGroupT modelDataT (SB.makeIndexByCounting show letterCode)
+  SB.addGroupIntMapForData letterGroupT modelDataT (SB.dataToIntMapFromEnum letterCode)

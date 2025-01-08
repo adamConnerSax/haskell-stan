@@ -21,6 +21,7 @@ module Stan.Builder.Parameters
 import Prelude hiding (All)
 import qualified Stan.Builder.Core as SBC
 import qualified Stan.Builder.Build as SB
+import qualified Stan.Builder.BuildRunner as SBR
 import qualified Stan.Builder.ParameterTypes as PT
 
 import Stan.Builder.ParameterTypes (DeclCode(..)
@@ -51,7 +52,6 @@ import qualified Data.Dependent.Sum as DM
 import qualified Data.Graph as Gr
 import qualified Control.Foldl as FL
 
-import qualified Effectful as Eff
 import Effectful ((:>), Eff)
 import qualified Effectful.State.Static.Local as EffS
 import qualified Effectful.Fail as EffF
@@ -183,7 +183,7 @@ runStanBuilderDAG md gq sb =
           bpc <- EffS.get @PT.BParameterCollection
           addAllParametersInCollection bpc
         return a
-  in SBC.runStanBuilderEff md gq sb'
+  in SBR.runStanBuilderEff md gq sb'
 
 {-
 runStanBuilderDAG' :: forall md gq a .

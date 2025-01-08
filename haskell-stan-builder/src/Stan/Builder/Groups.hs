@@ -17,36 +17,39 @@ module Stan.Builder.Groups
 where
 
 import qualified Stan.Builder.Core as SBC
-import qualified Stan.Language.Types as SLT
-import qualified Stan.Language.Program as SLP
-import qualified Stan.Language.Format as SLF
-import qualified Stan.Language.ASTContext as SLA
-import qualified Stan.Language.Expression as SLE
---import qualified Stan.Language.Statements as SLS -- was TE
-import qualified Stan.Builder.ParameterTypes as SBPT
+import qualified Stan.Builder.JSON as SBJ
 
 import Prelude hiding (All)
 import qualified Control.Foldl as Foldl
-import qualified Data.Aeson as Aeson
 import qualified Data.Dependent.HashMap as DHash
-import qualified Data.GADT.Compare as GADT
 import qualified Data.IntMap.Strict as IntMap
 import qualified Data.Map.Strict as Map
 import qualified Data.Set as Set
-import qualified Data.Some as Some
-import qualified Data.Text as T
-import qualified Data.Hashable as Hashable
-import qualified Type.Reflection as Reflection
-import qualified Data.GADT.Show as GADT
-import qualified Data.Dependent.Sum as DSum
-import qualified Data.Dependent.Map as DM
 
-import qualified Effectful as Eff
 import Effectful ((:>), Eff)
 import qualified Effectful.State.Static.Local as EffS
 import qualified Effectful.Fail as EffF
-import qualified Effectful.Dispatch.Dynamic as EffD
 
+type AddGroup k es = (Typeable k, EffF.Fail :> es, EffS.State (SBC.JSONConstFold (SBC.SourceType SBC.ModelDataT)) :> es, EffS.State SBC.StanCode :> es)
+
+addGroup :: forall k es . AddGroup k es
+         => Text -> Int -> Eff es (SBC.GroupTypeTag k)
+addGroup groupName size = do
+  lE <- SBJ.addFixedIntJson SBC.ModelData ("J_" <> groupName) (Just 1) size
+  pure $ SBC.GroupTypeTag groupName lE
+
+addEnumGroup :: forall k es . (Enum k, Bounded k, AddGroup k es)
+             => Text
+             -> Eff es (SBC.GroupTypeTag k)
+addEnumGroup groupName = addGroup groupName size
+  where
+    size = Foldl.fold Foldl.length $ ([minBound..maxBound] :: [k])
+
+addGroupFromCollection :: forall k f es . (Ord k, Foldable f, AddGroup k es)
+                       => Text -> f k -> Eff es (SBC.GroupTypeTag k)
+addGroupFromCollection groupName c = addGroup groupName size
+  where
+    size = Set.size $ Foldl.fold Foldl.set c
 
 makeIndexFromEnum :: forall k r . (Enum k, Bounded k, Ord k) => (r -> k) -> SBC.MakeIndex r k
 makeIndexFromEnum h = SBC.GivenIndex m h where
@@ -79,7 +82,7 @@ addGroupIndexForData :: forall r k es . (EffF.Fail :> es, EffS.State (SBC.RowInf
                      -> SBC.MakeIndex r k
                      -> Eff es ()
 addGroupIndexForData gtt rtt mkIndex = withRowInfoMakers @(SBC.DataSource r) f where
-  idt = SBC.inputDataType rtt
+  idt = SBC.dataSetInputDataT rtt
   f :: forall x. SBC.RowInfoMakers x -> Eff es (Maybe (SBC.RowInfoMakers x), ())
   f rowInfoMakers = do
     case DHash.lookup rtt rowInfoMakers of
@@ -91,7 +94,7 @@ addGroupIndexForData gtt rtt mkIndex = withRowInfoMakers @(SBC.DataSource r) f w
           let newRims = DHash.insert rtt (SBC.GroupIndexAndIntMapMakers tf (SBC.GroupIndexMakers $ DHash.insert gtt mkIndex gims) gimbs) rowInfoMakers
           pure (Just newRims, ())
 
-
+{-
 addGroupIndexForModelCrosswalk :: forall k r es . (EffF.Fail :> es, EffS.State (SBC.RowInfoMakers (SBC.DataSource r)) :> es, Typeable k)
                                => SBC.RowTypeTag r
                                -> SBC.MakeIndex r k
@@ -100,7 +103,7 @@ addGroupIndexForModelCrosswalk rtt mkIndex = do
   let gttX :: SBC.GroupTypeTag k = SBC.GroupTypeTag $ "I_" <> (SBC.dataSetName rtt)
 --      idt = inputDataType rtt
   addGroupIndexForData gttX rtt mkIndex
-
+-}
 buildIntMapBuilderF :: (k -> Either Text Int) -> (r -> k) -> SBC.DataToIntMap r k --FL.FoldM (Either Text) r (IM.IntMap k)
 buildIntMapBuilderF eIntF keyF = SBC.DataToIntMap $ Foldl.FoldM step (return IntMap.empty) return where
   step im r = case eIntF $ keyF r of
@@ -138,7 +141,7 @@ addGroupIntMapForData gtt rtt mkIntMap = withRowInfoMakers @(SBC.DataSource r) f
 
 
 withRowInfoMakers :: forall x es y . EffS.State (SBC.RowInfoMakers x) :> es
-                  => (forall x. SBC.RowInfoMakers x -> Eff es (Maybe (SBC.RowInfoMakers x), y)) -> Eff es y
+                  => (forall z. SBC.RowInfoMakers z -> Eff es (Maybe (SBC.RowInfoMakers z), y)) -> Eff es y
 withRowInfoMakers f = do
   rims <- EffS.get @(SBC.RowInfoMakers x)
   (mRims, y) <- f rims

@@ -8,7 +8,6 @@ module Stan.Builder.JSON.JSONUtils
   )
 where
 
-
 import Prelude hiding (Product)
 import qualified Control.Foldl as FL
 import qualified Control.Exception as X
@@ -23,8 +22,6 @@ import Data.List.Extra (nubOrd)
 import qualified Data.Map.Strict as M
 import qualified Data.IntMap.Strict as IM
 import qualified Data.Text as T
-
-import qualified Data.Dependent.HashMap as DHash
 
 import Data.Vector.Serialize()
 import qualified Data.Vector as BVec

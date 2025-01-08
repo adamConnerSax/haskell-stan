@@ -92,6 +92,7 @@ library
          , Relude.Extra)
   exposed-modules: Stan.Builder
                  , Stan.Builder.Build
+                 , Stan.Builder.BuildRunner
                  , Stan.Builder.Core
                  , Stan.Builder.JSON
                  , Stan.Builder.JSON.JSONUtils
@@ -106,6 +107,7 @@ executable builder-test
    hs-source-dirs: builder-tests
    main-is: Test1.hs
    build-depends: base
+                , aeson
                 , haskell-stan-language
                 , haskell-stan-functions
                 , haskell-stan-builder

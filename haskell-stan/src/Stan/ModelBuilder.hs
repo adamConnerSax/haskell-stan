@@ -325,7 +325,7 @@ groupIntMap (IndexMap _ _ im _) = im
 unIndexedRowInfo :: forall d r. ToFoldable d r -> Text -> RowInfo d r
 unIndexedRowInfo tf _  = RowInfo tf mempty (GroupIndexes DHash.empty) (GroupIntMapBuilders DHash.empty) mempty
 
-{- Moved to Stan.Builder.JSON -}
+{- Moved to Stan.Builder.JSON
 addFoldToDBuilder :: forall d r.
                   RowTypeTag r
                   -> Stan.StanJSONF r Aeson.Series
@@ -349,8 +349,9 @@ buildJSONFromRows :: DHash.DHashMap RowTypeTag (JSONRowFold d) -> d -> Either Te
 buildJSONFromRows rowFoldMap d = do
   let toSeriesOne (_ DSum.:=> JSONRowFold (ToFoldable tf) fld) = Foldl.foldM fld (tf d)
   fmap mconcat $ traverse toSeriesOne $ DHash.toList rowFoldMap
+-}
 
-
+{- Moved to Stan.Builder.JSON
 -- The Maybe return values are there just to satisfy the (returned) type of DHash.traverseWithKey
 buildGroupIndexes :: StanBuilderM md gq ()
 buildGroupIndexes = do
@@ -409,7 +410,7 @@ buildGQJSONFromDataM = do
     let c = Foldl.foldM constJSONFld (Just ())
         ds =  buildJSONFromRows dataSetJSON d
     in (<>) <$> c <*> ds
-
+-}
 {- Moved to Stan.Builder.CoreTypes
 data VariableScope = GlobalScope | ModelScope | GQScope deriving stock (Show, Eq, Ord)
 
@@ -1343,6 +1344,7 @@ addFixedIntJson idt tName mLower n = do
   modify $ addConstJson idt (JSONSeriesFold $ Stan.constDataF tName n)
   return $ TE.namedE tName TE.SInt
 -}
+{- moved to Stan.Builder.JSON
 addFixedIntJson' :: InputDataType
                  -> Text
                  -> Maybe Int
@@ -1445,7 +1447,7 @@ add2dMatrixJson rtt mrfd@(MatrixRowFromData tName _ cols vecF) cs = do
       idt = inputDataType rtt
   _ <- addFixedIntJson' idt colName Nothing cols
   addColumnJson rtt ndsF vecF
-
+-}
 {- Moved to Stan.Builder.Build
 modifyCode' :: (TE.StanProgram -> TE.StanProgram) -> BuilderState md gq -> BuilderState md gq
 modifyCode' f bs = let (StanCode currentBlock oldProg) = code bs in bs { code = StanCode currentBlock $ f oldProg }

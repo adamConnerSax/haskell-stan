@@ -18,7 +18,6 @@ where
 
 import qualified Stan.Builder.Core as SBC
 import qualified Stan.Language.Types as SLT
-import qualified Stan.Language.ASTContext as SLA
 import qualified Stan.Language.Expression as SLE
 import qualified Stan.Language.Expressions as SLE
 import qualified Stan.Language.Functions as SLF
@@ -29,15 +28,11 @@ import qualified Stan.Language.CodeWriter as SLC
 
 import Control.Monad (unless)
 import qualified Data.Dependent.HashMap as DHash
-import qualified Data.Map.Strict as Map
 import qualified Data.Set as Set
 
-import qualified Effectful as Eff
 import Effectful ((:>), Eff)
 import qualified Effectful.State.Static.Local as EffS
 import qualified Effectful.Fail as EffF
-import qualified Stan.Language.Program as SLP
---import Stan.Language.Program (stmtAsText)
 
 addToCurrentBlock :: SBC.StateAndFailEff SBC.StanCode es
                      => (SLP.StanBlock -> a -> Either Text (SLP.StanProgram -> SLP.StanProgram))
@@ -107,14 +102,13 @@ setBlock b = EffS.modify $ \(SBC.StanCode _ p) -> SBC.StanCode b p
 getBlock :: EffS.State SBC.StanCode :> es => Eff es SLP.StanBlock
 getBlock = EffS.gets SBC.curBlock
 
-inBlock ::  EffS.State SBC.StanCode :> es => SLP.StanBlock -> Eff es a -> Eff es a
+inBlock :: EffS.State SBC.StanCode :> es => SLP.StanBlock -> Eff es a -> Eff es a
 inBlock b m = do
   oldBlock <- getBlock
   setBlock b
   a <- m
   setBlock oldBlock
   pure a
-
 
 --inBlock ::
 
@@ -236,7 +230,7 @@ alreadyDeclaredAllScopes sd sn st =
 
 withRowInfo :: forall x es y r . EffS.State (SBC.RowInfos x) :> es
             => Eff es y
-            -> (forall x . SBC.RowInfo x r -> Eff es y)
+            -> (forall z . SBC.RowInfo z r -> Eff es y)
             -> SBC.RowTypeTag r
             -> Eff es y
 withRowInfo missing presentF rtt = EffS.get @(SBC.RowInfos x) >>= maybe missing presentF . DHash.lookup rtt
