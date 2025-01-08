@@ -32,6 +32,8 @@ main = do
       let SB.StanCode _ sp = SB.code bs
           modelJsonE = SB.modelJsonE bs modelData
           gqJsonE = SB.gqJsonE bs ()
+          modelIntMaps = SB.intMapsFromRowInfos (SB.modelRowBuilders bs) modelData
+          gqIntMaps = SB.intMapsFromRowInfos (SB.gqRowBuilders bs) ()
       putTextLn $ "messages: "
       putTextLn $ T.intercalate "\n" logs
       case SL.programAsText SL.All sp of
@@ -39,6 +41,8 @@ main = do
         Right code -> putTextLn code
       putTextLn $ "model JSON: "
       putTextLn $ show $ fmap A.pairs $ modelJsonE
+      putTextLn $ "model Group IntMaps:"
+      putTextLn $ show $ fmap SB.displayDataSetGroupIntMaps $ modelIntMaps
 
 data LetterCode = A | B | C deriving stock (Show, Eq, Ord, Enum, Bounded)
 
@@ -61,3 +65,7 @@ stanBuilder = do
   letterGroupT <- SB.addEnumGroup @LetterCode "LC"
   SB.addGroupIndexForData letterGroupT modelDataT (SB.makeIndexByCounting show letterCode)
   SB.addGroupIntMapForData letterGroupT modelDataT (SB.dataToIntMapFromEnum letterCode)
+  muP <- SB.simpleParameter (SL.NamedDeclSpec "mu" SL.realSpec)
+         (SB.given (SL.realE 1) SL.:> SB.given (SL.realE 0) SL.:> SL.TNil)
+         (SL.simpleDensity "normal")
+  pure ()

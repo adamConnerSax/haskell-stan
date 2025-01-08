@@ -286,7 +286,7 @@ displayDataSetGroupIntMaps = DHash.foldrWithKey g ""
 
 displayGroupIntMaps :: GroupIntMaps k -> Text
 displayGroupIntMaps (GroupIntMaps gim) = h gim where
-  h = DHash.foldrWithKey (\gtt _ t -> t <> ", " <> taggedGroupName gtt) ""
+  h = DHash.foldrWithKey (\gtt _im t -> t <> ", " <> taggedGroupName gtt) ""
 
 data GroupIndexAndIntMapMakers d r where
   GroupIndexAndIntMapMakers :: DataSource r ~ d
@@ -320,6 +320,12 @@ groupIndexes (RowInfo _ gi _ _) = gi
 
 groupIntMapBuilders :: RowInfo d r -> GroupIntMapBuilders r
 groupIntMapBuilders (RowInfo _ _ gimb _) = gimb
+
+intMapsFromRowInfos :: RowInfos d -> d -> Either Text DataSetGroupIntMaps
+intMapsFromRowInfos rowInfos d =
+  let f :: d -> RowInfo d r -> Either Text (GroupIntMaps r)
+      f d' (RowInfo (ToFoldable h) _ gims _) = Foldl.foldM (intMapsForDataSetFoldM gims) (h d')
+  in DHash.traverse (f d) rowInfos
 
 jsonSeries :: RowInfo d r -> JSONSeriesFold r
 jsonSeries (RowInfo _ _ _ jsf) = jsf
