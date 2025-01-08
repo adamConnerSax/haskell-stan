@@ -149,6 +149,12 @@ buildJSONFromRows rowFoldMap d = do
     Right s -> Left $ "buildJSONFromRows: pairs(series)=" <> show (Aeson.pairs s)
 -}
 
+modelJsonE :: SBC.BuilderState md gq -> md -> Either Text Aeson.Series
+modelJsonE (SBC.BuilderState mRBs _ (SBC.JSONConstFold mCJF) _ _ _ _) md = (<>) <$> Foldl.foldM mCJF (Just ()) <*> buildJSONSeries mRBs md
+
+gqJsonE :: SBC.BuilderState md gq -> gq -> Either Text Aeson.Series
+gqJsonE (SBC.BuilderState _ gqRBs _ (SBC.JSONConstFold gqCJF) _ _ _) gq = (<>) <$> Foldl.foldM gqCJF (Just ()) <*> buildJSONSeries gqRBs gq
+
 -- The Maybe return values are there just to satisfy the (returned) type of DHash.traverseWithKey
 {-
 buildGroupIndexes' :: forall md gq es . (EffF.Fail :> es, EffS.State SBC.StanCode :> es

@@ -98,6 +98,7 @@ library
                  , Stan.Builder.JSON.JSONUtils
                  , Stan.Builder.ParameterTypes
                  , Stan.Builder.Parameters
+                 , Stan.Builder.Data
                  , Stan.Builder.Groups
   hs-source-dirs:   src
 

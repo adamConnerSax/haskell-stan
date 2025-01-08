@@ -172,7 +172,7 @@ runStanBuilderDAG :: forall md gq a .
                      md
                   -> gq
                   -> SBC.StanBuilderEff md gq a
-                  -> Either Text (SBC.BuilderState md gq, a)
+                  -> Either Text (SBC.BuilderState md gq, [Text], a)
 runStanBuilderDAG md gq sb =
   let sb' :: SBC.StanBuilderEff md gq a
       sb' = do

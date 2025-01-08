@@ -15,23 +15,30 @@ import Stan.Functions.Operators
 import qualified Stan.Builder as SB
 
 import qualified Data.Aeson as A
+import qualified Data.Text as T
 
 main :: IO ()
 main = do
-  let sb' = do
+{-  let sb' = do
         stanBuilder
-        modelJSONF <- SB.buildJSONFromDataM @ModelData
-        gqJSONF <- SB.buildJSONFromDataM @()
-        pure (modelJSONF, gqJSONF)
+--        modelJSONF <- SB.buildJSONFromDataM @ModelData
+--        gqJSONF <- SB.buildJSONFromDataM @()
+--        pure (modelJSONF, gqJSONF)
 --        modelIntMapsBuilder <- SB.
-  case SB.runStanBuilderDAG modelData () sb' of
+-}
+  case SB.runStanBuilderDAG modelData () stanBuilder of
     Left err -> putTextLn $ "Error in runStanBuilder: " <> err
-    Right (SB.BuilderState _ _ _ _ _ _ (SB.StanCode _ sp), (modelJSF, gqJSF)) -> do
+    Right (bs, logs, ()) -> do
+      let SB.StanCode _ sp = SB.code bs
+          modelJsonE = SB.modelJsonE bs modelData
+          gqJsonE = SB.gqJsonE bs ()
+      putTextLn $ "messages: "
+      putTextLn $ T.intercalate "\n" logs
       case SL.programAsText SL.All sp of
         Left err -> putTextLn $ "Error during AST -> Text: " <> err
         Right code -> putTextLn code
       putTextLn $ "model JSON: "
-      putTextLn $ show $ fmap A.pairs $ modelJSF modelData
+      putTextLn $ show $ fmap A.pairs $ modelJsonE
 
 data LetterCode = A | B | C deriving stock (Show, Eq, Ord, Enum, Bounded)
 

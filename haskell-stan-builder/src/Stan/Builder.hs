@@ -6,6 +6,7 @@ module Stan.Builder
   , module Stan.Builder.JSON
   , module Stan.Builder.ParameterTypes
   , module Stan.Builder.Parameters
+  , module Stan.Builder.Data
   , module Stan.Builder.Groups
   )
 where
@@ -16,4 +17,5 @@ import Stan.Builder.Core
 import Stan.Builder.JSON
 import Stan.Builder.ParameterTypes
 import Stan.Builder.Parameters
+import Stan.Builder.Data
 import Stan.Builder.Groups

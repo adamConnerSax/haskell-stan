@@ -35,6 +35,7 @@ import qualified Data.Set as Set
 import qualified Effectful as Eff
 import Effectful ((:>), Eff)
 import qualified Effectful.State.Static.Local as EffS
+import qualified Effectful.Writer.Static.Local as EffW
 import qualified Effectful.Fail as EffF
 
 -- This weirdness avoids overlapping instances issues
@@ -44,13 +45,15 @@ runGroupBuilder x m = do
   (a, rowInfoMakers) <- EffS.runState DHash.empty m
   let rowInfos = DHash.mapWithKey (buildRowInfo x) rowInfoMakers
   EffS.put rowInfos
+  addDataLengths @x
   buildGroupIndexes @x
   pure a
 
-runStanBuilderEff :: forall md gq a . md -> gq -> SBC.StanBuilderEff md gq a -> Either Text (SBC.BuilderState md gq, a)
+runStanBuilderEff :: forall md gq a . md -> gq -> SBC.StanBuilderEff md gq a -> Either Text (SBC.BuilderState md gq, [Text], a)
 runStanBuilderEff md gq m = do
   let effRes =  Eff.runPureEff
                 . EffF.runFail
+                . EffW.runWriter
                 . EffS.runState mempty
                 . EffS.runState mempty
                 . EffS.runState Set.empty
@@ -63,8 +66,8 @@ runStanBuilderEff md gq m = do
                 $ m
   case effRes of
     Left err -> Left $ toText err
-    Right (((((((a, mRBs), gqRBs), pc), c), hf), mCJFs), gqCJFs) -> do
-      pure (SBC.BuilderState mRBs gqRBs mCJFs gqCJFs hf pc c, a)
+    Right ((((((((a, mRBs), gqRBs), pc), c), hf), mCJFs), gqCJFs), logs) -> do
+      pure (SBC.BuilderState mRBs gqRBs mCJFs gqCJFs hf pc c, Foldl.fold Foldl.list logs, a)
 
 -- build a new RowInfo from the row index and IntMap builders
 buildRowInfo :: d -> SBC.RowTypeTag r -> SBC.GroupIndexAndIntMapMakers d r -> SBC.RowInfo d r
@@ -94,6 +97,15 @@ mapToIndexMap h m = indxMap where
   lookupK = mapLookupE (const $ "key not found when building given index") m
   intIndex = SBC.IntIndex (Map.size m) (lookupK . h)
   indxMap = SBC.IndexMap intIndex lookupK (toIntMap m) h
+
+addDataLengths :: forall x es . (EffF.Fail :> es, EffS.State SBC.StanCode :> es
+                                , EffS.State (SBC.RowInfos x) :> es) => Eff es ()
+addDataLengths = do
+  let addDataLength :: SBC.RowTypeTag r -> SBC.RowInfo x r -> Eff es (Maybe r)
+      addDataLength rtt ri = case ri of
+        SBC.RowInfo {} -> SBJ.addLengthJson rtt ("N_" <> SBC.dataSetName rtt) >> pure Nothing
+  _ <- EffS.get @(SBC.RowInfos x) >>= DHash.traverseWithKey addDataLength
+  pure ()
 
 buildGroupIndexes :: forall x es . (EffF.Fail :> es, EffS.State SBC.StanCode :> es
                                    , EffS.State (SBC.RowInfos x) :> es)

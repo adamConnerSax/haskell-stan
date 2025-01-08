@@ -28,6 +28,7 @@ import qualified Data.Aeson as Aeson
 import qualified Data.Dependent.HashMap as DHash
 import qualified Data.GADT.Compare as GADT
 import qualified Data.IntMap.Strict as IntMap
+import qualified Data.Sequence as Seq
 import qualified Data.Set as Set
 import qualified Data.Some as Some
 import qualified Data.Text as T
@@ -39,6 +40,7 @@ import qualified Data.Dependent.Map as DM
 
 import Effectful ((:>), Eff)
 import qualified Effectful.State.Static.Local as EffS
+import qualified Effectful.Writer.Static.Local as EffW
 import qualified Effectful.Fail as EffF
 import qualified Effectful.Dispatch.Dynamic as EffD
 
@@ -80,6 +82,7 @@ type StanBuilderEffs md gq =
   , EffS.State (Set Text)
   , EffS.State (JSONConstFold md)
   , EffS.State (JSONConstFold gq)
+  , EffW.Writer (Seq.Seq Text)
   , EffF.Fail
   ]
 
@@ -88,6 +91,9 @@ type StanBuilderEff md gq a = Eff (StanBuilderEffs md gq) a
 
 
 type StateAndFailEff s es = (EffS.State s :> es, EffF.Fail :> es)
+
+buildLog :: EffW.Writer (Seq.Seq Text) :> es => Text -> Eff es ()
+buildLog = EffW.tell . Seq.singleton
 
 buildError :: EffF.Fail :> es => Text -> Eff es a
 buildError = EffD.send . EffF.Fail . toString
@@ -132,23 +138,9 @@ dumpBuilderState bs = -- (BuilderState dvs ibs ris js hf c) =
   <> "\n parameterCollection (keys)" <> show (DM.keys $ SBPT.pdm $ parameterCollection bs)
 
 
-addData :: forall es r i . (Typeable r, EffF.Fail :> es, EffS.State (RowInfoMakers (DataSource r)) :> es, DataSource r ~ SourceType i)
-        => DataSource r -> Text -> InputDataType i  -> ToFoldable (DataSource r) r -> Eff es (RowTypeTag r)
-addData _d name idt tf = do
-  rowInfoMakers <- EffS.get @(RowInfoMakers (DataSource r))
-  let rtt = RowTypeTag (inputDataT idt) name
-  case DHash.lookup rtt rowInfoMakers of
-    Just _ -> buildError $ "Attempt to add data of matching type and name (\"" <> name <> "\" to model-data."
-    Nothing -> do
-      let newRowInfoMakers = DHash.insert rtt (GroupIndexAndIntMapMakers tf (GroupIndexMakers DHash.empty) (GroupIntMapBuilders DHash.empty)) rowInfoMakers
-      EffS.put newRowInfoMakers
-      pure rtt
 
 intMapsForDataSetFoldM :: GroupIntMapBuilders r -> Foldl.FoldM (Either Text) r (GroupIntMaps r)
 intMapsForDataSetFoldM (GroupIntMapBuilders imbs) = GroupIntMaps <$> DHash.traverse unDataToIntMap imbs
-
-
-
 
 data StanCode = StanCode { curBlock :: SLP.StanBlock
                          , program :: SLP.StanProgram
@@ -211,7 +203,7 @@ dataSetSizeName rtt = "N_" <> dataSetName rtt
 instance GADT.GEq RowTypeTag where
   geq rta@(RowTypeTag idt1 n1) rtb@(RowTypeTag idt2 n2) =
     case Reflection.eqTypeRep (Reflection.typeOf rta) (Reflection.typeOf rtb) of
-      Just Reflection.HRefl -> if (n1 == n2) && (idt1 == idt2) then Just Reflection.Refl else Nothing
+      Just Reflection.HRefl -> if (n1 == n2) && (idt1 == idt2) then Just Reflection.Refl  else Nothing
       _ -> Nothing
 
 instance GADT.GShow RowTypeTag where

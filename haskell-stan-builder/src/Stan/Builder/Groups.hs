@@ -132,7 +132,7 @@ addGroupIntMapForData gtt rtt mkIntMap = withRowInfoMakers @(SBC.DataSource r) f
   f rowInfoMakers = do
     case DHash.lookup rtt rowInfoMakers of
       Nothing -> SBC.buildError
-        $ "Data-set \"" <> SBC.dataSetName rtt <> "\" needs to be added before groups can be added to it. Perhaps you have swicthed the model and GQ types?"
+        $ "Data-set \"" <> SBC.dataSetName rtt <> "\" needs to be added before groups can be added to it. Perhaps you have switched the model and GQ types?"
       Just (SBC.GroupIndexAndIntMapMakers tf gims (SBC.GroupIntMapBuilders gimbs)) -> case DHash.lookup gtt gimbs of
         Just _ -> SBC.buildError $ "Attempt to add a second group (\"" <> SBC.taggedGroupName gtt <> "\") at the same type for row=" <> SBC.dataSetName rtt
         Nothing -> do
