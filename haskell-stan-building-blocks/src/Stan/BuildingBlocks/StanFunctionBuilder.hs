@@ -3,15 +3,21 @@
 {-# LANGUAGE RankNTypes        #-}
 module Stan.BuildingBlocks.StanFunctionBuilder where
 
-import qualified Stan.ModelBuilder.Expressions as SME
-import qualified Stan.ModelBuilder as SB
+import qualified Stan.Language as SL
+import qualified Stan.Builder as SB
 import qualified Data.List.NonEmpty as NE
 
-buildFunction :: forall md gq.Text
-              -> NonEmpty SME.StanVar
-              -> SME.StanType
-              -> (NonEmpty SME.StanVar -> SB.StanBuilderM md gq SME.StanExpr)
-              -> SB.StanBuilderM md gq ()
+import Effectful ((:>), Eff)
+import qualified Effectful.State.Static.Local as EffS
+import qualified Effectful.Writer.Static.Local as EffW
+import qualified Effectful.Fail as EffF
+
+buildFunction :: SB.StanCodeC es
+              => Text
+              -> NonEmpty SL.VarName
+              -> SL.StanType
+              -> (NonEmpty SL.VarName -> Eff es SL.StanExpr)
+              -> Eff es ()
 buildFunction fName argList rType mkBodyAndReturn = do
   let fnArgsExpr = SB.csExprs $ SB.varAsArgument <$> argList
   SB.addFunctionsOnce fName $ do

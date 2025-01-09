@@ -82,9 +82,7 @@ library
                  , Stan.BuildingBlocks.DirichletMultinomial
                  , Stan.BuildingBlocks.Distributions
                  , Stan.BuildingBlocks.Distributions.RealBinomial
-                 , Stan.BuildingBlocks.FixedEffects
                  , Stan.BuildingBlocks.GroupAlpha
-                 , Stan.BuildingBlocks.StanFunctionBuilder
                  , Stan.BuildingBlocks.SumToZero
   hs-source-dirs:   src
 

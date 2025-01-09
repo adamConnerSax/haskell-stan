@@ -87,6 +87,10 @@ type StanBuilderEffs md gq =
   ]
 
 
+type StanBuildLogC es = EffW.Writer (Seq.Seq Text) :> es
+type StanCodeC es = EffS.State StanCode :> es
+
+
 type StanBuilderEff md gq a = Eff (StanBuilderEffs md gq) a
 
 

@@ -15,15 +15,11 @@ module Stan.BuildingBlocks.SumToZero
 where
 
 import Prelude hiding (All)
-import qualified Stan.ModelBuilder as SB
-import qualified Stan.ModelBuilder.TypedExpressions.Types as TE
-import qualified Stan.ModelBuilder.TypedExpressions.TypedList as TE
-import qualified Stan.ModelBuilder.TypedExpressions.Statements as TE
-import qualified Stan.ModelBuilder.TypedExpressions.StanFunctions as TE
-import qualified Stan.ModelBuilder.TypedExpressions.Indexing as TE
+import qualified Stan.Builder as SB
+import qualified Stan.Language as SL
 
-qSumToZeroQRF :: TE.Function TE.ECVec '[TE.EInt]
-qSumToZeroQRF = TE.simpleFunction "Q_sum_to_zero_QR"
+qSumToZeroQRF :: SL.Function SL.ECVec '[SL.EInt]
+qSumToZeroQRF = SL.simpleFunction "Q_sum_to_zero_QR"
 
 qSumToZeroQRBody :: TE.TypedList TE.UExpr '[TE.EInt] -> ([TE.UStmt], TE.UExpr TE.ECVec)
 qSumToZeroQRBody (n TE.:> TE.TNil) = TE.writerL $ do
