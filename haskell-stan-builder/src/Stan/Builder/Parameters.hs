@@ -185,27 +185,6 @@ runStanBuilderDAG md gq sb =
         return a
   in SBR.runStanBuilderEff md gq sb'
 
-{-
-runStanBuilderDAG' :: forall md gq a .
-                     md
-                  -> gq
-                  -> SBC.StanGroupBuilderM md gq ()
-                  -> SBC.StanBuilderM md gq a
-                  -> Either Text (SBC.BuilderState md gq, a)
-runStanBuilderDAG' md gq sgb sb =
-  let sb' :: SBC.StanBuilderM md gq a
-      sb' = do
-        a <- sb
-        -- we need the parameter code to come before anything written assuming it exists
-        -- so, shenanigans
-        SB.addCodeAbove $ do
-          bpc <- gets SBC.parameterCollection
-          addAllParametersInCollection bpc
-        return a
-      builderState = SBC.runStanGroupBuilder sgb md gq
-      (resE, bs) = usingState builderState . runExceptT $ SBC.unStanBuilderM sb'
-  in fmap (bs,) resE
--}
 exprListToParameters :: SLE.ExprList ts  -> PT.Parameters ts
 exprListToParameters = hfmap PT.GivenP
 

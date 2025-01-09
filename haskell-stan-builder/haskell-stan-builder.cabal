@@ -100,6 +100,7 @@ library
                  , Stan.Builder.Parameters
                  , Stan.Builder.Data
                  , Stan.Builder.Groups
+                 , Stan.Builder.TestUtils
   hs-source-dirs:   src
 
 executable builder-test
