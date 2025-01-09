@@ -1670,6 +1670,7 @@ stanModelAsText gq sm =
 --modelFile :: T.Text -> T.Text
 --modelFile modelNameT = modelNameT <> ".stan"
 -}
+{- Moved to Stan.Runner.Process
 -- The file is either not there, there but the same, or there but different so we
 -- need an available file name to proceed
 data ModelState = New | Same | Updated T.Text deriving stock Show
@@ -1709,3 +1710,4 @@ renameAndWriteIfNotSame gq p modelDir modelName = do
              K.logLE K.Diagnostic $ "model file:" <> T.pack curFile <> " written."
              pure New
          )
+-}

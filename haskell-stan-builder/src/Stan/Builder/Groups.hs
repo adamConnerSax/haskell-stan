@@ -140,6 +140,8 @@ addGroupIntMapForData gtt rtt mkIntMap = withRowInfoMakers @(SBC.DataSource r) f
           pure (Just newRims, ())
 
 
+
+
 withRowInfoMakers :: forall x es y . EffS.State (SBC.RowInfoMakers x) :> es
                   => (forall z. SBC.RowInfoMakers z -> Eff es (Maybe (SBC.RowInfoMakers z), y)) -> Eff es y
 withRowInfoMakers f = do

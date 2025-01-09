@@ -9,7 +9,12 @@
 {-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE UndecidableInstances #-}
-module Stan.Parameters where
+
+module Stan.Runner.Parameters
+  (
+    module Stan.Runner.Parameters
+  )
+where
 
 import qualified CmdStan.Types as CS
 
@@ -38,7 +43,7 @@ class IndexFunction (n :: Dim) where
   indexToTuple :: Int -> NTuple n -> Int -> NTuple n
 
 instance IndexFunction D0 where
-  tupleToIndex offset _ _ = 0
+  tupleToIndex _offset _ _ = 0
   indexToTuple _ _ _ = ()
 
 instance IndexFunction D1 where
@@ -68,7 +73,7 @@ instance IndexFunction D4 where
 data ParameterStatistics (dim :: Dim) a where
   ParameterStatistics :: Int -> NTuple dim -> V.Vector a -> ParameterStatistics dim a
 
-deriving instance (Show (NTuple dim), Show a) => Show (ParameterStatistics dim a)
+deriving stock instance (Show (NTuple dim), Show a) => Show (ParameterStatistics dim a)
 
 instance Functor (ParameterStatistics dim) where
   fmap f (ParameterStatistics o nt v) = ParameterStatistics o nt (fmap f v)
@@ -131,14 +136,14 @@ getIndexed :: forall dim a. IndexFunction dim => ParameterStatistics dim a -> NT
 getIndexed (ParameterStatistics offset dims vec) index = vec V.! tupleToIndex @dim offset dims index
 
 getScalar :: ParameterStatistics D0 a -> a
-getScalar p@(ParameterStatistics offset _ v) = getIndexed p ()
+getScalar p@(ParameterStatistics _offset _ _v) = getIndexed p ()
 
 -- parse from stansummary
 class ParseIndex (n :: Dim) where
   parseIndex :: T.Text -> Either T.Text (NTuple n)
 
 instance ParseIndex D0 where
-  parseIndex t = Right ()
+  parseIndex _t = Right ()
 
 instance ParseIndex D1 where
   parseIndex t = (\[i] -> i) <$> parseIndex' 1 t

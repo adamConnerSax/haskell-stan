@@ -9,7 +9,7 @@
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE LambdaCase #-}
 
-module Stan.Builder.ParameterTypes
+module Stan.Builder.Parameters.Types
   (
     ParameterTag
   , taggedParameterName

@@ -8,9 +8,9 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TypeFamilies #-}
 
-module Stan.ModelBuilder.SumToZero
+module Stan.BuildingBlocks.SumToZero
   (
-    module Stan.ModelBuilder.SumToZero
+    module Stan.BuildingBlocks.SumToZero
   )
 where
 

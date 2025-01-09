@@ -7,14 +7,14 @@
 {-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE TypeOperators #-}
-module Stan.RScriptBuilder
+module Stan.Runner.RScripts
   (
-    module Stan.RScriptBuilder
+    module Stan.Runner.RScripts
   )
 where
 
 
-import qualified Stan.ModelConfig as SC
+import qualified Stan.Runner.Config as SC
 
 import qualified Colonnade as Col
 import qualified Control.Foldl as Foldl

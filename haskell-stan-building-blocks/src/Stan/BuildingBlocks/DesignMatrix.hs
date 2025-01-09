@@ -12,9 +12,9 @@
 {-# HLINT ignore "Use for_" #-}
 {-# OPTIONS_GHC -Wno-redundant-constraints #-}
 
-module Stan.ModelBuilder.DesignMatrix
+module Stan.BuildingBlocks.DesignMatrix
   (
-    module Stan.ModelBuilder.DesignMatrix
+    module Stan.BuildingBlocks.DesignMatrix
   )
 where
 

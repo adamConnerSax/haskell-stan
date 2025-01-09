@@ -9,11 +9,13 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 
-module Stan.ModelConfig
+module Stan.Runner.Config
   (
-    module Stan.ModelConfig
+    module Stan.Runner.Config
   )
 where
+
+import Stan.Builder as SB
 
 import qualified CmdStan as CS
 import qualified CmdStan.Types as CS
@@ -204,7 +206,7 @@ instance Hashable InputDataType
 data DataIndexerType (b :: Type) where
   NoIndex :: DataIndexerType ()
   TransientIndex :: DataIndexerType b
-  CacheableIndex :: (ModelRunnerConfig -> InputDataType -> Text) -> DataIndexerType b
+  CacheableIndex :: (ModelRunnerConfig -> SB.InputDataT -> Text) -> DataIndexerType b
 
 -- pattern matching on the first brings the constraint into scope
 -- This allows us to choose to not have the constraint unless we need it.

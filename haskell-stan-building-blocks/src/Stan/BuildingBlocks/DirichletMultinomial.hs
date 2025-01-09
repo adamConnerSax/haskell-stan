@@ -13,9 +13,9 @@
 {-# HLINT ignore "Use for_" #-}
 {-# HLINT ignore "Use camelCase" #-}
 
-module Stan.ModelBuilder.BuildingBlocks.DirichletMultinomial
+module Stan.BuildingBlocks.DirichletMultinomial
   (
-    module Stan.ModelBuilder.BuildingBlocks.DirichletMultinomial
+    module Stan.BuildingBlocks.DirichletMultinomial
   )
 where
 

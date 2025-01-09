@@ -46,8 +46,8 @@ stanBuilder = do
   letterGroupT <- SB.addEnumGroup @LetterCode "LC"
   SB.addGroupIndexForData letterGroupT modelDataT (SB.makeIndexByCounting show letterCode)
   SB.addGroupIntMapForData letterGroupT modelDataT (SB.dataToIntMapFromEnum letterCode)
-{-  muP <- SB.simpleParameter (SL.NamedDeclSpec "mu" SL.realSpec)
+  muP <- SB.simpleParameter (SL.NamedDeclSpec "mu" SL.realSpec)
          (SB.given (SL.realE 1) SL.:> SB.given (SL.realE 0) SL.:> SL.TNil)
          (SL.simpleDensity "normal")
--}
+
   pure ()

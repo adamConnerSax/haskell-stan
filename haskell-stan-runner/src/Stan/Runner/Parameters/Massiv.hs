@@ -9,10 +9,14 @@
 {-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE UndecidableInstances #-}
-module Stan.Parameters.Massiv where
+module Stan.Runner.Parameters.Massiv
+  (
+    module Stan.Runner.Parameters.Massiv
+  )
+where
 
 import qualified CmdStan.Types as CS
-import qualified Stan.Parameters as Parameters
+import qualified Stan.Runner.Parameters as Parameters
 
 import qualified Control.Foldl as FL
 import qualified Data.List as L

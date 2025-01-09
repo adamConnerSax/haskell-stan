@@ -13,9 +13,9 @@
 {-# HLINT ignore "Use camelCase" #-}
 {-# LANGUAGE QuantifiedConstraints #-}
 
-module Stan.ModelBuilder.BuildingBlocks
+module Stan.BuildingBlocks.Data
   (
-    module Stan.ModelBuilder.BuildingBlocks
+    module Stan.BuildingBlocks.Data
   )
 where
 

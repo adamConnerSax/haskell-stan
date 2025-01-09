@@ -2,7 +2,7 @@
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE StrictData #-}
-module Stan.SamplerCSV where
+module Stan.Runner.SamplerCSV where
 
 import Prelude hiding (many, some)
 import Text.Megaparsec

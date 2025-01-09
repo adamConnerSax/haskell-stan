@@ -12,9 +12,9 @@
 {-# HLINT ignore "Use for_" #-}
 {-# HLINT ignore "Use camelCase" #-}
 
-module Stan.ModelBuilder.BuildingBlocks.ArrayHelpers
+module Stan.BuildingBlocks.ArrayHelpers
   (
-    module Stan.ModelBuilder.BuildingBlocks.ArrayHelpers
+    module Stan.BuildingBlocks.ArrayHelpers
   )
 where
 

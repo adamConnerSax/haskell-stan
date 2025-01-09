@@ -23,7 +23,7 @@ import qualified Stan.Language.Program as SLP
 import qualified Stan.Language.Expressions as SLE
 import qualified Stan.Language.Statement as SLS
 import qualified Stan.Language.Statements as SLS
-import qualified Stan.Builder.ParameterTypes as SBPT
+import qualified Stan.Builder.Parameters.Types as SBPT
 
 import Prelude hiding (All)
 import qualified Control.Foldl as Foldl

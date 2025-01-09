@@ -13,7 +13,7 @@
 {-# HLINT ignore "Use camelCase" #-}
 {-# LANGUAGE QuantifiedConstraints #-}
 
-module Stan.ModelBuilder.Distributions.RealBinomial where
+module Stan.BuildingBlocks.Distributions.RealBinomial where
 
 import Data.Type.Equality (type (~))
 

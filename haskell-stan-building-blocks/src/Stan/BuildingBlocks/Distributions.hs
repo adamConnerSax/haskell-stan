@@ -10,9 +10,9 @@
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE TypeOperators #-}
 
-module Stan.ModelBuilder.Distributions
+module Stan.BuildingBlocks.Distributions
   (
-    module Stan.ModelBuilder.Distributions
+    module Stan.BuildingBlocks.Distributions
   )
 where
 

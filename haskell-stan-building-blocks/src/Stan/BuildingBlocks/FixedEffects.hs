@@ -8,16 +8,16 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TypeFamilies #-}
 
-module Stan.ModelBuilder.FixedEffects where
+module Stan.BuildingBlocks.FixedEffects where
 
-import qualified Stan.ModelBuilder as SB
+import qualified Stan.Builder as SB
 --import qualified Stan.ModelBuilder.Expressions as SME
-import qualified Stan.ModelBuilder.Distributions as SMD
-import qualified Stan.ModelBuilder.Parameters as MP
-import qualified Stan.ModelBuilder.BuildingBlocks as SBB
+import qualified Stan.BuildingBlockks.Distributions as SMD
+--import qualified Stan.Builder.Parameters.Core as MP
+import qualified Stan.BuildingBlocks.Data as SBB
 
-import qualified Stan.ModelBuilder.TypedExpressions.Types as TE
-import qualified Stan.ModelBuilder.TypedExpressions.Expressions as TE
+import qualified Stan.Language.Types as SLT
+import qualified Stan.Language.Expressions as SLE
 
 import Prelude hiding (All)
 import qualified Data.Map as Map

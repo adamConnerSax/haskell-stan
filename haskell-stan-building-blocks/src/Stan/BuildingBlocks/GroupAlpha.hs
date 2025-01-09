@@ -11,9 +11,9 @@
 {-# LANGUAGE TypeOperators #-}
 {-# LANGUAGE QuantifiedConstraints #-}
 {-# LANGUAGE UndecidableInstances #-}
-module Stan.ModelBuilder.BuildingBlocks.GroupAlpha
+module Stan.BuildingBlocks.GroupAlpha
   (
-    module Stan.ModelBuilder.BuildingBlocks.GroupAlpha
+    module Stan.BuildingBlocks.GroupAlpha
   )
 where
 

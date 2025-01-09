@@ -1,7 +1,7 @@
 {-# LANGUAGE GADTs             #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RankNTypes        #-}
-module Stan.ModelBuilder.StanFunctionBuilder where
+module Stan.BuildingBlocks.StanFunctionBuilder where
 
 import qualified Stan.ModelBuilder.Expressions as SME
 import qualified Stan.ModelBuilder as SB

@@ -20,7 +20,7 @@ import qualified Stan.Builder.JSON.JSONUtils as SJ
 import qualified Stan.Language.Types as SLT
 import qualified Stan.Language.Program as SLP
 import qualified Stan.Language.Expressions as SLE
-import qualified Stan.Builder.ParameterTypes as SBPT
+import qualified Stan.Builder.Parameters.Types as SBPT
 
 import Prelude hiding (All)
 import qualified Control.Foldl as Foldl

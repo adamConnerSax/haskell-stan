@@ -15,9 +15,9 @@
 {-# LANGUAGE QuantifiedConstraints #-}
 {-# LANGUAGE TypeFamilyDependencies #-}
 
-module Stan.ModelBuilder.BuildingBlocks.CovarianceStructure
+module Stan.BuildingBlocks.CovarianceStructure
   (
-    module Stan.ModelBuilder.BuildingBlocks.CovarianceStructure
+    module Stan.BuildingBlocks.CovarianceStructure
   )
 where
 
