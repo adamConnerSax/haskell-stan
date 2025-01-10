@@ -208,8 +208,9 @@ declareAndAssignN (NamedDeclSpec vn ds) = declareAndAssign vn ds
 addToTarget :: SLE.UExpr EReal -> SLS.UStmt
 addToTarget = SLS.STarget
 
-assign :: SLE.UExpr t -> SLE.UExpr t -> SLS.UStmt
+assign, (|=|) :: SLE.UExpr t -> SLE.UExpr t -> SLS.UStmt
 assign = SLS.SAssign
+(|=|) = SLS.SAssign
 
 -- doing it this way avoids using Stans += syntax.  I just expand.
 -- to do otherwise I would have to add a constructor to Stmt
