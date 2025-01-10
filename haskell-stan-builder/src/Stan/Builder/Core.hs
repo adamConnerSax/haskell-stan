@@ -79,7 +79,7 @@ type StanBuilderEffs md gq =
   , EffS.State (RowInfos gq)
   , EffS.State SBPT.BParameterCollection
   , EffS.State StanCode
-  , EffS.State (Set Text)
+  , EffS.State FunctionNames
   , EffS.State (JSONConstFold md)
   , EffS.State (JSONConstFold gq)
   , EffW.Writer (Seq.Seq Text)
@@ -88,8 +88,9 @@ type StanBuilderEffs md gq =
 
 
 type StanBuildLogC es = EffW.Writer (Seq.Seq Text) :> es
-type StanCodeC es = EffS.State StanCode :> es
-
+type StanCodeC es = (EffF.Fail :> es, EffS.State StanCode :> es)
+type StanFunctionsC es = (StanCodeC es, EffS.State (Set Text) :> es)
+type StanParametersC es = (EffS.State SBPT.BParameterCollection :> es, EffF.Fail :> es)
 
 type StanBuilderEff md gq a = Eff (StanBuilderEffs md gq) a
 

@@ -21,11 +21,13 @@ module Stan.Functions
     module Stan.Functions.Containers
   , module Stan.Functions.Numeric
   , module Stan.Functions.Probability
+  , module Stan.Functions.Constraints
   )
   where
 import Stan.Functions.Containers
 import Stan.Functions.Numeric
 import Stan.Functions.Probability
+import Stan.Functions.Constraints
 {-
 import qualified Stan.Language.Types as SLT
 import qualified Stan.Language.TypedList as SLTL

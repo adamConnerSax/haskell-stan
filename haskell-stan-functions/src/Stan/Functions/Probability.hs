@@ -35,6 +35,8 @@ import Prelude hiding (Nat)
 -- Densities & RNGs
 type RealOrVec t =  (SFC.TypeOneOf t [SLT.EReal, SLT.ECVec, SLT.ERVec], SFC.GenSType t)
 
+--rvDensity2pD :: RealOrVec t => Text -> SLF.Density t [t, t]
+--rvDensity2pD = SLF.simpleDensity
 
 rvDensity2p :: RealOrVec t => Text -> SLE.UExpr t -> SLE.UExpr t -> SLE.UExpr t -> SLE.RealE
 rvDensity2p dName g p1 p2 = SLE.densityE (SLF.simpleDensity dName) g (p1 :> p2 :> TNil)
@@ -48,34 +50,34 @@ rvDensity2pS dName g p1 p2 = SLE.densityE (SLF.simpleDensity dName) g (p1 :> p2 
 rvRNG2pS :: RealOrVec t => Text -> SLE.RealE -> SLE.RealE -> SLE.UExpr t
 rvRNG2pS rngName p1 p2 = SLE.functionE (SLF.simpleFunction rngName) (p1 :> p2 :> TNil)
 
-uniform, uniform_lpdf, uniform_lupdf ::  RealOrVec t => SLE.UExpr t -> SLE.UExpr t -> SLE.UExpr t -> SLE.RealE
-uniform = rvDensity2p "uniform"
-uniform_lpdf = rvDensity2p "uniform_lpdf"
-uniform_lupdf = rvDensity2p "uniform_lupdf"
+uniform, uniform_lpdf, uniform_lupdf ::  RealOrVec t => SLF.Density t [t, t] --SLE.UExpr t -> SLE.UExpr t -> SLE.RealE
+uniform = SLF.simpleDensity "uniform"
+uniform_lpdf = SLF.simpleDensity "uniform_lpdf"
+uniform_lupdf = SLF.simpleDensity "uniform_lupdf"
 
 uniform_rng ::  RealOrVec t => SLE.UExpr t -> SLE.UExpr t -> SLE.UExpr t
 uniform_rng = rvRNG2p "uniform_rng"
 
-uniformS, uniformS_lpdf, uniformS_lupdf ::  RealOrVec t => SLE.UExpr t -> SLE.RealE -> SLE.RealE -> SLE.RealE
-uniformS = rvDensity2pS "uniform"
-uniformS_lpdf = rvDensity2pS "uniform_lpdf"
-uniformS_lupdf = rvDensity2pS "uniform_lupdf"
+uniformS, uniformS_lpdf, uniformS_lupdf ::  RealOrVec t => SLF.Density t [SLT.EReal, SLT.EReal] --SLE.UExpr t -> SLE.RealE -> SLE.RealE -> SLE.RealE
+uniformS = SLF.simpleDensity "uniform"
+uniformS_lpdf = SLF.simpleDensity "uniform_lpdf"
+uniformS_lupdf = SLF.simpleDensity "uniform_lupdf"
 
 uniformS_rng ::  RealOrVec t => SLE.RealE -> SLE.RealE -> SLE.UExpr t
 uniformS_rng = rvRNG2pS "uniform_rng"
 
-normal, normal_lpdf, normal_lupdf ::  RealOrVec t => SLE.UExpr t -> SLE.UExpr t -> SLE.UExpr t -> SLE.RealE
-normal = rvDensity2p "normal"
-normal_lpdf = rvDensity2p "normal_lpdf"
-normal_lupdf = rvDensity2p "normal_lupdf"
+normal, normal_lpdf, normal_lupdf ::  RealOrVec t => SLF.Density t [t,t] -- SLE.UExpr t -> SLE.UExpr t -> SLE.UExpr t -> SLE.RealE
+normal = SLF.simpleDensity "normal"
+normal_lpdf = SLF.simpleDensity "normal_lpdf"
+normal_lupdf = SLF.simpleDensity "normal_lupdf"
 
 normal_rng ::  RealOrVec t => SLE.UExpr t -> SLE.UExpr t -> SLE.UExpr t
 normal_rng = rvRNG2p "normal_rng"
 
-normalS, normalS_lpdf, normalS_lupdf ::  RealOrVec t => SLE.UExpr t -> SLE.RealE -> SLE.RealE -> SLE.RealE
-normalS = rvDensity2pS "normal"
-normalS_lpdf = rvDensity2pS "normal_lpdf"
-normalS_lupdf = rvDensity2pS "normal_lupdf"
+normalS, normalS_lpdf, normalS_lupdf ::  RealOrVec t => SLF.Density t [SLT.EReal, SLT.EReal] --SLE.UExpr t -> SLE.RealE -> SLE.RealE -> SLE.RealE
+normalS = SLF.simpleDensity "normal"
+normalS_lpdf = SLF.simpleDensity "normal_lpdf"
+normalS_lupdf = SLF.simpleDensity "normal_lupdf"
 
 normalS_rng ::  RealOrVec t => SLE.RealE -> SLE.RealE -> SLE.UExpr t
 normalS_rng = rvRNG2pS "normal_rng"
@@ -86,66 +88,66 @@ rvDensity1p dName g p = SLE.densityE (SLF.simpleDensity dName) g (p :> TNil)
 rvRNG1p :: RealOrVec t => Text -> SLE.UExpr t -> SLE.UExpr t
 rvRNG1p rngName p = SLE.functionE (SLF.simpleFunction rngName) (p :> TNil)
 
-std_normal, std_normal_lpdf, std_normal_lupdf ::  RealOrVec t => SLE.UExpr t -> SLE.UExpr t -> SLE.RealE
-std_normal = rvDensity1p "std_normal"
-std_normal_lpdf = rvDensity1p "std_normal_lpdf"
-std_normal_lupdf = rvDensity1p "std_normal_lupdf"
+std_normal, std_normal_lpdf, std_normal_lupdf ::  RealOrVec t => SLF.Density t '[t] --SLE.UExpr t -> SLE.UExpr t -> SLE.RealE
+std_normal = SLF.simpleDensity "std_normal"
+std_normal_lpdf = SLF.simpleDensity "std_normal_lpdf"
+std_normal_lupdf = SLF.simpleDensity "std_normal_lupdf"
 
 std_normal_rng ::  RealOrVec t => SLE.UExpr t -> SLE.UExpr t
 std_normal_rng = rvRNG1p "std_normal_rng"
 
-lognormal, lognormal_lpdf, lognormal_lupdf ::  RealOrVec t => SLE.UExpr t -> SLE.UExpr t -> SLE.UExpr t -> SLE.RealE
-lognormal = rvDensity2p "lognormal"
-lognormal_lpdf = rvDensity2p "lognormal_lpdf"
-lognormal_lupdf = rvDensity2p "lognormal_lupdf"
+lognormal, lognormal_lpdf, lognormal_lupdf ::  RealOrVec t => SLF.Density t [t, t] --SLE.UExpr t -> SLE.UExpr t -> SLE.UExpr t -> SLE.RealE
+lognormal = SLF.simpleDensity "lognormal"
+lognormal_lpdf = SLF.simpleDensity "lognormal_lpdf"
+lognormal_lupdf = SLF.simpleDensity "lognormal_lupdf"
 
 lognormal_rng ::  RealOrVec t => SLE.UExpr t -> SLE.UExpr t -> SLE.UExpr t
 lognormal_rng = rvRNG2p "lognormal_rng"
 
-lognormalS, lognormalS_lpdf, lognormalS_lupdf ::  RealOrVec t => SLE.UExpr t -> SLE.RealE -> SLE.RealE -> SLE.RealE
-lognormalS = rvDensity2pS "lognormal"
-lognormalS_lpdf = rvDensity2pS "lognormal_lpdf"
-lognormalS_lupdf = rvDensity2pS "lognormal_lupdf"
+lognormalS, lognormalS_lpdf, lognormalS_lupdf ::  RealOrVec t => SLF.Density t [SLT.EReal, SLT.EReal] --SLE.UExpr t -> SLE.RealE -> SLE.RealE -> SLE.RealE
+lognormalS = SLF.simpleDensity "lognormal"
+lognormalS_lpdf = SLF.simpleDensity "lognormal_lpdf"
+lognormalS_lupdf = SLF.simpleDensity "lognormal_lupdf"
 
 lognormalS_rng ::  RealOrVec t => SLE.RealE -> SLE.RealE -> SLE.UExpr t
 lognormalS_rng = rvRNG2pS "lognormal_rng"
 
-cauchy, cauchy_lpdf, cauchy_lupdf ::  RealOrVec t => SLE.UExpr t -> SLE.UExpr t -> SLE.UExpr t -> SLE.RealE
-cauchy = rvDensity2p "cauchy"
-cauchy_lpdf = rvDensity2p "cauchy_lpdf"
-cauchy_lupdf = rvDensity2p "cauchy_lupdf"
+cauchy, cauchy_lpdf, cauchy_lupdf ::  RealOrVec t => SLF.Density t [t, t] --SLE.UExpr t -> SLE.UExpr t -> SLE.UExpr t -> SLE.RealE
+cauchy = SLF.simpleDensity "cauchy"
+cauchy_lpdf = SLF.simpleDensity "cauchy_lpdf"
+cauchy_lupdf = SLF.simpleDensity "cauchy_lupdf"
 
 cauchy_rng ::  RealOrVec t => SLE.UExpr t -> SLE.UExpr t -> SLE.UExpr t
 cauchy_rng = rvRNG2p "cauchy_rng"
 
-gamma, gamma_lpdf, gamma_lupdf ::  RealOrVec t => SLE.UExpr t -> SLE.UExpr t -> SLE.UExpr t -> SLE.RealE
-gamma = rvDensity2p "gamma"
-gamma_lpdf = rvDensity2p "gamma_lpdf"
-gamma_lupdf = rvDensity2p "gamma_lupdf"
+gamma, gamma_lpdf, gamma_lupdf ::  RealOrVec t => SLF.Density t [t, t] --SLE.UExpr t -> SLE.UExpr t -> SLE.UExpr t -> SLE.RealE
+gamma = SLF.simpleDensity "gamma"
+gamma_lpdf = SLF.simpleDensity "gamma_lpdf"
+gamma_lupdf = SLF.simpleDensity "gamma_lupdf"
 
 gamma_rng ::  RealOrVec t => SLE.UExpr t -> SLE.UExpr t -> SLE.UExpr t
 gamma_rng = rvRNG2p "gamma_rng"
 
-beta, beta_lpdf, beta_lupdf :: RealOrVec t  => RealOrVec t => SLE.UExpr t -> SLE.UExpr t -> SLE.UExpr t -> SLE.RealE
-beta = rvDensity2p "beta"
-beta_lpdf = rvDensity2p "beta_lpdf"
-beta_lupdf = rvDensity2p "beta_lupdf"
+beta, beta_lpdf, beta_lupdf :: RealOrVec t  => RealOrVec t => SLF.Density t [t, t] --SLE.UExpr t -> SLE.UExpr t -> SLE.UExpr t -> SLE.RealE
+beta = SLF.simpleDensity "beta"
+beta_lpdf = SLF.simpleDensity "beta_lpdf"
+beta_lupdf = SLF.simpleDensity "beta_lupdf"
 
 beta_rng ::  RealOrVec t => SLE.UExpr t -> SLE.UExpr t -> SLE.UExpr t
 beta_rng = rvRNG2p "beta_rng"
 
-betaS, betaS_lpdf, betaS_lupdf :: RealOrVec t => SLE.UExpr t -> SLE.RealE -> SLE.RealE -> SLE.RealE
-betaS = rvDensity2pS "beta"
-betaS_lpdf = rvDensity2pS "beta_lpdf"
-betaS_lupdf = rvDensity2pS "beta_lupdf"
+betaS, betaS_lpdf, betaS_lupdf :: RealOrVec t => SLF.Density t [SLT.EReal, SLT.EReal] --SLE.UExpr t -> SLE.RealE -> SLE.RealE -> SLE.RealE
+betaS = SLF.simpleDensity "beta"
+betaS_lpdf = SLF.simpleDensity "beta_lpdf"
+betaS_lupdf = SLF.simpleDensity "beta_lupdf"
 
 betaS_rng ::  RealOrVec t => SLE.RealE -> SLE.RealE -> SLE.UExpr t
 betaS_rng = rvRNG2pS "beta_rng"
 
-beta_proportion, beta_proportion_lpdf, beta_proportion_lupdf :: RealOrVec t  => RealOrVec t => SLE.UExpr t -> SLE.UExpr t -> SLE.UExpr t -> SLE.RealE
-beta_proportion = rvDensity2p "beta_proportion"
-beta_proportion_lpdf = rvDensity2p "beta_proportion_lpdf"
-beta_proportion_lupdf = rvDensity2p "beta_proportion_lupdf"
+beta_proportion, beta_proportion_lpdf, beta_proportion_lupdf :: RealOrVec t  => SLF.Density t [t, t] --RealOrVec t => SLE.UExpr t -> SLE.UExpr t -> SLE.UExpr t -> SLE.RealE
+beta_proportion = SLF.simpleDensity "beta_proportion"
+beta_proportion_lpdf = SLF.simpleDensity "beta_proportion_lpdf"
+beta_proportion_lupdf = SLF.simpleDensity "beta_proportion_lupdf"
 
 beta_proportion_rng ::  RealOrVec t => SLE.UExpr t -> SLE.UExpr t -> SLE.UExpr t
 beta_proportion_rng = rvRNG2p "beta_proportion_rng"
@@ -170,21 +172,19 @@ multiNormalRNG :: (MultiNormalDensityC t, SFC.GenSType (MultiNormalRngReturnT t)
   => Text -> SLE.UExpr t -> SLE.UExpr SLT.ESqMat -> SLE.UExpr  (MultiNormalRngReturnT t)
 multiNormalRNG stanName p m = SLE.functionE (SLF.simpleFunction stanName) (p :> m :> TNil)
 
-multi_normal_cholesky, multi_normal_cholesky_lpdf, multi_normal_cholesky_lupdf ::  MultiNormalDensityC t
-  => SLE.UExpr t -> SLE.UExpr t -> SLE.UExpr SLT.ESqMat -> SLE.RealE
-multi_normal_cholesky = multiNormalDensity "multi_normal_cholesky"
-multi_normal_cholesky_lpdf = multiNormalDensity "multi_normal_cholesky_lpdf"
-multi_normal_cholesky_lupdf = multiNormalDensity "multi_normal_cholesky_lupdf"
+multi_normal_cholesky, multi_normal_cholesky_lpdf, multi_normal_cholesky_lupdf ::  MultiNormalDensityC t => SLF.Density t '[t, SLT.ESqMat]
+multi_normal_cholesky = SLF.simpleDensity "multi_normal_cholesky"
+multi_normal_cholesky_lpdf = SLF.simpleDensity "multi_normal_cholesky_lpdf"
+multi_normal_cholesky_lupdf = SLF.simpleDensity "multi_normal_cholesky_lupdf"
 
 multi_normal_cholesky_rng :: (MultiNormalDensityC t, SFC.GenSType (MultiNormalRngReturnT t))
   => SLE.UExpr t -> SLE.UExpr SLT.ESqMat -> SLE.UExpr  (MultiNormalRngReturnT t)
 multi_normal_cholesky_rng = multiNormalRNG "multi_normal_cholesky_rng"
 
-multi_normal, multi_normal_lpdf, multi_normal_lupdf ::  MultiNormalDensityC t
-  => SLE.UExpr t -> SLE.UExpr t -> SLE.UExpr SLT.ESqMat -> SLE.RealE
-multi_normal = multiNormalDensity "multi_normal"
-multi_normal_lpdf = multiNormalDensity "multi_normal_lpdf"
-multi_normal_lupdf = multiNormalDensity "multi_normal_lupdf"
+multi_normal, multi_normal_lpdf, multi_normal_lupdf ::  MultiNormalDensityC t => SLF.Density t [t, SLT.ESqMat]
+multi_normal = SLF.simpleDensity "multi_normal"
+multi_normal_lpdf = SLF.simpleDensity "multi_normal_lpdf"
+multi_normal_lupdf = SLF.simpleDensity "multi_normal_lupdf"
 
 multi_normal_rng :: (MultiNormalDensityC t, SFC.GenSType (MultiNormalRngReturnT t))
                  =>  SLE.UExpr t -> SLE.UExpr SLT.ESqMat -> SLE.UExpr  (MultiNormalRngReturnT t)
@@ -196,10 +196,10 @@ rvDensity3p dName g p1 p2 p3 = SLE.densityE (SLF.simpleDensity dName) g (p1 :> p
 rvRNG3p :: RealOrVec t => Text -> SLE.UExpr t -> SLE.UExpr t -> SLE.UExpr t -> SLE.UExpr t
 rvRNG3p rngName p1 p2 p3 = SLE.functionE (SLF.simpleFunction rngName) (p1 :> p2 :> p3 :> TNil)
 
-student_t, student_t_lpdf, student_t_lupdf :: RealOrVec t => SLE.UExpr t -> SLE.UExpr t -> SLE.UExpr t -> SLE.UExpr t -> SLE.RealE
-student_t = rvDensity3p "student_t"
-student_t_lpdf = rvDensity3p "student_t_lpdf"
-student_t_lupdf = rvDensity3p "student_t_lupdf"
+student_t, student_t_lpdf, student_t_lupdf :: RealOrVec t => SLF.Density t [t, t, t] --SLE.UExpr t -> SLE.UExpr t -> SLE.UExpr t -> SLE.UExpr t -> SLE.RealE
+student_t = SLF.simpleDensity "student_t"
+student_t_lpdf = SLF.simpleDensity "student_t_lpdf"
+student_t_lupdf = SLF.simpleDensity "student_t_lupdf"
 
 student_t_rng :: RealOrVec t => SLE.UExpr t -> SLE.UExpr t -> SLE.UExpr t -> SLE.UExpr t
 student_t_rng = rvRNG3p "student_t_rng"
@@ -213,25 +213,25 @@ binomialD :: BinDensityC t t' => Text -> SLE.UExpr t -> SLE.UExpr t -> SLE.UExpr
 binomialD stanName k n p = SLE.densityE (SLF.simpleDensity stanName) k (n :> p :> TNil)
 
 binomial, binomial_lpdf, binomial_lupdf, binomial_logit, binomial_logit_lpdf, binomial_logit_lupdf :: BinDensityC t t'
-  => SLE.UExpr t -> SLE.UExpr t -> SLE.UExpr t' -> SLE.RealE
-binomial = binomialD "binomial"
-binomial_lpdf = binomialD "binomial_lpdf"
-binomial_lupdf = binomialD "binomial_lupdf"
+  => SLF.Density t [t, t'] --SLE.UExpr t -> SLE.UExpr t -> SLE.UExpr t' -> SLE.RealE
+binomial = SLF.simpleDensity "binomial"
+binomial_lpdf = SLF.simpleDensity "binomial_lpdf"
+binomial_lupdf = SLF.simpleDensity "binomial_lupdf"
 
 binomial_rng :: BinDensityC t t' => SLE.UExpr t -> SLE.UExpr t' -> SLE.UExpr t --Function t '[t, t']
 binomial_rng n p = SLE.functionE (SLF.simpleFunction "binomial_rng") (n :> p :> TNil)
 
-binomial_logit = binomialD "binomial_logit"
-binomial_logit_lpdf = binomialD "binomial_logit_lpdf"
-binomial_logit_lupdf = binomialD "binomial_logit_lupdf"
+binomial_logit = SLF.simpleDensity "binomial_logit"
+binomial_logit_lpdf = SLF.simpleDensity "binomial_logit_lpdf"
+binomial_logit_lupdf = SLF.simpleDensity "binomial_logit_lupdf"
 
 betaBinomialD :: BinDensityC t t' => Text -> SLE.UExpr t -> SLE.UExpr t -> SLE.UExpr t' -> SLE.UExpr t' -> SLE.RealE
 betaBinomialD stanName k n alpha beta' = SLE.densityE (SLF.simpleDensity stanName) k (n :> alpha :> beta' :> TNil)
 
-beta_binomial, beta_binomial_lpmf,beta_binomial_lupmf  :: BinDensityC t t' => SLE.UExpr t -> SLE.UExpr t -> SLE.UExpr t' -> SLE.UExpr t' -> SLE.RealE
-beta_binomial = betaBinomialD "beta_binomial"
-beta_binomial_lpmf = betaBinomialD "beta_binomial_lpmf"
-beta_binomial_lupmf = betaBinomialD "beta_binomial_lupmf"
+beta_binomial, beta_binomial_lpmf,beta_binomial_lupmf  :: BinDensityC t t' => SLF.Density t [t, t']
+beta_binomial = SLF.simpleDensity "beta_binomial"
+beta_binomial_lpmf = SLF.simpleDensity "beta_binomial_lpmf"
+beta_binomial_lupmf = SLF.simpleDensity "beta_binomial_lupmf"
 
 beta_binomial_rng :: BinDensityC t t' => SLE.UExpr t -> SLE.UExpr t' -> SLE.UExpr t' -> SLE.UExpr t
 beta_binomial_rng n alpha beta' = SLE.functionE (SLF.simpleFunction "beta_binomial_rng") (n :> alpha :> beta' :> TNil)
@@ -243,21 +243,20 @@ type CategoricalTypes t = (SFC.TypeOneOf t [SLT.EInt, SLT.EIntArray], SFC.GenSTy
 categoricalD :: CategoricalTypes t => Text -> SLE.UExpr t -> SLE.VectorE -> SLE.RealE
 categoricalD stanName y theta = SLE.densityE (SLF.simpleDensity stanName) y (theta :> TNil)
 
-categorical, categorical_lpmf, categorical_lupmf  :: CategoricalTypes t => SLE.UExpr t -> SLE.VectorE -> SLE.RealE
-categorical = categoricalD "categorical"
-categorical_lpmf = categoricalD "categorical_lpmf"
-categorical_lupmf = categoricalD "categorical_lupmf"
+categorical, categorical_lpmf, categorical_lupmf  :: CategoricalTypes t => SLF.Density t '[SLT.ECVec]
+categorical = SLF.simpleDensity "categorical"
+categorical_lpmf = SLF.simpleDensity "categorical_lpmf"
+categorical_lupmf = SLF.simpleDensity "categorical_lupmf"
 
 categorical_rng :: SLE.VectorE -> SLE.IntE --Function EInt '[t]
 categorical_rng theta = SLE.functionE (SLF.simpleFunction "categorical_rng") (theta :> TNil)
 {-# INLINEABLE categorical_rng #-}
 
 
-categorical_logit, categorical_logit_lpmf, categorical_logit_lupmf :: CategoricalTypes t
-  => SLE.UExpr t -> SLE.VectorE -> SLE.RealE
-categorical_logit = categoricalD "categorical_logit"
-categorical_logit_lpmf = categoricalD "categorical_logit_lpmf"
-categorical_logit_lupmf = categoricalD "categorical_logit_lupmf"
+categorical_logit, categorical_logit_lpmf, categorical_logit_lupmf :: CategoricalTypes t => SLF.Density t '[SLT.ECVec]
+categorical_logit = SLF.simpleDensity "categorical_logit"
+categorical_logit_lpmf = SLF.simpleDensity "categorical_logit_lpmf"
+categorical_logit_lupmf = SLF.simpleDensity "categorical_logit_lupmf"
 
 categorical_logit_rng :: SLE.VectorE -> SLE.IntE
 categorical_logit_rng beta' = SLE.functionE (SLF.simpleFunction "categorical_logit_rng") (beta' :> TNil)
@@ -267,23 +266,23 @@ categorical_logit_rng beta' = SLE.functionE (SLF.simpleFunction "categorical_log
 multinomialD :: SFC.Vector t => Text -> SLE.UExpr SLT.EIntArray -> SLE.UExpr t -> SLE.RealE
 multinomialD stanName ns gamma' = SLE.densityE (SLF.simpleDensity stanName) ns (gamma' :> TNil)
 
-multinomial, multinomial_lpmf, multinomial_lupmf :: SFC.Vector t => SLE.UExpr SLT.EIntArray -> SLE.UExpr t -> SLE.RealE --Density SLT.EIntArray '[t]
-multinomial = multinomialD "multinomial"
-multinomial_lpmf = multinomialD "multinomial_lpmf"
-multinomial_lupmf = multinomialD "multinomial_lupmf"
+multinomial, multinomial_lpmf, multinomial_lupmf :: SFC.Vector t => SLF.Density SLT.EIntArray '[t]
+multinomial = SLF.simpleDensity "multinomial"
+multinomial_lpmf = SLF.simpleDensity "multinomial_lpmf"
+multinomial_lupmf = SLF.simpleDensity "multinomial_lupmf"
 
-multinomialRNG :: SFC.Vector t => Text -> SLE.UExpr t -> SLE.UExpr SLT.EIntArray
-multinomialRNG stanName gamma' = SLE.functionE (SLF.simpleFunction stanName) (gamma' :> TNil)
+multinomialRNG :: SFC.Vector t => Text -> SLE.UExpr t -> SLE.IntE -> SLE.UExpr SLT.EIntArray
+multinomialRNG stanName theta' n = SLE.functionE (SLF.simpleFunction stanName) (theta' :> n :> TNil)
 
-multinomial_rng :: SFC.Vector t => SLE.UExpr t -> SLE.UExpr SLT.EIntArray --Function EIntArray '[t, EInt]
+multinomial_rng :: SFC.Vector t => SLE.UExpr t -> SLE.IntE -> SLE.UExpr SLT.EIntArray
 multinomial_rng = multinomialRNG "multinomial_rng"
 
-multinomial_logit, multinomial_logit_lpmf, multinomial_logit_lupmf :: SFC.Vector t => SLE.UExpr SLT.EIntArray -> SLE.UExpr t -> SLE.RealE --Density EIntArray '[t]
-multinomial_logit = multinomialD "multinomial_logit"
-multinomial_logit_lpmf = multinomialD "multinomial_logit_lpmf"
-multinomial_logit_lupmf = multinomialD "multinomial_logit_lupmf"
+multinomial_logit, multinomial_logit_lpmf, multinomial_logit_lupmf :: SFC.Vector t => SLF.Density SLT.EIntArray '[t]
+multinomial_logit = SLF.simpleDensity "multinomial_logit"
+multinomial_logit_lpmf = SLF.simpleDensity "multinomial_logit_lpmf"
+multinomial_logit_lupmf = SLF.simpleDensity "multinomial_logit_lupmf"
 
-multinomial_logit_rng :: SFC.Vector t => SLE.UExpr t -> SLE.UExpr SLT.EIntArray
+multinomial_logit_rng :: SFC.Vector t => SLE.UExpr t -> SLE.IntE -> SLE.UExpr SLT.EIntArray
 multinomial_logit_rng = multinomialRNG "multinomial_logit_rng"
 
 -- dirichlet
@@ -295,10 +294,10 @@ type DirichletTypes t t' = (SFC.TypeOneOf t [SLT.ECVec, SLT.ERVec, SLT.EArray1 S
 dirichletD :: DirichletTypes t t' => Text -> SLE.UExpr t -> SLE.UExpr t' -> SLE.RealE
 dirichletD stanName theta alpha = SLE.densityE (SLF.simpleDensity stanName) theta (alpha :> TNil)
 
-dirichlet, dirichlet_lpdf, dirichlet_lupdf :: DirichletTypes t t' => SLE.UExpr t -> SLE.UExpr t' -> SLE.RealE
-dirichlet = dirichletD "dirichlet"
-dirichlet_lpdf = dirichletD "dirichlet_lpdf"
-dirichlet_lupdf = dirichletD "dirichlet_lupdf"
+dirichlet, dirichlet_lpdf, dirichlet_lupdf :: DirichletTypes t t' => SLF.Density t '[t']
+dirichlet = SLF.simpleDensity "dirichlet"
+dirichlet_lpdf = SLF.simpleDensity "dirichlet_lpdf"
+dirichlet_lupdf = SLF.simpleDensity "dirichlet_lupdf"
 
 dirichlet_rng :: SFC.Vector t => SLE.UExpr t -> SLE.UExpr t --Function t '[t]
 dirichlet_rng alpha = SLE.functionE (SLF.simpleFunction "dirichlet_rng") (alpha :> TNil)

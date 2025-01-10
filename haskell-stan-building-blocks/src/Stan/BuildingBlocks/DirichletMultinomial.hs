@@ -3,6 +3,7 @@
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE GADTs #-}
+{-# LANGUAGE ImpredicativeTypes #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE ScopedTypeVariables #-}
@@ -19,84 +20,73 @@ module Stan.BuildingBlocks.DirichletMultinomial
   )
 where
 
-import qualified Stan.ModelBuilder.TypedExpressions.Types as TE
-import Stan.ModelBuilder.TypedExpressions.TypedList (TypedList(..))
-import qualified Stan.ModelBuilder.TypedExpressions.TypedList as TL
-import qualified Stan.ModelBuilder.TypedExpressions.Statements as TE
-import Stan.ModelBuilder.TypedExpressions.Recursion (hfmap)
-import qualified Stan.ModelBuilder.TypedExpressions.Functions as TE
-import qualified Stan.ModelBuilder.TypedExpressions.Operations as TEO
-import qualified Stan.ModelBuilder.TypedExpressions.StanFunctions as SF
-
-import qualified Stan.ModelBuilder as SB
-
+import qualified Stan.Language as SL
+import Stan.Language (TypedList(..))
+import Stan.Language.Recursion (hfmap)
+import qualified Stan.Functions as SF
+import Stan.Functions.Operators
+import qualified Stan.Builder as SB
 
 import qualified Data.Vec.Lazy as Vec
 import qualified Data.Type.Nat as DT
 import Data.Type.Equality (type (:~:)(..))
 
+import Effectful (Eff)
+
 -- These constraints are...sheesh.
-addDirichletMultinomialLPMF :: forall t md gq . (TE.TypeOneOf t [TE.ECVec, TE.ERVec]
-                                                , TE.TypeOneOf t [TE.ECVec, TE.ERVec, TE.EMat, TE.ESqMat, TE.ERealArray]
-                                                , TE.TypeOneOf (TEO.BinaryResultT TEO.BAdd t TE.ECVec) [TE.ECVec, TE.ERVec, TE.EMat, TE.ESqMat, TE.ERealArray]
-                                                , TE.GenSType t
-                                                , TE.GenSType (TEO.BinaryResultT TEO.BAdd t TE.ECVec)
-                                                , TE.ScalarType t ~ TE.EReal
-                                                , TE.ScalarType (TEO.BinaryResultT TEO.BAdd t TE.ECVec) ~ TE.EReal
-                                                )
-                            => SB.StanBuilderM md gq (TE.Density TE.EIntArray '[t])
+addDirichletMultinomialLPMF :: forall t es . (SB.StanFunctionsC es
+                                             , SF.RealContainer t
+                                             , SF.RealContainer (SL.BinaryResultT SL.BAdd t SL.ECVec)
+                                             , SL.GenSType t
+                                             , SL.GenSType (SL.BinaryResultT SL.BAdd t SL.ECVec)
+                                             , SL.ScalarType t ~ SL.EReal
+                                             , SL.ScalarType (SL.BinaryResultT SL.BAdd t SL.ECVec) ~ SL.EReal
+                                             )
+                            => Eff es (SL.Density SL.EIntArray '[t])
 addDirichletMultinomialLPMF = do
-  let f :: TE.Density TE.EIntArray '[t]
-      f = TE.simpleDensity "dirichlet_multinomial_lpmf"
-      sum' x = TE.functionE SF.sum (x :> TNil)
-      toVector x = TE.functionE SF.to_vector (x :> TNil)
-      lgamma x = TE.functionE SF.lgamma (x :> TNil)
-  SB.addDensityOnce f (TE.DataArg "y" :> TE.Arg "alpha" :> TNil)
+  let f :: SL.Density SL.EIntArray '[t]
+      f = SL.simpleDensity "dirichlet_multinomial_lpmf"
+  SB.addDensityOnce f (SL.DataArg "y" :> SL.Arg "alpha" :> TNil)
     $ \(y :> a :> TNil) ->
-        TE.writerL $ (do
-                         let size x = TE.functionE SF.size (x :> TNil)
-                         ap <- TE.declareRHSNW (TE.NamedDeclSpec "alpha_plus" $ TE.realSpec []) $ sum' a
-                         vy <- TE.declareRHSNW (TE.NamedDeclSpec "yVec" $ TE.vectorSpec (size y) []) $ toVector y
-                         pure $ lgamma ap
-                           `TE.plusE` sum' (lgamma (a `TE.plusE` vy))
-                           `TE.minusE` lgamma (ap `TE.plusE` sum' vy)
-                           `TE.minusE` sum' (lgamma a)
-                     )
+        SL.cwStmt $ (do
+                        ap <- SL.declareRHSNW (SL.NamedDeclSpec "alpha_plus" $ SL.realSpec) $ SF.sum a
+                        vy <- SL.declareRHSNW (SL.NamedDeclSpec "yVec" $ SL.vectorSpec (SF.size y)) $ SF.to_vector y
+                        pure $ SF.lgamma ap |+| SF.sum (SF.lgamma (a |+| vy)) |-| SF.lgamma (ap |+| SF.sum vy) |-| SF.sum (SF.lgamma a)
+{-                              `SL.plusE` sum' (lgamma (a `SL.plusE` vy))
+                              `SL.minusE` lgamma (ap `SL.plusE` sum' vy)
+                              `SL.minusE` sum' (lgamma a)
+-}
+                    )
 
-
-addDirichletMultinomialRNG :: forall t md gq . (TE.TypeOneOf t [TE.ECVec, TE.ERVec]
-                                               , TE.TypeOneOf t [TE.ESimplex, TE.ECVec, TE.ERVec]
-                                               , TE.GenSType t
+addDirichletMultinomialRNG :: forall t es . (SB.StanFunctionsC es
+                                            , SL.TypeOneOf t [SL.ECVec, SL.ERVec]
+                                            , SL.TypeOneOf t [SL.ECVec, SL.ERVec]
+                                            , SL.GenSType t
                                                )
-                           => SB.StanBuilderM md gq (TE.Function (TE.EArray1 TE.EInt) '[t, TE.EInt])
+                           => Eff es (SL.Function (SL.EArray1 SL.EInt) '[t, SL.EInt])
 addDirichletMultinomialRNG = do
-  let f :: TE.Function  (TE.EArray1 TE.EInt) [t, TE.EInt]
-      f = TE.simpleFunction "dirichlet_multinomial_rng"
-      dr a = TE.functionE SF.dirichlet_rng (a :> TNil)
-      mr ad n = TE.functionE SF.multinomial_rng (ad :> n :> TNil)
-  SB.addFunctionOnce f (TE.Arg "alpha" :> TE.Arg "N" :> TNil)
-    $ \ (a :> n :> TNil) ->
-        TE.writerL $ pure $ mr (dr a) n
+  let f :: SL.Function  (SL.EArray1 SL.EInt) [t, SL.EInt]
+      f = SL.simpleFunction "dirichlet_multinomial_rng"
+--      dr a = SL.functionE SF.dirichlet_rng (a :> TNil)
+--      mr ad n = SL.functionE SF.multinomial_rng (ad :> n :> TNil)
+  SB.addFunctionOnce f (SL.Arg "alpha" :> SL.Arg "N" :> TNil)
+    $ \ (a :> n :> TNil) -> SL.cwStmt $ pure $ SF.multinomial_rng (SF.dirichlet_rng a) n
 
-
-
-
-dirichletMultinomial ::  forall t t' md gq . (TE.TypeOneOf t [TE.ECVec, TE.ERVec]
-                                          , TE.TypeOneOf t' [TE.ECVec, TE.ERVec]
-                                          , TE.TypeOneOf t' [TE.ESimplex, TE.ECVec, TE.ERVec]
-                                          , TE.TypeOneOf t [TE.ECVec, TE.ERVec, TE.EMat, TE.ESqMat, TE.ERealArray]
-                                          , TE.TypeOneOf (TEO.BinaryResultT TEO.BAdd t TE.ECVec) [TE.ECVec, TE.ERVec, TE.EMat, TE.ESqMat, TE.ERealArray]
-                                          , TE.GenSType t
-                                          , TE.GenSType t'
-                                          , TE.GenSType (TEO.BinaryResultT TEO.BAdd t TE.ECVec)
-                                          , TE.ScalarType t ~ TE.EReal
-                                          , TE.ScalarType (TEO.BinaryResultT TEO.BAdd t TE.ECVec) ~ TE.EReal
+dirichletMultinomial ::  forall t t' es . (SB.StanFunctionsC es
+                                          , SL.TypeOneOf t' [SL.ECVec, SL.ERVec]
+                                          , SF.RealContainer t
+                                          , SF.RealContainer (SL.BinaryResultT SL.BAdd t SL.ECVec)
+                                          , SL.GenSType t
+                                          , SL.GenSType t'
+                                          , SL.GenSType (SL.BinaryResultT SL.BAdd t SL.ECVec)
+                                          , SL.ScalarType t ~ SL.EReal
+                                          , SL.ScalarType (SL.BinaryResultT SL.BAdd t SL.ECVec) ~ SL.EReal
                                           )
-                     => SB.StanBuilderM md gq (TE.Density TE.EIntArray '[t]
-                                              , TE.Density TE.EIntArray '[t]
-                                              , TE.Function TE.EIntArray '[t', TE.EInt]
-                                              )
+                     => Eff es (SL.Density SL.EIntArray '[t]
+                               , SL.Density SL.EIntArray '[t]
+                               , SL.Function SL.EIntArray '[t', SL.EInt]
+                               )
 dirichletMultinomial = do
   lpmf <- addDirichletMultinomialLPMF @t
   rng <- addDirichletMultinomialRNG @t'
-  pure (TE.simpleDensity "dirichlet_multinomial", lpmf, rng)
+  pure (SL.simpleDensity "dirichlet_multinomial", lpmf, rng)

@@ -23,9 +23,9 @@ import qualified Stan.Functions as SF
 import Stan.Functions.Operators
 import Stan.Language (TypedList((:>), TNil))
 
-import Effectful ((:>), Eff)
-import qualified Effectful.State.Static.Local as EffS
-import qualified Effectful.Fail as EffF
+import Effectful (Eff)
+--import qualified Effectful.State.Static.Local as EffS
+--import qualified Effectful.Fail as EffF
 
 qSumToZeroQRF' :: SL.Function SL.ECVec '[SL.EInt]
 qSumToZeroQRF' = SL.simpleFunction "Q_sum_to_zero_QR"
@@ -66,13 +66,13 @@ sumToZeroQRBody (x_raw :> qr :> TNil) = SL.cwStmt $ do
   SL.addStmt $ x `SL.at` n  |=| x_aux
   return $ x_sigma |*| x
 
-sumToZeroFunctions :: (SB.StanCodeC es, EffS.State SB.FunctionNames :> es, EffF.Fail :> es) => Eff es () --SB.StanBuilderM md gq ()
+sumToZeroFunctions :: SB.StanFunctionsC es => Eff es () --SB.StanBuilderM md gq ()
 sumToZeroFunctions = SB.addFunctionCodeOnce "sumToZeroQR" $ SL.grouped
     [SL.function qSumToZeroQRF' (SL.Arg "N" :> TNil) qSumToZeroQRBody
     , SL.function sumToZeroQRF' (SL.Arg "x_raw" :> SL.Arg "Q_r" :> TNil) sumToZeroQRBody
     ]
 
-sumToZeroQR :: (SB.StanCodeC es, EffS.State SB.FunctionNames :> es, EffF.Fail :> es) => SL.VarName -> SL.VectorE -> Eff es SL.VectorE
+sumToZeroQR :: SB.StanFunctionsC es => SL.VarName -> SL.VectorE -> Eff es SL.VectorE
 sumToZeroQR vName v_stz = do
   sumToZeroFunctions
   let vecSizeE = SF.size v_stz |+| SL.intE 1
@@ -81,11 +81,11 @@ sumToZeroQR vName v_stz = do
   SB.inBlock SL.SBTransformedParameters $ SB.addFromCodeWriter
     $ SL.declareRHSW vName (SL.vectorSpec vecSizeE) $ sumToZeroQRF v_stz qr_v
 
-softSumToZero :: (SB.StanCodeC es, EffS.State SB.FunctionNames :> es, EffF.Fail :> es) => SL.VectorE -> SL.DensityWithArgs SL.EReal -> Eff es ()
+softSumToZero :: SB.StanFunctionsC es => SL.VectorE -> SL.DensityWithArgs SL.EReal -> Eff es ()
 softSumToZero v dw = SB.addStmtToBlock SL.SBModel $ SF.sum v SL.|~| dw
 
 -- up to user to insure IndexArray and vector have same size
-weightedSoftSumToZero :: (SB.StanCodeC es, EffS.State SB.FunctionNames :> es, EffF.Fail :> es)
+weightedSoftSumToZero :: SB.StanFunctionsC es
                       => SL.VarName -> SL.VectorE -> SL.IntArrayE -> SL.DensityWithArgs SL.EReal -> Eff es ()
 weightedSoftSumToZero vName v wgtIndex prior = do
   let vecSize = SF.size wgtIndex--SL.indexSize wgtIndex

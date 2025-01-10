@@ -4,7 +4,6 @@
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE ImpredicativeTypes #-}
---{-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE PolyKinds #-}
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE ScopedTypeVariables #-}
@@ -29,10 +28,6 @@ import qualified Stan.Language.Types as SLT
 import qualified Stan.Language.Indexing as SLI
 import Stan.Language.Types (TypeOneOf, GenSType, IsContainer)
 import Stan.Language.Indexing (Dimension)
---import Stan.Language.TypedList (TypedList(..))
---import GHC.TypeLits (ErrorMessage((:<>:)))
---import Data.Type.Nat (SNatI)
---import Data.Type.Equality (type (~))
 import Prelude hiding (Nat)
 
 -- this needs fixing for higher dimensions?

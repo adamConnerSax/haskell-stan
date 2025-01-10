@@ -157,6 +157,9 @@ type family IfLessOrEq (n :: Nat) (m :: Nat) (a :: SLT.EType) (b :: SLT.EType) :
   IfLessOrEq (S n) Z _ b = b
   IfLessOrEq (S n) (S m) a b = IfLessOrEq n m a b
 
+-- test if the expression can be indexed at the dimension n
+-- if so, return the expression, otherwise, error
+-- What's going on w square matrix??
 type family Indexed (n :: Nat) (a :: SLT.EType) :: SLT.EType where
 --  Indexed Z ESimplex = ESimplex
 --  Indexed _ ESimplex = TE.TypeError (TE.Text "Attempt to index a simplex at a position other than 0.")
