@@ -51,7 +51,7 @@ import Stan.Language.Functions ( Density(..), Function(..) )
 import Prelude hiding (Nat)
 import qualified Data.Vec.Lazy as Vec
 import qualified Data.Type.Nat as DT
-import Data.Type.Nat (Nat(Z, S), SNat (SZ, SS))
+import Data.Type.Nat (Nat(Z, S), SNat (SZ, SS, SS'))
 
 namedE :: SLE.VarName -> SType t -> SLE.UExpr t
 namedE name st = SLR.IFix $ SLE.UVarExpr name st $ SLE.LNamed name st
@@ -137,6 +137,13 @@ indexE sn ie e = SLR.IFix $ SLE.UL $ SLE.LIndex sn ie e
 
 indexTuple :: SNat n -> SLE.UExpr t -> SLE.UExpr (IndexedTuple n t)
 indexTuple sn e = SLR.IFix $ SLE.UL $ SLE.LIndexedTuple sn e
+
+fstRef :: SLE.UExpr t -> SLE.UExpr (IndexedTuple Z t)
+fstRef e = SLR.IFix $ SLE.UL $ SLE.LIndexedTuple SZ e
+
+sndRef :: SLE.UExpr t -> SLE.UExpr (IndexedTuple (S Z) t)
+sndRef e = SLR.IFix $ SLE.UL $ SLE.LIndexedTuple (SS' SZ) e
+
 
 rangeIndexE :: SNat n -> Maybe (SLE.UExpr EInt) -> Maybe (SLE.UExpr EInt) -> SLE.UExpr t -> SLE.UExpr (Indexed n t)
 rangeIndexE n leM ueM = indexE n (SLR.IFix $ SLE.UL $ SLE.LIntRange leM ueM)

@@ -12,15 +12,10 @@ module Stan.Builder.Data
 where
 
 import qualified Stan.Builder.Core as SBC
---import qualified Stan.Builder.JSON as SBJ
---import qualified Stan.Language.Expressions as SLE
+import qualified Stan.Language as SL
 
 import Prelude hiding (All)
---import qualified Control.Foldl as Foldl
 import qualified Data.Dependent.HashMap as DHash
---import qualified Data.IntMap.Strict as IntMap
---import qualified Data.Map.Strict as Map
---import qualified Data.Set as Set
 
 import Effectful ((:>), Eff)
 import qualified Effectful.State.Static.Local as EffS
@@ -37,3 +32,9 @@ addData _d name idt tf = do
       let newRowInfoMakers = DHash.insert rtt (SBC.GroupIndexAndIntMapMakers tf (SBC.GroupIndexMakers DHash.empty) (SBC.GroupIntMapBuilders DHash.empty)) rowInfoMakers
       EffS.put newRowInfoMakers
       pure rtt
+
+dataSetSizeName :: SBC.RowTypeTag r -> Text
+dataSetSizeName rtt = "N_" <> SBC.dataSetName rtt
+
+dataSetSizeE :: SBC.RowTypeTag r -> SL.IntE
+dataSetSizeE rtt = SL.namedSizeE $ "N_" <> SBC.dataSetName rtt

@@ -345,8 +345,8 @@ simpleFunctionBody :: Function rt pts
                    -> (ExprList pts -> DeclSpec SLE.UExpr rt)
                    -> (SLE.UExpr rt -> ExprList pts -> [SLS.UStmt])
                    -> ExprList pts
-                   -> (NonEmpty SLS.UStmt, SLE.UExpr rt)
-simpleFunctionBody _ n retDSF bF args = let rE = namedE n st in  (declare n (retDSF args) :| bF rE args, rE)
+                   -> (SLS.UStmt, SLE.UExpr rt)
+simpleFunctionBody _ n retDSF bF args = let rE = namedE n st in  (grouped (declare n (retDSF args) : bF rE args), rE)
   where
     st = sTypeFromStanType $ declType $ retDSF args
 

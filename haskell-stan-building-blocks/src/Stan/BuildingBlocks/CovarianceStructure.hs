@@ -31,18 +31,6 @@ import qualified Stan.Functions as SF
 import Stan.Functions.Operators
 import qualified Stan.Builder as SB
 import qualified Stan.BuildingBlocks.ArrayHelpers as SBBA
-{-
-import qualified Stan.ModelBuilder.TypedExpressions.Types as TE
-import Stan.ModelBuilder.TypedExpressions.TypedList (TypedList(..))
-import qualified Stan.ModelBuilder.TypedExpressions.TypedList as TL
-import qualified Stan.ModelBuilder.TypedExpressions.Statements as TE
-import qualified Stan.ModelBuilder.TypedExpressions.Operations as TE
-import qualified Stan.ModelBuilder.TypedExpressions.StanFunctions as SF
-import qualified Stan.ModelBuilder.TypedExpressions.DAGTypes as DAG
-import qualified Stan.ModelBuilder.TypedExpressions.DAG as DAG
-import qualified Stan.ModelBuilder as SB
-import qualified Stan.ModelBuilder.BuildingBlocks.ArrayHelpers as SBBA
--}
 
 import qualified Data.Vec.Lazy as Vec
 import qualified Data.Type.Nat as DT

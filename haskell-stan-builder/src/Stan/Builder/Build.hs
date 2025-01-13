@@ -25,6 +25,7 @@ import qualified Stan.Language.Program as SLP
 import qualified Stan.Language.Statement as SLS -- was TE
 import qualified Stan.Language.Statements as SLS -- was TE
 import qualified Stan.Language.CodeWriter as SLC
+import qualified Stan.Functions as SF
 
 import Control.Monad (unless)
 import qualified Data.Dependent.HashMap as DHash
@@ -109,6 +110,13 @@ inBlock b m = do
   a <- m
   setBlock oldBlock
   pure a
+
+printExpr :: SBC.StanCodeC es => Text -> SLE.UExpr t -> Eff es ()
+printExpr t e = addStmtToCode $ SLS.print (SLE.stringE ("\"" <> t <> "\"=") SLT.:> e SLT.:> SLT.TNil)
+
+printTarget :: SBC.StanCodeC es => Text -> Eff es ()
+printTarget _ = printExpr "target" SF.targetVal
+
 
 --inBlock ::
 

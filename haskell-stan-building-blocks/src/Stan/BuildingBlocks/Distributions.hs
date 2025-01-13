@@ -16,6 +16,8 @@ module Stan.BuildingBlocks.Distributions
   )
 where
 
+import Prelude hiding (All)
+
 import qualified Stan.Language as SL
 import qualified Stan.Language.Statement as SL
 import Stan.Language (TypedList(..))
@@ -26,16 +28,7 @@ import qualified Stan.Builder as SB
 import qualified Stan.BuildingBlocks.ArrayHelpers as SBBA
 import Data.Type.Equality ((:~:)(Refl),TestEquality(testEquality))
 
-{-
---import Stan.ModelBuilder.Expressions as SME
-import qualified Stan.ModelBuilder.TypedExpressions.Types as TE
-import Stan.ModelBuilder.TypedExpressions.TypedList (TypedList(..))
-import qualified Stan.ModelBuilder.TypedExpressions.Expressions as TE
-import qualified Stan.ModelBuilder.TypedExpressions.Statements as TE
-import qualified Stan.ModelBuilder.TypedExpressions.StanFunctions as TE
--}
-import Prelude hiding (All)
---import qualified Stan.ModelBuilder.TypedExpressions.Operations as TE
+import Effectful (Eff)
 
 data DistType = Discrete | Continuous deriving stock (Show, Eq)
 
@@ -71,6 +64,9 @@ applyToDist x (StanDist dt s ld lu rng) =
   (\t xs -> ld t (x :> xs))
   (\t xs -> lu t (x :> xs))
   (\rs -> rng (x :> rs))
+
+sampleDistV :: SB.StanCodeC es => StanDist t args rargs -> SL.ExprList args -> SL.UExpr t -> Eff es ()
+sampleDistV sDist args yV =  SB.inBlock SL.SBModel $ SB.addStmtToCode $ familySample sDist yV args
 
 normalDist :: forall t.(SL.TypeOneOf t [SL.EReal, SL.ECVec, SL.ERVec], SL.GenSType t) => SimpleDist t '[t, t]
 normalDist = StanDist Continuous sample lpdf lupdf rng

@@ -80,6 +80,10 @@ library
                  , Stan.BuildingBlocks.ArrayHelpers
                  , Stan.BuildingBlocks.CovarianceStructure
                  , Stan.BuildingBlocks.Data
+                 , Stan.BuildingBlocks.Misc
+                 , Stan.BuildingBlocks.LogLikelihood
+                 , Stan.BuildingBlocks.PosteriorPrediction
+                 , Stan.BuildingBlocks.PostStratification
                  , Stan.BuildingBlocks.DesignMatrix
                  , Stan.BuildingBlocks.DirichletMultinomial
                  , Stan.BuildingBlocks.Distributions

@@ -42,6 +42,7 @@ import qualified Effectful.State.Static.Local as EffS
 import qualified Effectful.Fail as EffF
 
 type AddJsonC r es = (EffF.Fail :> es, EffS.State SBC.StanCode :> es, EffS.State (SBC.RowInfos (SBC.DataSource r)) :> es)
+type AddConstJsonC i es = (EffF.Fail :> es, EffS.State (SBC.JSONConstFold (SBC.SourceType i)) :> es, EffS.State SBC.StanCode :> es)
 
 data MatrixRowFromData r = MatrixRowFromData { rowName :: SLT.VarName, colIndexM :: Maybe SLT.VarName, rowLength :: Int, rowVec :: r -> VU.Vector Double }
 
@@ -52,7 +53,7 @@ add2dMatrixJson :: AddJsonC r es
                 -> SLE.IntE
                 -> SLE.IntE
                 -> Eff es SLE.MatrixE
-add2dMatrixJson rtt (MatrixRowFromData tName _ _ vecF) cs rowsE colsE = do
+add2dMatrixJson rtt (MatrixRowFromData vName _ _ vecF) cs rowsE colsE = do
   let dsName = SBC.dataSetName rtt
       wdName = tName <> underscoredIf dsName
       ndsF rowsE' = SLS.NamedDeclSpec wdName $ SLS.addVMs cs $ SLS.matrixSpec rowsE' colsE
@@ -183,7 +184,7 @@ buildGroupIndexes' = do
 
 
 
-addFixedIntJson :: (EffF.Fail :> es, EffS.State (SBC.JSONConstFold (SBC.SourceType i)) :> es, EffS.State SBC.StanCode :> es)
+addFixedIntJson :: AddConstJsonC i es --(EffF.Fail :> es, EffS.State (SBC.JSONConstFold (SBC.SourceType i)) :> es, EffS.State SBC.StanCode :> es)
                 => SBC.InputDataType i -> Text -> Maybe Int -> Int -> Eff es SLE.IntE
 addFixedIntJson idt tName mLower n = do
   let ds = flip SLS.addVMs SLS.intSpec $ maybe SLS.NoModifiers (SLS.Modifiers . pure . SLS.lowerM . SLE.intE) mLower
