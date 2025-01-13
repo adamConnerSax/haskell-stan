@@ -8,6 +8,7 @@
 {-# LANGUAGE PolyKinds #-}
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE TypeAbstractions #-}
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE UndecidableInstances #-}
 {-# OPTIONS_GHC -fwarn-incomplete-patterns #-}
@@ -24,10 +25,10 @@ import Prelude hiding (Nat)
 import qualified Stan.Language.ASTContext as SLA
 import Stan.Language.Types ( EType(EInt, EArray)
                            , sTypeFromStanType
-                           , SType(..), GenSType(..), AllGenSTypes, sTypeName, STypeList, FunctionName
+                           , SType(..), GenSType(..), GenSTypeList(..), AllGenSTypes, sTypeName, STypeList, FunctionName
                            )
 import Stan.Language.Expression ( IndexKey, VarName, LExpr, LExprF (..), UExpr, UExprF(..), lNamedE )
-import Stan.Language.Functions (Function(..), Density, TypedArgNames, funcArgName, withFunction, withDensity)
+import Stan.Language.Functions (Function(..), Density(..), TypedArgNames, funcArgName) --, withFunction, withDensity)
 import Stan.Language.Statement
     ( LStmt,
       Stmt(..),
@@ -114,12 +115,12 @@ lookupVar vn st = do
 
 newFunction :: Function t ts -> LookupM ()
 newFunction = \case
-  IdentityFunction _ -> lift $ Left "Evaluate: attempt to add new identity function!"
-  Function fn rt ats -> do
+  IdentityFunction -> lift $ Left "Evaluate: attempt to add new identity function!"
+  Function @rt @ats fn -> do
     (SLA.FunctionCtxt fcm) <- gets SLA.functionCtxt
     case Map.lookup fn fcm of
       Nothing -> do
-        let fcm' = Map.insert fn (Some.Some rt, Some.Some ats) fcm
+        let fcm' = Map.insert fn (Some.Some $ genSType @rt, Some.Some $ genSTypeList @ats) fcm
         modify $ SLA.modifyFunctionCtxt $ const $ SLA.FunctionCtxt fcm'
         pure ()
       Just _ -> lift $ Left $ "function name \"" <> fn <> "\" previously declared."
@@ -185,9 +186,11 @@ updateContextA = \case
   SDeclAssign varName declSpec _ -> ucDeclare varName declSpec
   SFor loopCounter _ _ _ -> ucAddIntCounterToLoopBodyScope loopCounter
   SForEach loopCounter ce _ -> ucAddTypedCounterToLoopBodyScope loopCounter ce
-  SFunction f typedArgs _  -> do
-    ucAddArgsToFunctionBodyScope typedArgs
-    newFunction f
+  SFunction f  typedArgs _ -> case f of
+    Function _ -> do
+      ucAddArgsToFunctionBodyScope typedArgs
+      newFunction f
+    IdentityFunction -> newFunction f
 --    ucAddReturnToFunctionBodyScope re
 --  SBlockF stBlock body -> case stBlock of
 --    ModelStmts -> modify (modifyVarCtxt enterNewScope)
@@ -302,21 +305,21 @@ eStatementToCodeE :: SLA.ASTCtxt -> UStmt -> Either Text CodePP
 eStatementToCodeE ctxt0 x = doLookupsEInStatementE ctxt0 x >>= eStmtToCode
 
 -- currently unused because we'd need to preload all supported built-in functions
-calledFunction :: Function t ts -> LookupM ()
+calledFunction :: forall t ts . (GenSType t, GenSTypeList ts) => Function t ts -> LookupM ()
 calledFunction f = case f of
-  IdentityFunction _ ->  pure ()
-  _ -> flip withFunction f $ \fn rt ats -> do
+  IdentityFunction ->  pure ()
+  Function fn -> do
     (SLA.FunctionCtxt fcm) <- gets SLA.functionCtxt
     case Map.lookup fn fcm of
       Nothing -> lift $ Left $ "Function \"" <> fn <> "\" called but no function by that name exists."
-      Just (rtS, atsS) -> testFunctionTypes fn rt ats rtS atsS
+      Just (rtS, atsS) -> testFunctionTypes fn (genSType @t) (genSTypeList @ts) rtS atsS
 
-calledDensity :: Density t ts -> LookupM ()
-calledDensity d = flip withDensity d $ \fn gt ats -> do
+calledDensity :: forall t ts . (GenSType t, GenSTypeList ts) => Density t ts -> LookupM ()
+calledDensity (Density fn) = do
     (SLA.FunctionCtxt fcm) <- gets SLA.functionCtxt
     case Map.lookup fn fcm of
       Nothing -> lift $ Left $ "Density \"" <> fn <> "\" called but no function by that name exists."
-      Just (gtS, atsS) -> testDensityTypes fn gt ats gtS atsS
+      Just (gtS, atsS) -> testDensityTypes fn (genSType @t) (genSTypeList @ts) gtS atsS
 
 testFunctionTypes :: FunctionName -> SType t -> STypeList ts -> Some.Some SType -> Some.Some STypeList -> LookupM ()
 testFunctionTypes fn rt ats rtS atsS =

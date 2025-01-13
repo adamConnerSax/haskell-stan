@@ -64,6 +64,7 @@ makeVecArraySpec :: (DT.SNatI (DT.S m)
                     , forall f. SL.VecToTListC f m
                     , forall f. SL.TListToVecC f m
                     , SL.GenSTypeList (SL.SameTypeList SL.EInt m)
+                    , SL.AllGenSTypes (SL.SameTypeList SL.EInt m)
                     )
                  => SL.VarModifiers SL.UExpr (SL.ScalarType SL.EReal)
                  -> Vec.Vec (DT.S m) SL.IntE
@@ -126,6 +127,7 @@ makeMatArraySpec :: (DT.SNatI (DT.S m)
                     , forall f. SL.VecToTListC f m
                     , forall f. SL.TListToVecC f m
                     , SL.GenSTypeList (SL.SameTypeList SL.EInt m)
+                    , SL.AllGenSTypes (SL.SameTypeList SL.EInt m)
                     )
                  => SL.VarModifiers SL.UExpr (SL.ScalarType SL.EReal)
                  -> Vec.Vec (DT.S m) SL.IntE
@@ -214,6 +216,7 @@ zeroVec lE = SF.rep_vector (SL.realE 0) lE
 
 arrayOfZeroVecs :: (SL.VecToSameTypedListF SL.UExpr SL.EInt n
                    , SL.GenSTypeList (SL.SameTypeList SL.EInt n)
+                   , SL.AllGenSTypes (SL.SameTypeList SL.EInt n)
                    , DT.SNatI n)
                 => Vec.Vec (DT.S n) SL.IntE -> SL.IntE -> SL.UExpr (SL.EArray (DT.S n) SL.ECVec)
 arrayOfZeroVecs arrDims lE = SL.functionE SF.rep_array' (zeroVec lE :> SL.vecToSameTypedList arrDims)

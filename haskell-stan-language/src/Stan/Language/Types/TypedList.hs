@@ -9,10 +9,6 @@
 {-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE TypeOperators #-}
---{-# LANGUAGE UndecidableInstances #-}
---{-# LANGUAGE AllowAmbiguousTypes #-}
---{-# LANGUAGE TypeSynonymInstances #-}
---{-# LANGUAGE StandaloneKindSignatures #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE FlexibleInstances #-}
 
@@ -121,6 +117,9 @@ oneTyped e = e :> TNil
 type family SameTypeList (e :: SLTE.EType) (n :: DTN.Nat) :: [SLTE.EType] where
   SameTypeList _ DTN.Z = '[]
   SameTypeList e (DTN.S n) = e ': SameTypeList e n
+
+--instance GenSType e => AllGenSTypes (SameTypeList e n) where
+
 
 class VecToSameTypedListF f (e :: SLTE.EType) (n :: DTN.Nat) where
   vecToSameTypedListF :: (DTN.Nat -> a -> f e) -> Vec.Vec n a -> TypedList f (SameTypeList e n)

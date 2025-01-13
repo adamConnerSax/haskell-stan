@@ -383,19 +383,19 @@ addFunctionCodeOnce functionsName fCode = do
     EffS.modify $ Set.insert functionsName
 
 
-addFunctionOnce :: (SLT.AllGenSTypes ats, EffF.Fail :> es, EffS.State SBC.FunctionNames :> es, EffS.State SBC.StanCode :> es)
+addFunctionOnce :: (EffF.Fail :> es, EffS.State SBC.FunctionNames :> es, EffS.State SBC.StanCode :> es)
                 => SLF.Function rt ats
                 -> SLF.TypedArgNames ats
                 -> (SLE.ExprList ats -> (SLS.UStmt, SLE.UExpr rt))
                 -> Eff es (SLF.Function rt ats)
-addFunctionOnce f@(SLF.Function fn _ _) argNames fBF = do
+addFunctionOnce f@(SLF.Function fn) argNames fBF = do
   fNames <- EffS.get
   unless (fn `Set.member` fNames) $ do
     addStmtToBlock SLP.SBFunctions $ SLS.function f argNames fBF
     EffS.modify (Set.insert fn)
   pure f
 
-addFunctionOnce f@(SLF.IdentityFunction _) _ _ = pure f
+addFunctionOnce f@(SLF.IdentityFunction) _ _ = pure f
 
 {-
 addFunctionOnce :: SLT.AllGenSTypes ats
@@ -412,12 +412,12 @@ addFunctionOnce f@(SLF.Function fn _ _) argNames fBF = do
 addFunctionOnce f@(SLF.IdentityFunction _) _ _ = pure f
 -}
 
-addDensityOnce :: (SLT.AllGenSTypes ats, SLT.GenSType gt, EffF.Fail :> es, EffS.State SBC.FunctionNames :> es, EffS.State SBC.StanCode :> es)
+addDensityOnce :: (SLT.GenSType gt, EffF.Fail :> es, EffS.State SBC.FunctionNames :> es, EffS.State SBC.StanCode :> es)
                => SLF.Density gt ats
                -> SLF.TypedArgNames (gt ': ats)
                -> (SLE.ExprList (gt ': ats) -> (SLS.UStmt, SLE.UExpr SLT.EReal))
                -> Eff es (SLF.Density gt ats)
-addDensityOnce f@(SLF.Density fn _ _) argNames fBF = do
+addDensityOnce f@(SLF.Density fn) argNames fBF = do
   fsNames <- EffS.get
   unless (fn `Set.member` fsNames) $ do
     addStmtToBlock SLP.SBFunctions $  SLS.function (SLF.densityAsFunction f) argNames fBF

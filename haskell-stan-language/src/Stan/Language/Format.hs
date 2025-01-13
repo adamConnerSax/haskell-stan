@@ -10,6 +10,7 @@
 {-# LANGUAGE QuantifiedConstraints #-}
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE TypeAbstractions #-}
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE TypeOperators #-}
 {-# LANGUAGE UndecidableInstances #-}
@@ -80,20 +81,20 @@ stmtToCodeAlg = \case
   SLS.SAssignF lhs rhs -> Right $ lineLayout $ preferOpBreak (unK lhs) PP.equals (unK rhs <> PP.semi)
   SLS.SOpAssignF op lhs rhs -> Right $ lineLayout $ preferOpBreak (unK lhs) (opDoc op <> PP.equals) (unK rhs <> PP.semi)
   SLS.STargetF rhs -> Right $ lineLayout $ preferOpBreak "target" "+=" $ unK rhs <> PP.semi
-  SLS.SSampleF lhs (Density dn _ _) al -> Right $ lineLayout
-                                         $ preferOpBreak
-                                         (unK lhs)
-                                         "~"
-                                         (PP.pretty dn <> PP.parens (csArgList al) <> PP.semi)
+  SLS.SSampleF lhs (Density dn) al -> Right $ lineLayout
+                                      $ preferOpBreak
+                                      (unK lhs)
+                                      "~"
+                                      (PP.pretty dn <> PP.parens (csArgList al) <> PP.semi)
   SLS.SForF txt fe te body -> (\b -> "for" <+> PP.parens (PP.pretty txt <+> "in" <+> unK fe <> PP.colon <> unK te) <+> bracketCode (PP.group b)) <$> body
   SLS.SForEachF txt e body -> (\b -> "foreach" <+> PP.parens (PP.pretty txt <+> "in" <+> unK e) <+> bracketLoopCode b) <$> body
   SLS.SIfElseF condAndIfTrueL allFalse -> ifElseCode condAndIfTrueL allFalse
   SLS.SWhileF if' body -> (\b -> "while" <+> PP.parens (unK if') <+> bracketLoopCode b) <$> body
   SLS.SBreakF -> Right $ "break" <> PP.semi
   SLS.SContinueF -> Right $ "continue" <> PP.semi
-  SLS.SFunctionF (Function fname rt ats) al body ->
-    (\b -> functionArg rt <+> PP.pretty fname <> functionArgs ats al <+> bracketCode b) <$> body
-  SLS.SFunctionF (IdentityFunction _) _ _  -> Left "Attempt to *declare* Identity function!"
+  SLS.SFunctionF (Function @rt @ats fname) al body ->
+    (\b -> functionArg (genSType @rt) <+> PP.pretty fname <> functionArgs (genSTypeList @ats) al <+> bracketCode b) <$> body
+  SLS.SFunctionF IdentityFunction _ _  -> Left "Attempt to *declare* Identity function!"
   SLS.SReturnF re -> Right $ "return" <+> unK re <> PP.semi
   SLS.SCommentF cs -> case toList cs of
     [] -> Right mempty
@@ -316,9 +317,9 @@ exprToDocAlg = K . \case
   SLE.LArray nv -> Bare $ nestedVecToCode nv
   SLE.LIntRange leM ueM -> Oped RangeOp $ maybe mempty (unK . f) leM <> PP.colon <> maybe mempty (unK . f) ueM
   SLE.LTuple tls -> Bare $ PP.parens $ csArgList $ hfmap f tls
-  SLE.LFunction (Function fn _ _) al -> Bare $ PP.pretty fn <> PP.parens (csArgList $ hfmap f al)
-  SLE.LFunction (IdentityFunction _) (arg :> TNil) -> Bare $ unK $ f arg
-  SLE.LDensity (Density dn _ _) k al -> Bare $ PP.pretty dn <> PP.parens (formatDensityArgs (unK (f k) : typedKToList (hfmap f al)))
+  SLE.LFunction (Function fn) al -> Bare $ PP.pretty fn <> PP.parens (csArgList $ hfmap f al)
+  SLE.LFunction IdentityFunction (arg :> TNil) -> Bare $ unK $ f arg
+  SLE.LDensity (Density dn) k al -> Bare $ PP.pretty dn <> PP.parens (formatDensityArgs (unK (f k) : typedKToList (hfmap f al)))
   SLE.LBinaryOp sbo le re -> binaryOp sbo le re --Oped (binaryOpFromSBinaryOp sbo) $ unK (f $ parenthesizeOped le) <> PP.softline <> opDoc sbo <+> unK (f $ parenthesizeOped re)
   SLE.LUnaryOp op e -> Bare $ unaryOpDoc (unK (f $ parenthesizeOped e)) op
   SLE.LCond ce te fe -> Bare $ PP.group $ PP.nest 1 $ unK (f ce) <> PP.softline <> "?" <+> unK (f te) <> PP.softline <> PP.colon <+> unK (f fe)

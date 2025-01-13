@@ -104,7 +104,8 @@ rep_array = simpleFunction "rep_array"
 
 -}
 -- this pleases me
-rep_array' :: (SFC.GenSType t, SLT.GenSTypeList (SLT.SameTypeList SLT.EInt n), SNatI n) => SLF.Function (SLT.EArray n t) (t ': SLT.SameTypeList SLT.EInt n)
+rep_array' :: (SFC.GenSType t, SLT.AllGenSTypes (SLT.SameTypeList SLT.EInt n), SLT.GenSTypeList (SLT.SameTypeList SLT.EInt n), SNatI n)
+           => SLF.Function (SLT.EArray n t) (t ': SLT.SameTypeList SLT.EInt n)
 rep_array' = SLF.simpleFunction "rep_array"
 
 rep_array1 :: SFC.GenSType t => SLE.UExpr t -> SLE.IntE -> SLE.UExpr (SLT.EArray (S Z) t)

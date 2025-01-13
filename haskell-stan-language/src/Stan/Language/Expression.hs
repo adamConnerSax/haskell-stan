@@ -8,6 +8,7 @@
 {-# LANGUAGE PolyKinds #-}
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE TypeAbstractions #-}
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE TypeOperators #-}
 {-# LANGUAGE UndecidableInstances #-}
@@ -28,6 +29,8 @@ import Stan.Language.Types
       SType(SInt, SArray),
       TypedList,
       eqTypedLists
+    , GenSType(..)
+    , GenSTypeList(..)
     )
 import Stan.Language.Indexing
     ( Vec(..),
@@ -215,8 +218,8 @@ eqLExprType = go
     go (SLR.IFix (LTuple sta)) (SLR.IFix (LTuple stb)) = do
       Refl <- testEquality sta stb
       pure Refl
-    go (SLR.IFix (LFunction (Function _ sta _) _)) (SLR.IFix (LFunction (Function _ stb _) _)) = testEquality sta stb
-    go (SLR.IFix (LFunction (IdentityFunction sta) _)) (SLR.IFix (LFunction (IdentityFunction stb) _)) = testEquality sta stb
+    go (SLR.IFix (LFunction (Function @sta _) _)) (SLR.IFix (LFunction (Function @stb _) _)) = testEquality (genSType @sta) (genSType @stb)
+    go (SLR.IFix (LFunction (IdentityFunction @sta) _)) (SLR.IFix (LFunction (IdentityFunction @stb) _)) = testEquality (genSType @sta) (genSType @stb)
     go (SLR.IFix (LDensity _ _ _)) (SLR.IFix (LDensity _ _ _)) = Just Refl
     go (SLR.IFix (LUnaryOp opa ea)) (SLR.IFix (LUnaryOp opb eb)) = do
       Refl <- testEquality opa opb
@@ -261,20 +264,23 @@ eqLExprOf = go
           cm _ _ = False
       in cm mla mlb && cm mua mub
     go (SLR.IFix (LTuple tas)) (SLR.IFix (LTuple tbs)) = eqTypedLists go tas tbs
-    go (SLR.IFix (LFunction (Function fna _ ata) ala)) (SLR.IFix (LFunction (Function fnb _ atb) alb)) =
-      let eqArgs = case testEquality ata atb of -- given lists are same
-            Just Refl -> case testEquality ata atb of -- reqwritten lists are same
+    go (SLR.IFix (LFunction (Function @ra @ata fna) ala)) (SLR.IFix (LFunction (Function @rb @atb fnb) alb)) =
+      let eqReturns = case testEquality (genSType @ra) (genSType @rb) of
+            Just Refl -> True
+            Nothing -> False
+          eqArgs = case testEquality (genSTypeList @ata) (genSTypeList @atb) of -- given lists are same
+            Just Refl -> case testEquality ala alb of -- reqwritten lists are same
               Just Refl -> eqTypedLists go ala alb -- given args are same
               Nothing -> False
             Nothing -> False
-      in fna == fnb && eqArgs
-    go (SLR.IFix (LFunction (IdentityFunction _) _)) (SLR.IFix (LFunction (IdentityFunction _) _)) = True
-    go (SLR.IFix (LDensity (Density dna gta ata) _ ala)) (SLR.IFix (LDensity (Density dnb gtb atb) _ alb)) =
-      let eqGivens = case testEquality gta gtb of
+      in fna == fnb && eqReturns && eqArgs
+    go (SLR.IFix (LFunction IdentityFunction _)) (SLR.IFix (LFunction IdentityFunction _)) = True
+    go (SLR.IFix (LDensity (Density @gta @ata dna) _ ala)) (SLR.IFix (LDensity (Density @gtb @atb dnb) _ alb)) =
+      let eqGivens = case testEquality (genSType @gta) (genSType @gtb) of
             Just Refl -> True
             Nothing -> False
-          eqArgs =  case testEquality ata atb of
-            Just Refl -> case testEquality ata atb of -- reqwritten lists are same
+          eqArgs =  case testEquality (genSTypeList @ata) (genSTypeList @atb) of
+            Just Refl -> case testEquality ala alb of -- reqwritten lists are same
               Just Refl -> eqTypedLists go ala alb
               Nothing -> False
             Nothing -> False

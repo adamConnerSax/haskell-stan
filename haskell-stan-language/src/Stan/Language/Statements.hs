@@ -65,7 +65,6 @@ import Stan.Language.Functions
       Function,
       FuncArg,
       funcArgName,
---      functionArgTypes
     )
 
 import qualified Data.Vec.Lazy as Vec
@@ -162,7 +161,7 @@ choleskyFactorCorrSpec rce = MatrixSpec StanCholeskyFactorCorr rce rce SLS.NoMod
 choleskyFactorCovSpec :: SLE.UExpr EInt -> DeclSpec SLE.UExpr ESqMat
 choleskyFactorCovSpec rce = MatrixSpec StanCholeskyFactorCov rce rce SLS.NoModifiers
 
-arraySpec :: (forall f.SLS.VecToTListC f n, forall f . SLS.TListToVecC f n, GenSTypeList (SameTypeList EInt n))
+arraySpec :: (forall f.SLS.VecToTListC f n, forall f . SLS.TListToVecC f n, GenSTypeList (SameTypeList EInt n), AllGenSTypes (SameTypeList EInt n))
           => SNat (DT.S n) -> Vec (DT.S n) (SLE.UExpr EInt) -> DeclSpec SLE.UExpr t -> DeclSpec SLE.UExpr (EArray (DT.S n) t)
 arraySpec = ArraySpec --(DeclSpec t tIndices vms) = DeclSpec (StanArray n t) (arrIndices Vec.++ tIndices) vms
 
@@ -333,7 +332,7 @@ break = SLS.SBreak
 continue :: SLS.UStmt
 continue = SLS.SContinue
 
-function :: forall args rt . (AllGenSTypes args, GenSTypeList args)
+function :: forall args rt . GenSTypeList args
          => Function rt args -> TypedList (FuncArg Text) args -> (TypedList SLE.UExpr args -> (SLS.UStmt, SLE.UExpr rt)) -> SLS.UStmt
 function fd argNames bodyF = scoped $ SLS.SFunction fd argNames $ grouped [bodyS, SLS.SReturn ret]
   where

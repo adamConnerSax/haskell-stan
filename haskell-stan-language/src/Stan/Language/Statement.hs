@@ -30,6 +30,7 @@ import Stan.Language.Types
     StanType(..),
     TypedList,
     AllGenSTypes,
+    SameTypeList,
     VecToSameTypedListF,
     SameTypedListToVecF, SameTypeList, GenSTypeList
     )
@@ -116,7 +117,7 @@ data DeclSpec :: (EType -> Type) -> EType -> Type  where
   ScalarSpec :: StanType t -> VarModifiers r (ScalarType t) -> DeclSpec r t
   VectorSpec :: StanType t -> r EInt -> VarModifiers r (ScalarType t) -> DeclSpec r t
   MatrixSpec :: StanType t -> r EInt -> r EInt -> VarModifiers r (ScalarType t) -> DeclSpec r t
-  ArraySpec :: (forall f. VecToTListC f n, forall f.TListToVecC f n, GenSTypeList (SameTypeList EInt n))
+  ArraySpec :: (forall f. VecToTListC f n, forall f.TListToVecC f n, GenSTypeList (SameTypeList EInt n), AllGenSTypes (SameTypeList EInt n))
     => DT.SNat (DT.S n) -> Vec.Vec (DT.S n) (r EInt) -> DeclSpec r t -> DeclSpec r (EArray (DT.S n) t)
   TupleSpec :: TypedList (DeclSpec r) ts -> DeclSpec r (ETuple ts)
 
@@ -161,7 +162,7 @@ data Stmt :: (EType -> Type) -> Type where
   SWhile :: r EBool -> Stmt r -> Stmt r
   SBreak :: Stmt r
   SContinue :: Stmt r
-  SFunction :: AllGenSTypes args => Function rt args -> TypedList (FuncArg Text) args -> Stmt r -> Stmt r
+  SFunction :: Function rt args -> TypedList (FuncArg Text) args -> Stmt r -> Stmt r
   SReturn :: r rt -> Stmt r
   SComment :: Traversable f => f Text -> Stmt r
   SProfile :: Text -> Stmt r -> Stmt r
@@ -184,7 +185,7 @@ data StmtF :: (EType -> Type) -> Type -> Type where
   SWhileF :: r EBool -> a -> StmtF r a
   SBreakF :: StmtF r a
   SContinueF :: StmtF r a
-  SFunctionF :: AllGenSTypes args => Function rt args -> TypedList (FuncArg Text) args -> a -> StmtF r a
+  SFunctionF :: Function rt args -> TypedList (FuncArg Text) args -> a -> StmtF r a
   SReturnF :: r t -> StmtF r a
   SCommentF :: Traversable f => f Text -> StmtF r a
   SProfileF :: Text -> a -> StmtF r a

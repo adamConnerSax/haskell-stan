@@ -19,10 +19,8 @@
 module Stan.Language.Functions
   (
     Function(..)
-  , withFunction
   , simpleFunction
   , Density(..)
-  , withDensity
   , simpleDensity
   , densityAsFunction
   , FuncArg(..)
@@ -39,28 +37,26 @@ import Prelude hiding (Nat)
 --import           Data.Kind (Type)
 
 data Function :: EType -> [EType] -> Type  where
-  Function :: FunctionName
-           -> SType t
-           -> STypeList args
-           -> Function t args
-  IdentityFunction :: SType t -> Function t '[t]
+  Function :: (GenSType t, AllGenSTypes ts, GenSTypeList ts) => FunctionName -> Function t ts
+  IdentityFunction :: GenSType t => Function t '[t]
 
 --curryOneF :: Function t ts -> Function (t ::-> LastType ts) (AllButLast ts)
 --curryOneF (Function n st tl tF) = Function n
-
+{-
 -- Can't pattern match on the arg-mapping function in "where" or "let" since then args' would escape its scope.
 -- But we can do this
+
 withFunction :: (FunctionName -> SType t -> STypeList args -> r)
                 -> Function t args
                 -> r
 withFunction f (Function t st tl) = f t st tl
 withFunction f (IdentityFunction st) = f "" st (st :> TNil)
-
+-}
 --simpleFunction :: (GenSType t, AllGenTypes args) => Text -> SType t -> TypeList args -> Function t args
 --simpleFunction fn st args = Function fn st args id
 
-simpleFunction :: (GenSType t, GenSTypeList args) => Text -> Function t args
-simpleFunction fn  = Function fn genSType genSTypeList
+simpleFunction :: forall t ts . (GenSType t, AllGenSTypes ts, GenSTypeList ts) => Text -> Function t ts
+simpleFunction = Function @t @ts
 
 
 {-
@@ -70,26 +66,23 @@ functionArgTypes (IdentityFunction t) = t :> TNil
 -}
 
 data Density :: EType -> [EType] -> Type where
-  Density :: FunctionName -- name
-          -> SType t -- givens type
-          -> STypeList args -- argument types
-          -> Density t args
+  Density :: (GenSType t, AllGenSTypes ts, GenSTypeList ts) => FunctionName -> Density t ts
 
-densityAsFunction :: Density gt ats -> Function EReal (gt ': ats)
-densityAsFunction (Density n gt ats) = Function n SReal (gt :> ats)
+densityAsFunction :: forall gt ats . Density gt ats -> Function EReal (gt ': ats)
+densityAsFunction (Density n) = Function @EReal @(gt ': ats) n
 
 {-
 densityFunctionArgTypes :: Density gt args -> STypeList (gt ': args)
 densityFunctionArgTypes (Density _ gt al) = gt :> al
--}
+
 
 withDensity :: (FunctionName -> SType t -> STypeList args -> r)
             -> Density t args
             -> r
 withDensity f (Density dn st tl) = f dn st tl
-
-simpleDensity :: (GenSType t, GenSTypeList ts) => Text -> Density t ts
-simpleDensity t  = Density t genSType genSTypeList
+-}
+simpleDensity :: forall t ts . (GenSType t, AllGenSTypes ts, GenSTypeList ts) => Text -> Density t ts
+simpleDensity n = Density @t @ts n
 
 -- const functor for holding arguments to functions
 data FuncArg :: Type -> k -> Type where
