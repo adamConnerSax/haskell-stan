@@ -22,7 +22,10 @@ import Stan.Language.Recursion (hfmap)
 import qualified Stan.Functions as SF
 import Stan.Functions.Operators
 import qualified Stan.Builder as SB
+import qualified Stan.BuildingBlocks.Distributions as SBD
 import qualified Stan.BuildingBlocks.ArrayHelpers as SBBA
+
+import Effectful (Eff)
 
 {-
 import Data.Type.Equality (type (~))
@@ -37,268 +40,214 @@ import qualified Stan.ModelBuilder.Distributions as SD
 import qualified Stan.ModelBuilder as SB
 -}
 
-realBinomialLogitDistM :: forall t md gq . RealBinomialT t => SB.StanBuilderM md gq (SD.SimpleDist t '[t, t])
+realBinomialLogitDistM :: forall t es . (SB.StanFunctionsC es, RealBinomialT t) => Eff es (SBD.SimpleDist t '[t, t])
 realBinomialLogitDistM = do
   sampleD <- realBinomialLogit @t
   lpdfD <- realBinomialLogitLPDF @t
   rngF <- realBinomialLogitRng @t
-  let sample gE args = TE.sample gE sampleD args
-      lpdf = TE.densityE lpdfD
-      lupdf = TE.densityE lpdfD
-      rng = TE.functionE rngF
-  pure $ SD.StanDist SD.Continuous sample lpdf lupdf rng
+  let sample gE args = SL.sample gE sampleD args
+      lpdf = SL.densityE lpdfD
+      lupdf = SL.densityE lpdfD
+      rng = SL.functionE rngF
+  pure $ SBD.StanDist SBD.Continuous sample lpdf lupdf rng
 
-realBinomialLogitDistSM :: forall t md gq . SB.StanBuilderM md gq (SD.SimpleDist TE.EReal '[TE.EReal, TE.EReal])
+realBinomialLogitDistSM :: forall t es . SB.StanFunctionsC es => Eff es (SBD.SimpleDist SL.EReal '[SL.EReal, SL.EReal])
 realBinomialLogitDistSM = do
   sampleD <- realBinomialLogitS
   lpdfD <- realBinomialLogitLPDF_S
 --  lupmfD <- realBinomialLogitLUPMF_S
   rngF <- realBinomialLogitRngS_URS
-  let sample gE args = TE.sample gE sampleD args
-      lpdf = TE.densityE lpdfD
-      lupdf = TE.densityE lpdfD
-      rng = TE.functionE rngF
-  pure $ SD.StanDist SD.Continuous sample lpdf lupdf rng
+  let sample gE args = SL.sample gE sampleD args
+      lpdf = SL.densityE lpdfD
+      lupdf = SL.densityE lpdfD
+      rng = SL.functionE rngF
+  pure $ SBD.StanDist SBD.Continuous sample lpdf lupdf rng
 
-type RealBinomialT t = (TE.VectorizedReal t
-                       , TE.TypeOneOf t [TE.ECVec, TE.ERVec, TE.EMat, TE.ESqMat, TE.ERealArray]
-                       , TE.TypeOneOf t [TE.ECVec, TE.ERVec]
-                       , TE.BinaryResultT (TE.BElementWise TE.BMultiply) t t ~ t
-                       , TE.BinaryResultT (TE.BElementWise TE.BSubtract) t t ~ t
-                       , TE.BinaryResultT (TE.BElementWise TE.BAdd) t t ~ t
-                       , TE.BinaryResultT TE.BSubtract TE.EInt t ~ t
+type RealBinomialT t = (SF.VectorizedReal t
+                       , SL.TypeOneOf t [SL.ECVec, SL.ERVec, SL.EMat, SL.ESqMat, SL.ERealArray]
+                       , SL.TypeOneOf t [SL.ECVec, SL.ERVec]
+                       , SL.BinaryResultT (SL.BElementWise SL.BMultiply) t t ~ t
+                       , SL.BinaryResultT (SL.BElementWise SL.BSubtract) t t ~ t
+                       , SL.BinaryResultT (SL.BElementWise SL.BAdd) t t ~ t
+                       , SL.BinaryResultT SL.BSubtract SL.EInt t ~ t
                        )
 
 
-realBinomialLogit :: forall t md gq . RealBinomialT t => SB.StanBuilderM md gq (TE.Density t [t, t])
+realBinomialLogit :: forall t es . (SB.StanFunctionsC es, RealBinomialT t) => Eff es (SL.Density t [t, t])
 realBinomialLogit = do
   _ <- realBinomialLogitLPDF @t
-  pure $ TE.simpleDensity "real_binomial_logit"
+  pure $ SL.simpleDensity "real_binomial_logit"
 
-realBinomialLogitLPDF :: forall t md gq . (RealBinomialT t)
-                      => SB.StanBuilderM md gq (TE.Density t [t, t])
+realBinomialLogitLPDF :: forall t es . (RealBinomialT t, SB.StanFunctionsC es)
+                      => Eff es (SL.Density t [t, t])
 realBinomialLogitLPDF = do
-  let f :: TE.Density t [t,t]
-      f = TE.simpleDensity "real_binomial_logit_lpdf"
-      eTimes :: TE.UExpr t -> TE.UExpr t -> TE.UExpr t
-      eTimes = TE.binaryOpE (TE.SElementWise TE.SMultiply)
---      eMinus = TE.binaryOpE (TE.SElementWise TE.SSubtract)
-      invLogit :: TE.UExpr t -> TE.UExpr t
-      invLogit x = TE.functionE TE.inv_logit (x :> TNil)
-      log :: TE.UExpr t -> TE.UExpr t
-      log x = TE.functionE TE.log (x :> TNil)
-      log1m :: TE.UExpr t -> TE.UExpr t
-      log1m x = TE.functionE TE.log1m (x :> TNil)
-  SB.addDensityOnce f (TE.DataArg "succ" :> TE.DataArg "trials" :> TE.Arg "lp" :> TNil)
-    $ \(s :> t :> lp :> TNil) -> TE.writerL $ do
-    case TE.genSType @t of
-      TE.SCVec -> do
-        p <- TE.declareRHSNW (TE.NamedDeclSpec "p" $ TE.vectorSpec (TE.functionE TE.size (lp :> TNil)) []) $ invLogit lp
-        let c = TE.functionE TE.lChoose (t :> s :> TNil)
-            t1 = s `eTimes` log p
-            t2 = (t `TE.minusE` s) `eTimes` log1m p
-        pure $ TE.functionE TE.sum (c `TE.plusE` t1 `TE.plusE` t2 :> TNil)
-      TE.SRVec -> do
-        p <- TE.declareRHSNW (TE.NamedDeclSpec "p" $ TE.rowVectorSpec (TE.functionE TE.size (lp :> TNil)) []) $ invLogit lp
-        let c = TE.functionE TE.lChoose (t :> s :> TNil)
-            t1 = s `eTimes` log p
-            t2 = (t `TE.minusE` s) `eTimes` log1m p
-        pure $ TE.functionE TE.sum (c `TE.plusE` t1 `TE.plusE` t2 :> TNil)
-      TE.SReal -> do
-        p <- TE.declareRHSNW (TE.NamedDeclSpec "p" $ TE.realSpec []) $ invLogit lp
-        let c :: TE.UExpr t = TE.functionE TE.lChoose (t :> s :> TNil)
-            t1 = s `TE.timesE` log p
-            t2 = (t `TE.minusE` s) `TE.timesE` log1m p
-        pure $ c `TE.plusE` t1 `TE.plusE` t2
+  let f :: SL.Density t [t,t]
+      f = SL.simpleDensity "real_binomial_logit_lpdf"
+  SB.addDensityOnce f (SL.DataArg "succ" :> SL.DataArg "trials" :> SL.Arg "lp" :> TNil)
+    $ \(s :> t :> lp :> TNil) -> SL.cwStmt $ do
+    case SL.genSType @t of
+      SL.SCVec -> do
+        p <- SL.declareRHSNW (SL.NamedDeclSpec "p" $ SL.vectorSpec (SF.size lp)) $ SF.inv_logit lp
+        pure $ SF.sum (SF.lChoose t s |+| (s |.*| SF.log p) |+| ((t |-| s) |.*| SF.log1m p))
+      SL.SRVec -> do
+        p <- SL.declareRHSNW (SL.NamedDeclSpec "p" $ SL.rowVectorSpec (SF.size lp)) $ SF.inv_logit lp
+        pure $ SF.sum (SF.lChoose t s |+| (s |.*| SF.log p) |+| ((t |-| s) |.*| SF.log1m p))
+      SL.SReal -> do
+        p <- SL.declareRHSNW (SL.NamedDeclSpec "p" $ SL.realSpec) $ SF.inv_logit lp
+        pure $ SF.lChoose t s |+| (s |*| SF.log p) |+| ((t |-| s) |*| SF.log1m p)
       _ -> error "realBinomialLogitLPMF: Impossible type!"
 
-realBinomialLogitLUPDF :: forall t md gq . (RealBinomialT t)
-                      => SB.StanBuilderM md gq (TE.Density t [t, t])
+realBinomialLogitLUPDF :: forall t es . (RealBinomialT t, SB.StanFunctionsC es)
+                      => Eff es (SL.Density t [t, t])
 realBinomialLogitLUPDF = do
-  let f :: TE.Density t [t,t]
-      f = TE.simpleDensity "real_binomial_logit_lupdf"
-      eTimes :: TE.UExpr t -> TE.UExpr t -> TE.UExpr t
-      eTimes = TE.binaryOpE (TE.SElementWise TE.SMultiply)
-      invLogit :: TE.UExpr t -> TE.UExpr t
-      invLogit x = TE.functionE TE.inv_logit (x :> TNil)
-      log :: TE.UExpr t -> TE.UExpr t
-      log x = TE.functionE TE.log (x :> TNil)
-      log1m :: TE.UExpr t -> TE.UExpr t
-      log1m x = TE.functionE TE.log1m (x :> TNil)
-  SB.addDensityOnce f (TE.DataArg "succ" :> TE.DataArg "trials" :> TE.Arg "lp" :> TNil)
-    $ \(s :> t :> lp :> TNil) -> TE.writerL $ do
-    case TE.genSType @t of
-      TE.SCVec -> do
-        p <- TE.declareRHSNW (TE.NamedDeclSpec "p" $ TE.vectorSpec (TE.functionE TE.size (lp :> TNil)) []) $ invLogit lp
-        let t1 = s `eTimes` log p
-            t2 = (t `TE.minusE` s) `eTimes` log1m p
-        pure $ TE.functionE TE.sum (t1 `TE.plusE` t2 :> TNil)
-      TE.SRVec -> do
-        p <- TE.declareRHSNW (TE.NamedDeclSpec "p" $ TE.rowVectorSpec (TE.functionE TE.size (lp :> TNil)) []) $ invLogit lp
-        let t1 = s `eTimes` log p
-            t2 = (t `TE.minusE` s) `eTimes` log1m p
-        pure $ TE.functionE TE.sum (t1 `TE.plusE` t2 :> TNil)
-      TE.SReal -> do
-        p <- TE.declareRHSNW (TE.NamedDeclSpec "p" $ TE.realSpec []) $ invLogit lp
-        let t1 = s `TE.timesE` log p
-            t2 = (t `TE.minusE` s) `TE.timesE` log1m p
-        pure $ t1 `TE.plusE` t2
+  let f :: SL.Density t [t,t]
+      f = SL.simpleDensity "real_binomial_logit_lupdf"
+  SB.addDensityOnce f (SL.DataArg "succ" :> SL.DataArg "trials" :> SL.Arg "lp" :> TNil)
+    $ \(s :> t :> lp :> TNil) -> SL.cwStmt $ do
+    case SL.genSType @t of
+      SL.SCVec -> do
+        p <- SL.declareRHSNW (SL.NamedDeclSpec "p" $ SL.vectorSpec (SF.size lp)) $ SF.inv_logit lp
+        pure $ SF.sum $ (s |.*| SF.log p) |+| ((t |-| s) |.*| SF.log1m p)
+      SL.SRVec -> do
+        p <- SL.declareRHSNW (SL.NamedDeclSpec "p" $ SL.rowVectorSpec (SF.size lp)) $ SF.inv_logit lp
+        pure $ SF.sum $ (s |.*| SF.log p) |+| ((t |-| s) |.*| SF.log1m p)
+      SL.SReal -> do
+        p <- SL.declareRHSNW (SL.NamedDeclSpec "p" $ SL.realSpec) $ SF.inv_logit lp
+        pure $ (s |*| SF.log p) |+| ((t |-| s) |*| SF.log1m p)
       _ -> error "realBinomialLogitLUPMF: Impossible type!"
 
 
 -- we do this via rejection sampling, using a uniform distribution for now.
-realBinomialLogitRng :: forall t md gq . (RealBinomialT t)
-                      => SB.StanBuilderM md gq (TE.Function t [t, t])
+realBinomialLogitRng :: forall t es . (RealBinomialT t, SB.StanFunctionsC es)
+                      => Eff es (SL.Function t [t, t])
 realBinomialLogitRng = do
   scalarLogitRngSF <- realBinomialLogitRngS_URS
-  let f :: TE.Function t [t,t]
-      f = TE.simpleFunction "real_binomial_logit_rng"
-      scalarLogitRng :: TE.RealE -> TE.RealE -> TE.RealE
-      scalarLogitRng n lp = TE.functionE scalarLogitRngSF (n :> lp :> TNil)
-  case TE.genSType @t of
-     TE.SCVec -> SB.addFunctionOnce f (TE.DataArg "trials" :> TE.Arg "lp" :> TNil)
-       $ \ (n :> lp :> TNil) -> TE.writerL $ do
-       sz <- TE.declareRHSNW (TE.NamedDeclSpec "n" $ TE.intSpec []) $ TE.functionE TE.size (lp :> TNil)
-       let vecSpec = TE.vectorSpec sz []
-       samples <- TE.declareNW (TE.NamedDeclSpec "samples" vecSpec)
-       TE.addStmt
-         $ TE.for "k" (TE.SpecificNumbered (TE.intE 1) sz)
-         $ \k ->
-             [(samples `TE.at` k) `TE.assign` scalarLogitRng (n `TE.at` k) (lp `TE.at` k)]
+  let f :: SL.Function t [t,t]
+      f = SL.simpleFunction "real_binomial_logit_rng"
+      scalarLogitRng :: SL.RealE -> SL.RealE -> SL.RealE
+      scalarLogitRng n lp = SL.functionE scalarLogitRngSF (n :> lp :> TNil)
+  case SL.genSType @t of
+     SL.SCVec -> SB.addFunctionOnce f (SL.DataArg "trials" :> SL.Arg "lp" :> TNil)
+       $ \ (n :> lp :> TNil) -> SL.cwStmt $ do
+       sz <- SL.declareRHSNW (SL.NamedDeclSpec "n" $ SL.intSpec) $ SF.size lp
+       let vecSpec = SL.vectorSpec sz
+       samples <- SL.declareNW (SL.NamedDeclSpec "samples" vecSpec)
+       SL.addStmt
+         $ SL.for "k" (SL.SpecificNumbered (SL.intE 1) sz)
+         $ \k -> (samples `SL.at` k) SL.|=| scalarLogitRng (n `SL.at` k) (lp `SL.at` k)
        pure samples
-     TE.SRVec -> SB.addFunctionOnce f (TE.DataArg "trials" :> TE.Arg "lp" :> TNil)
-       $ \ (n :> lp :> TNil) -> TE.writerL $ do
-       sz <- TE.declareRHSNW (TE.NamedDeclSpec "n" $ TE.intSpec []) $ TE.functionE TE.size (lp :> TNil)
-       let rowVecSpec = TE.rowVectorSpec sz []
-       samples <- TE.declareNW (TE.NamedDeclSpec "samples" rowVecSpec)
-       TE.addStmt
-         $ TE.for "k" (TE.SpecificNumbered (TE.intE 1) sz)
-         $ \k ->
-             [(samples `TE.at` k) `TE.assign` scalarLogitRng (n `TE.at` k) (lp `TE.at` k)]
+     SL.SRVec -> SB.addFunctionOnce f (SL.DataArg "trials" :> SL.Arg "lp" :> TNil)
+       $ \ (n :> lp :> TNil) -> SL.cwStmt $ do
+       sz <- SL.declareRHSNW (SL.NamedDeclSpec "n" $ SL.intSpec) $ SF.size lp
+       let rowVecSpec = SL.rowVectorSpec sz
+       samples <- SL.declareNW (SL.NamedDeclSpec "samples" rowVecSpec)
+       SL.addStmt
+         $ SL.for "k" (SL.SpecificNumbered (SL.intE 1) sz)
+         $ \k -> (samples `SL.at` k) SL.|=| scalarLogitRng (n `SL.at` k) (lp `SL.at` k)
        pure samples
-     TE.SReal -> SB.addFunctionOnce f (TE.DataArg "trials" :> TE.Arg "lp" :> TNil)
-       $ \ (n :> lp :> TNil) -> TE.writerL $ pure $ scalarLogitRng n lp
+     SL.SReal -> SB.addFunctionOnce f (SL.DataArg "trials" :> SL.Arg "lp" :> TNil)
+       $ \ (n :> lp :> TNil) -> SL.cwStmt $ pure $ scalarLogitRng n lp
      _ -> error "realBinomialLogitLPMF: Impossible type!"
 
-
-realBinomialLogitS :: forall md gq . SB.StanBuilderM md gq (TE.Density TE.EReal [TE.EReal, TE.EReal])
+realBinomialLogitS :: forall es . SB.StanFunctionsC es => Eff es (SL.Density SL.EReal [SL.EReal, SL.EReal])
 realBinomialLogitS = do
   _ <- realBinomialLogitLPDF_S
-  pure $ TE.simpleDensity "real_binomial_logitS"
+  pure $ SL.simpleDensity "real_binomial_logitS"
 
-realBinomialLogitLPDF_S :: SB.StanBuilderM md gq (TE.Density TE.EReal [TE.EReal, TE.EReal])
+realBinomialLogitLPDF_S :: SB.StanFunctionsC es => Eff es (SL.Density SL.EReal [SL.EReal, SL.EReal])
 realBinomialLogitLPDF_S = do
-  let f :: TE.Density TE.EReal [TE.EReal, TE.EReal]
-      f = TE.simpleDensity "scalar_real_binomial_logit_lpdf"
-  SB.addDensityOnce f (TE.DataArg "succ" :> TE.DataArg "trials" :> TE.Arg "lp" :> TNil)
-    $ \(s :> t :> lp :> TNil) -> TE.writerL $ realBinomialLogitLPDF_S_CW t s lp
+  let f :: SL.Density SL.EReal [SL.EReal, SL.EReal]
+      f = SL.simpleDensity "scalar_real_binomial_logit_lpdf"
+  SB.addDensityOnce f (SL.DataArg "succ" :> SL.DataArg "trials" :> SL.Arg "lp" :> TNil)
+    $ \(s :> t :> lp :> TNil) -> SL.cwStmt $ realBinomialLogitLPDF_S_CW t s lp
 
-realBinomialLogitLPDF_S_CW :: TE.RealE -> TE.RealE -> TE.RealE -> TE.CodeWriter TE.RealE
+realBinomialLogitLPDF_S_CW :: SL.RealE -> SL.RealE -> SL.RealE -> SL.CodeWriter SL.RealE
 realBinomialLogitLPDF_S_CW t s lp = do
-  let invLogit x = TE.functionE TE.inv_logit (x :> TNil)
-  p <- TE.declareRHSNW (TE.NamedDeclSpec "p" $ TE.realSpec []) $ invLogit lp
+  p <- SL.declareRHSNW (SL.NamedDeclSpec "p" $ SL.realSpec) $ SF.inv_logit lp
   pure $ realBinomialLogitLPDF_S_Expr t s p
 
-realBinomialLogitLPDF_S_Expr :: TE.RealE -> TE.RealE -> TE.RealE -> TE.RealE
-realBinomialLogitLPDF_S_Expr t s p =
-  let log x = TE.functionE TE.log (x :> TNil)
-      log1m x = TE.functionE TE.log1m (x :> TNil)
-      c = TE.functionE TE.lChoose (t :> s :> TNil)
-      t1 = s `TE.timesE` log p
-      t2 = (t `TE.minusE` s) `TE.timesE` log1m p
-  in c `TE.plusE` t1 `TE.plusE` t2
+realBinomialLogitLPDF_S_Expr :: SL.RealE -> SL.RealE -> SL.RealE -> SL.RealE
+realBinomialLogitLPDF_S_Expr t s p = SF.lChoose t s `SL.plusE` (s |*| SF.log p) |+| ((t |-| s) |*| SF.log1m p)
 
 
-realBinomialLogitLUPDF_S :: SB.StanBuilderM md gq (TE.Density TE.EReal [TE.EReal, TE.EReal])
+realBinomialLogitLUPDF_S :: SB.StanFunctionsC es => Eff es (SL.Density SL.EReal [SL.EReal, SL.EReal])
 realBinomialLogitLUPDF_S = do
-  let f :: TE.Density TE.EReal [TE.EReal,TE.EReal]
-      f = TE.simpleDensity "scalar_real_binomial_logit_lupdf"
-      invLogit x = TE.functionE TE.inv_logit (x :> TNil)
-      log x = TE.functionE TE.log (x :> TNil)
-      log1m x = TE.functionE TE.log1m (x :> TNil)
-  SB.addDensityOnce f (TE.DataArg "succ" :> TE.DataArg "trials" :> TE.Arg "lp" :> TNil)
-    $ \(s :> t :> lp :> TNil) -> TE.writerL $ do
-    p <- TE.declareRHSNW (TE.NamedDeclSpec "p" $ TE.realSpec []) $ invLogit lp
-    let t1 = s `TE.timesE` log p
-        t2 = (t `TE.minusE` s) `TE.timesE` log1m p
-    pure $ t1 `TE.plusE` t2
+  let f :: SL.Density SL.EReal [SL.EReal,SL.EReal]
+      f = SL.simpleDensity "scalar_real_binomial_logit_lupdf"
+  SB.addDensityOnce f (SL.DataArg "succ" :> SL.DataArg "trials" :> SL.Arg "lp" :> TNil)
+    $ \(s :> t :> lp :> TNil) -> SL.cwStmt  $ do
+    p <- SL.declareRHSNW (SL.NamedDeclSpec "p" $ SL.realSpec) $ SF.inv_logit lp
+    pure $ (s |*| SF.log p) |+| ((t |-| s) |*| SF.log1m p)
 
-realBinomialLogitRngS_URS :: SB.StanBuilderM md gq (TE.Function TE.EReal [TE.EReal, TE.EReal])
+realBinomialLogitRngS_URS :: SB.StanFunctionsC es => Eff es (SL.Function SL.EReal [SL.EReal, SL.EReal])
 realBinomialLogitRngS_URS = do
-  let f :: TE.Function TE.EReal [TE.EReal,TE.EReal]
-      f = TE.simpleFunction "scalar_real_binomial_logit_rng"
-      invLogit x = TE.functionE TE.inv_logit (x :> TNil)
-      binomialDensity :: TE.RealE -> TE.RealE -> TE.RealE -> TE.RealE
-      binomialDensity k n p = TE.functionE TE.exp (realBinomialLogitLPDF_S_Expr k n p :> TNil) --TE.densityE lpdfD k (n :> lp :> TNil)
-      uniformSample :: TE.RealE -> TE.RealE -> TE.RealE
-      uniformSample lo hi = TE.functionE TE.uniform_rng (lo :> hi :> TNil)
-  SB.addFunctionOnce f (TE.DataArg "trials" :> TE.Arg "lp" :> TNil)
-    $ \ (n :> lp :> TNil) -> TE.writerL $ do
-    p <- TE.declareRHSNW (TE.NamedDeclSpec "p" $ TE.realSpec []) $ invLogit lp
-    k <- TE.declareRHSNW (TE.NamedDeclSpec "k" $ TE.realSpec []) $ n `TE.timesE` p
-    maxB <- TE.declareRHSNW (TE.NamedDeclSpec "maxB" $ TE.realSpec []) $ binomialDensity n k p
-    proposal <- TE.declareRHSNW (TE.NamedDeclSpec "proposal" $ TE.realSpec []) $ uniformSample (TE.realE 0) n
-    let geq :: TE.RealE -> TE.RealE -> TE.BoolE
-        geq = TE.boolOpE TE.SGEq
-        unacceptable x = uniformSample (TE.realE 0) maxB `geq` binomialDensity n x p
-    TE.addStmt $ TE.while (unacceptable proposal) [proposal `TE.assign` uniformSample (TE.realE 0) n]
+  let f :: SL.Function SL.EReal [SL.EReal,SL.EReal]
+      f = SL.simpleFunction "scalar_real_binomial_logit_rng"
+  SB.addFunctionOnce f (SL.DataArg "trials" :> SL.Arg "lp" :> TNil)
+    $ \ (n :> lp :> TNil) -> SL.cwStmt $ do
+    p <- SL.declareRHSNW (SL.NamedDeclSpec "p" $ SL.realSpec) $ SF.inv_logit lp
+    k <- SL.declareRHSNW (SL.NamedDeclSpec "k" $ SL.realSpec) $ n |*| p
+    maxB <- SL.declareRHSNW (SL.NamedDeclSpec "maxB" $ SL.realSpec) $ SF.exp $ realBinomialLogitLPDF_S_Expr n k p
+    proposal <- SL.declareRHSNW (SL.NamedDeclSpec "proposal" $ SL.realSpec) $ SF.uniform_rng (SL.realE 0) n
+    let unacceptable x = SF.uniform_rng (SL.realE 0) maxB |>=| (SF.exp $ realBinomialLogitLPDF_S_Expr n x p)
+    SL.addStmt $ SL.while (unacceptable proposal) $ proposal SL.|=| SF.uniform_rng (SL.realE 0) n
     pure proposal
 
 {-
 
 -- is this correct? We use the beta in place of the binomial just for purposes of rng/cdf
 realBinomialLogitRng :: forall t md gq . (RealBinomialT t)
-                      => SB.StanBuilderM md gq (TE.Function t [t, t])
+                      => SB.StanBuilderM md gq (SL.Function t [t, t])
 realBinomialLogitRng = do
-  let f :: TE.Function t [t,t]
-      f = TE.simpleFunction "real_binomial_logit_rng"
-      invLogit :: TE.UExpr t -> TE.UExpr t
-      invLogit x = TE.functionE TE.inv_logit (x :> TNil)
-      eTimes = TE.binaryOpE (TE.SElementWise TE.SMultiply)
-      toVec x = TE.functionE TE.to_vector (x :> TNil)
-      toRVec x = TE.functionE TE.to_row_vector (x :> TNil)
-  case TE.genSType @t of
-     TE.SCVec -> SB.addFunctionOnce f (TE.DataArg "trials" :> TE.Arg "lp" :> TNil)
-       $ \ (n :> lp :> TNil) -> TE.writerL $ do
-       sz <- TE.declareRHSNW (TE.NamedDeclSpec "n" $ TE.intSpec []) $ TE.functionE TE.size (lp :> TNil)
-       let vecSpec = TE.vectorSpec sz []
-       p <- TE.declareRHSNW (TE.NamedDeclSpec "p" vecSpec) $ invLogit lp
-       k <- TE.declareRHSNW (TE.NamedDeclSpec "k" vecSpec) $ n `eTimes` p
-       alpha <- TE.declareRHSNW (TE.NamedDeclSpec "alpha" vecSpec)  $ k `TE.plusE` TE.realE 1
-       beta <- TE.declareRHSNW (TE.NamedDeclSpec "beta" vecSpec) $ n `TE.minusE` k `TE.plusE` TE.realE 1
-       pure $ n `eTimes` toVec (TE.functionE TE.beta_rng (alpha :> beta :> TNil))
-     TE.SRVec -> SB.addFunctionOnce f (TE.DataArg "trials" :> TE.Arg "lp" :> TNil)
-       $ \ (n :> lp :> TNil) -> TE.writerL $ do
-       sz <- TE.declareRHSNW (TE.NamedDeclSpec "n" $ TE.intSpec []) $ TE.functionE TE.size (lp :> TNil)
-       let rowVecSpec = TE.rowVectorSpec sz []
-       p <- TE.declareRHSNW (TE.NamedDeclSpec "p" rowVecSpec) $ invLogit lp
-       k <- TE.declareRHSNW (TE.NamedDeclSpec "k" rowVecSpec) $ n `eTimes` p
-       alpha <- TE.declareRHSNW (TE.NamedDeclSpec "kp1" rowVecSpec) $ k `TE.plusE` TE.realE 1
-       beta <- TE.declareRHSNW (TE.NamedDeclSpec "beta" rowVecSpec) $ n `TE.minusE` k `TE.plusE` TE.realE 1
-       pure $ n `eTimes` toRVec (TE.functionE TE.beta_rng (alpha :> beta :> TNil))
-     TE.SReal -> SB.addFunctionOnce f (TE.DataArg "trials" :> TE.Arg "lp" :> TNil)
-       $ \ (n :> lp :> TNil) -> TE.writerL $ do
-       p <- TE.declareRHSNW (TE.NamedDeclSpec "p" $ TE.realSpec []) $ invLogit lp
-       let k = n `TE.timesE` p
-           alpha = k `TE.plusE` TE.realE 1
-           beta = n `TE.minusE` k `TE.plusE` TE.realE 1
-       pure $ n `TE.timesE` TE.functionE TE.beta_rng (alpha :> beta :> TNil)
+  let f :: SL.Function t [t,t]
+      f = SL.simpleFunction "real_binomial_logit_rng"
+      invLogit :: SL.UExpr t -> SL.UExpr t
+      invLogit x = SL.functionE SL.inv_logit (x :> TNil)
+      eTimes = SL.binaryOpE (SL.SElementWise SL.SMultiply)
+      toVec x = SL.functionE SL.to_vector (x :> TNil)
+      toRVec x = SL.functionE SL.to_row_vector (x :> TNil)
+  case SL.genSType @t of
+     SL.SCVec -> SB.addFunctionOnce f (SL.DataArg "trials" :> SL.Arg "lp" :> TNil)
+       $ \ (n :> lp :> TNil) -> SL.writerL $ do
+       sz <- SL.declareRHSNW (SL.NamedDeclSpec "n" $ SL.intSpec []) $ SL.functionE SL.size (lp :> TNil)
+       let vecSpec = SL.vectorSpec sz []
+       p <- SL.declareRHSNW (SL.NamedDeclSpec "p" vecSpec) $ invLogit lp
+       k <- SL.declareRHSNW (SL.NamedDeclSpec "k" vecSpec) $ n `eTimes` p
+       alpha <- SL.declareRHSNW (SL.NamedDeclSpec "alpha" vecSpec)  $ k `SL.plusE` SL.realE 1
+       beta <- SL.declareRHSNW (SL.NamedDeclSpec "beta" vecSpec) $ n `SL.minusE` k `SL.plusE` SL.realE 1
+       pure $ n `eTimes` toVec (SL.functionE SL.beta_rng (alpha :> beta :> TNil))
+     SL.SRVec -> SB.addFunctionOnce f (SL.DataArg "trials" :> SL.Arg "lp" :> TNil)
+       $ \ (n :> lp :> TNil) -> SL.writerL $ do
+       sz <- SL.declareRHSNW (SL.NamedDeclSpec "n" $ SL.intSpec []) $ SL.functionE SL.size (lp :> TNil)
+       let rowVecSpec = SL.rowVectorSpec sz []
+       p <- SL.declareRHSNW (SL.NamedDeclSpec "p" rowVecSpec) $ invLogit lp
+       k <- SL.declareRHSNW (SL.NamedDeclSpec "k" rowVecSpec) $ n `eTimes` p
+       alpha <- SL.declareRHSNW (SL.NamedDeclSpec "kp1" rowVecSpec) $ k `SL.plusE` SL.realE 1
+       beta <- SL.declareRHSNW (SL.NamedDeclSpec "beta" rowVecSpec) $ n `SL.minusE` k `SL.plusE` SL.realE 1
+       pure $ n `eTimes` toRVec (SL.functionE SL.beta_rng (alpha :> beta :> TNil))
+     SL.SReal -> SB.addFunctionOnce f (SL.DataArg "trials" :> SL.Arg "lp" :> TNil)
+       $ \ (n :> lp :> TNil) -> SL.writerL $ do
+       p <- SL.declareRHSNW (SL.NamedDeclSpec "p" $ SL.realSpec []) $ invLogit lp
+       let k = n `SL.timesE` p
+           alpha = k `SL.plusE` SL.realE 1
+           beta = n `SL.minusE` k `SL.plusE` SL.realE 1
+       pure $ n `SL.timesE` SL.functionE SL.beta_rng (alpha :> beta :> TNil)
      _ -> error "realBinomialLogitLPMF: Impossible type!"
 
 
 
 -- is this correct? We use the beta in place of the binomial just for purposes of rng/cdf
-realBinomialLogitRngS :: SB.StanBuilderM md gq (TE.Function TE.EReal [TE.EReal, TE.EReal])
+realBinomialLogitRngS :: SB.StanBuilderM md gq (SL.Function SL.EReal [SL.EReal, SL.EReal])
 realBinomialLogitRngS = do
-  let f :: TE.Function TE.EReal [TE.EReal,TE.EReal]
-      f = TE.simpleFunction "scalar_real_binomial_logit_rng"
-      invLogit x = TE.functionE TE.inv_logit (x :> TNil)
-  SB.addFunctionOnce f (TE.DataArg "trials" :> TE.Arg "lp" :> TNil)
-    $ \ (n :> lp :> TNil) -> TE.writerL $ do
-    p <- TE.declareRHSNW (TE.NamedDeclSpec "p" $ TE.realSpec []) $ invLogit lp
-    k <- TE.declareRHSNW (TE.NamedDeclSpec "k" $ TE.realSpec []) $ n `TE.timesE` p
-    let a = k `TE.plusE` TE.realE 1
-        b = n `TE.minusE` k `TE.plusE` TE.realE 1
-    pure $ n `TE.timesE` TE.functionE TE.beta_rng (a :> b :> TNil)
+  let f :: SL.Function SL.EReal [SL.EReal,SL.EReal]
+      f = SL.simpleFunction "scalar_real_binomial_logit_rng"
+      invLogit x = SL.functionE SL.inv_logit (x :> TNil)
+  SB.addFunctionOnce f (SL.DataArg "trials" :> SL.Arg "lp" :> TNil)
+    $ \ (n :> lp :> TNil) -> SL.writerL $ do
+    p <- SL.declareRHSNW (SL.NamedDeclSpec "p" $ SL.realSpec []) $ invLogit lp
+    k <- SL.declareRHSNW (SL.NamedDeclSpec "k" $ SL.realSpec []) $ n `SL.timesE` p
+    let a = k `SL.plusE` SL.realE 1
+        b = n `SL.minusE` k `SL.plusE` SL.realE 1
+    pure $ n `SL.timesE` SL.functionE SL.beta_rng (a :> b :> TNil)
 
 -}

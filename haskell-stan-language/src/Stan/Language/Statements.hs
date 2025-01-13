@@ -43,6 +43,7 @@ import Stan.Language.Types
       GenSTypeList,
       SameTypeList,
       AllGenSTypes,
+      genSTypeList,
       vecToSameTypedListF,
       zipTypedListsWith,
       VecToSameTypedListF,
@@ -64,7 +65,8 @@ import Stan.Language.Functions
       Function,
       FuncArg,
       funcArgName,
-      functionArgTypes)
+--      functionArgTypes
+    )
 
 import qualified Data.Vec.Lazy as Vec
 import qualified Data.Type.Nat as DT
@@ -331,10 +333,11 @@ break = SLS.SBreak
 continue :: SLS.UStmt
 continue = SLS.SContinue
 
-function :: AllGenSTypes args => Function rt args -> TypedList (FuncArg Text) args -> (TypedList SLE.UExpr args -> (SLS.UStmt, SLE.UExpr rt)) -> SLS.UStmt
+function :: forall args rt . (AllGenSTypes args, GenSTypeList args)
+         => Function rt args -> TypedList (FuncArg Text) args -> (TypedList SLE.UExpr args -> (SLS.UStmt, SLE.UExpr rt)) -> SLS.UStmt
 function fd argNames bodyF = scoped $ SLS.SFunction fd argNames $ grouped [bodyS, SLS.SReturn ret]
   where
-    argTypes = functionArgTypes fd
+    argTypes = genSTypeList @args --functionArgTypes fd
     argExprs = zipTypedListsWith (namedE . funcArgName) argNames argTypes
     (bodyS, ret) = bodyF argExprs
 

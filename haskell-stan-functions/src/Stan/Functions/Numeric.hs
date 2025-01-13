@@ -32,7 +32,7 @@ import qualified Stan.Language.Expressions as SLE
 vectorizedRealFunction :: SFC.VectorizedReal t => Text -> SLE.UExpr t -> SLE.UExpr t
 vectorizedRealFunction fName t = SLE.functionE (SLF.simpleFunction fName) (t :> TNil)
 
-logit, inv_logit, sqrt, inv_sqrt, lgamma, log, exp, log1m, atanh, lChoose, inv, abs :: SFC.VectorizedReal t => SLE.UExpr t -> SLE.UExpr t
+logit, inv_logit, sqrt, inv_sqrt, lgamma, log, exp, log1m, atanh, inv, abs :: SFC.VectorizedReal t => SLE.UExpr t -> SLE.UExpr t
 logit = vectorizedRealFunction "logit"
 inv_logit = vectorizedRealFunction "inv_logit"
 sqrt = vectorizedRealFunction "sqrt"
@@ -47,7 +47,8 @@ abs = vectorizedRealFunction "abs"
 
 -- vectorized log of real-valued binomial coefficient
 -- see: https://mc-stan.org/docs/functions-reference/betafun.html
-lChoose = vectorizedRealFunction "lChoose"
+lChoose :: SFC.VectorizedReal t => SLE.UExpr t -> SLE.UExpr t -> SLE.UExpr t
+lChoose t1 t2 = SLE.functionE (SLF.simpleFunction "lchoose") (t1 :> t2 :> TNil)
 
 softmax, log_softmax :: SFC.VectorizedReal t => SLE.UExpr t -> SLE.UExpr t
 softmax = vectorizedRealFunction "softmax"

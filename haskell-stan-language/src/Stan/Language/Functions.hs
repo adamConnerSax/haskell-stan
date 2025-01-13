@@ -18,7 +18,17 @@
 
 module Stan.Language.Functions
   (
-    module Stan.Language.Functions
+    Function(..)
+  , withFunction
+  , simpleFunction
+  , Density(..)
+  , withDensity
+  , simpleDensity
+  , densityAsFunction
+  , FuncArg(..)
+  , TypedArgNames
+  , funcArgName
+  , mapFuncArg
   )
   where
 
@@ -53,9 +63,11 @@ simpleFunction :: (GenSType t, GenSTypeList args) => Text -> Function t args
 simpleFunction fn  = Function fn genSType genSTypeList
 
 
+{-
 functionArgTypes :: Function rt args -> STypeList args
 functionArgTypes (Function _ _ al) = al
 functionArgTypes (IdentityFunction t) = t :> TNil
+-}
 
 data Density :: EType -> [EType] -> Type where
   Density :: FunctionName -- name
@@ -66,8 +78,10 @@ data Density :: EType -> [EType] -> Type where
 densityAsFunction :: Density gt ats -> Function EReal (gt ': ats)
 densityAsFunction (Density n gt ats) = Function n SReal (gt :> ats)
 
+{-
 densityFunctionArgTypes :: Density gt args -> STypeList (gt ': args)
 densityFunctionArgTypes (Density _ gt al) = gt :> al
+-}
 
 withDensity :: (FunctionName -> SType t -> STypeList args -> r)
             -> Density t args
