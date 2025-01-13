@@ -23,7 +23,6 @@ module Stan.Language.Functions
   where
 
 import Stan.Language.Types
---import Stan.Language.TypedList
 
 
 import Prelude hiding (Nat)

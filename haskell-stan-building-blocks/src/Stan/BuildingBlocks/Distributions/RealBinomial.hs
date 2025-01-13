@@ -15,6 +15,16 @@
 
 module Stan.BuildingBlocks.Distributions.RealBinomial where
 
+import qualified Stan.Language as SL
+import qualified Stan.Language.Statement as SL
+import Stan.Language (TypedList(..))
+import Stan.Language.Recursion (hfmap)
+import qualified Stan.Functions as SF
+import Stan.Functions.Operators
+import qualified Stan.Builder as SB
+import qualified Stan.BuildingBlocks.ArrayHelpers as SBBA
+
+{-
 import Data.Type.Equality (type (~))
 
 import qualified Stan.ModelBuilder.TypedExpressions.Types as TE
@@ -25,7 +35,7 @@ import qualified Stan.ModelBuilder.TypedExpressions.Operations as TE
 import qualified Stan.ModelBuilder.TypedExpressions.StanFunctions as TE
 import qualified Stan.ModelBuilder.Distributions as SD
 import qualified Stan.ModelBuilder as SB
-
+-}
 
 realBinomialLogitDistM :: forall t md gq . RealBinomialT t => SB.StanBuilderM md gq (SD.SimpleDist t '[t, t])
 realBinomialLogitDistM = do
