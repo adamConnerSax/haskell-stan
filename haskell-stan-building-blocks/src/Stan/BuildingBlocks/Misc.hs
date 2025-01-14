@@ -83,23 +83,18 @@ weightedMeanVarianceFunction = do
     n <- SL.declareRHSW "N" SL.intSpec $ SF.size xs
     wgtdXs <- SL.declareRHSW "wgtdXs" (SL.vectorSpec n) $ ws |.*| xs
     mv <- SL.declareW "meanVar" (SL.tuple2Spec SL.realSpec SL.realSpec)
+    let mvFst = SL.indexTuple SL.s0 mv
 --    let meanVar i = SL.slice0 (SL.intE i) mv
-    SL.addStmt $ SL.indexTuple SL.s0 mv SL.|=| (SF.sum wgtdXs |/| SF.sum ws)
-    y <- SL.declareRHSW "y" (SL.vectorSpec n) $ xs |-| SL.indexTuple SL.s0 mv --meanVar 1
+    SL.addStmt $  mvFst SL.|=| (SF.sum wgtdXs |/| SF.sum ws)
+    y <- SL.declareRHSW "y" (SL.vectorSpec n) $ xs |-| mvFst
     SL.addStmt $ SL.indexTuple SL.s1 mv SL.|=| (SF.sum (ws |.*| y |.*| y) |/| SF.sum ws)
     return mv
 
 unWeightedMeanVarianceFunction :: SB.StanFunctionsC es => Eff es (SL.Function (SL.ETuple [SL.EReal, SL.EReal]) '[SL.ECVec])
-unWeightedMeanVarianceFunction = do
-  let f :: SL.Function (SL.ETuple [SL.EReal, SL.EReal]) '[SL.ECVec]
-      f = SL.simpleFunction "unweighted_mean_variance"
-  SB.addFunctionOnce f (SL.Arg "xs" :> TNil)
-    $ \(xs :> TNil) -> SL.cwStmt $ do
-    _ <- SL.declareRHSW "N" SL.intSpec $ SF.size xs
-    mv <- SL.declareW "meanVar" (SL.tuple2Spec SL.realSpec SL.realSpec)
-    SL.addStmt $ SL.indexTuple SL.s0 mv SL.|=| SF.mean xs
-    SL.addStmt $ SL.indexTuple SL.s1 mv SL.|=| SF.variance xs
-    return mv
+unWeightedMeanVarianceFunction =
+  SB.addFunctionOnce (SL.simpleFunction "unweighted_mean_variance") (SL.Arg "xs" :> TNil)
+  $ \(xs :> TNil) -> SL.cwStmt $ pure $ SL.tupleE (SF.mean xs :> SF.variance xs :> TNil)
+
 
 realIntRatio :: SL.UExpr SL.EInt -> SL.UExpr SL.EInt -> SL.UExpr SL.EReal
 realIntRatio k l = let f x = (SL.realE 1 `SL.timesE` x) in f k `SL.divideE` f l

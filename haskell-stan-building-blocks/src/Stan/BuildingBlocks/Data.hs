@@ -39,7 +39,7 @@ import qualified Stan.Builder as SB
 import Effectful (Eff)
 
 addFixedInt :: SB.AddConstJsonC SB.ModelDataT es => Text -> Int -> Eff es SL.IntE
-addFixedInt t n = SB.addFixedIntJson SB.ModelData t Nothing n
+addFixedInt t n = SB.addFixedIntJson SB.ErrIfDuplicate SB.ModelData t Nothing n
 
 addIntData :: SB.AddJsonC r es
            => SB.RowTypeTag r
@@ -51,7 +51,7 @@ addIntData :: SB.AddJsonC r es
 addIntData rtt varName mLower mUpper f = do
   let cs = maybe SL.NoModifiers (SL.Modifiers . pure . SL.lowerM . SL.intE) mLower <> maybe SL.NoModifiers (SL.Modifiers . pure . SL.upperM . SL.intE) mUpper
       ndsF lE = SL.NamedDeclSpec varName $ SL.addVMs cs $ SL.intArraySpec lE
-  SB.addColumnJson rtt ndsF (SB.dataSetSizeE rtt) f
+  SB.addColumnJson SB.ErrIfDuplicate rtt ndsF (SB.dataSetSizeE rtt) f
 
 addCountData :: SB.AddJsonC r es
              => SB.RowTypeTag r
@@ -70,7 +70,7 @@ addRealData :: SB.AddJsonC r es
 addRealData rtt varName mLower mUpper f = do
   let cs = maybe SL.NoModifiers (SL.Modifiers . pure . SL.lowerM. SL.realE) mLower <> maybe SL.NoModifiers (SL.Modifiers . pure . SL.upperM . SL.realE) mUpper
       ndsF lE = SL.NamedDeclSpec varName $ SL.addVMs cs $ SL.vectorSpec lE
-  SB.addColumnJson rtt ndsF (SB.dataSetSizeE rtt) f
+  SB.addColumnJson  SB.ErrIfDuplicate rtt ndsF (SB.dataSetSizeE rtt) f
 
 addIntArrayData :: SB.AddJsonC r es
                 => SB.RowTypeTag r
@@ -83,17 +83,20 @@ addIntArrayData :: SB.AddJsonC r es
 addIntArrayData rtt varName innerSizeE mLower mUpper f = do
   let cs = maybe SL.NoModifiers (SL.Modifiers . pure . SL.lowerM . SL.intE) mLower <> maybe SL.NoModifiers (SL.Modifiers . pure . SL.upperM . SL.intE) mUpper
       ndsF lE = SL.NamedDeclSpec varName $ SL.array1Spec lE (SL.array1Spec innerSizeE $ SL.addVMs cs SL.intSpec)
-  SB.addColumnJson rtt ndsF (SB.dataSetSizeE rtt) f
+  SB.addColumnJson  SB.ErrIfDuplicate rtt ndsF (SB.dataSetSizeE rtt) f
 
 add2dMatrixData :: SB.AddJsonC r es
                 => SB.RowTypeTag r
                 -> SB.MatrixRowFromData r
                 -> Maybe Double
                 -> Maybe Double
-                -> Eff es SL.MatrixE
+                -> Eff es (SL.MatrixE, SL.IntE)
 add2dMatrixData rtt mrfd@(SB.MatrixRowFromData rowName ciM rl _) mLower mUpper = do
   let cs = maybe SL.NoModifiers (SL.Modifiers . pure . SL.lowerM . SL.realE) mLower <> maybe SL.NoModifiers (SL.Modifiers . pure . SL.upperM . SL.realE) mUpper
-  SB.add2dMatrixJson rtt mrfd cs -- (SB.NamedDim $ SB.dataSetName rtt)  --stanType bounds f
+      colName = fromMaybe ("K_" <> rowName) ciM
+  colE <- SB.addFixedIntJson SB.IgnoreIfDuplicate (SB.inputDataType $ SB.inputDataT rtt) colName (Just 1) rl -- add col
+  mE <- SB.add2dMatrixJson rtt mrfd cs -- (SB.NamedDim $ SB.dataSetName rtt)  --stanType bounds f
+  pure (mE, colE)
 
 -- This is specifically useful for things like categorical/multinomial
 addArrayOfIntArrays :: SB.AddJsonC r es

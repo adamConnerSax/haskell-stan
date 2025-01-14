@@ -92,7 +92,7 @@ library
                  , Stan.BuildingBlocks.SumToZero
   hs-source-dirs:   src
 
-executable builder-test
+executable building-blocks-test
    import: common-options
    ghc-options: -Wall -O
    hs-source-dirs: builder-tests

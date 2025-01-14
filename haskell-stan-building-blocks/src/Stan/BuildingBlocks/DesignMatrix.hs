@@ -28,6 +28,7 @@ import qualified Stan.Functions as SF
 import Stan.Functions.Operators
 import qualified Stan.Builder as SB
 import qualified Stan.BuildingBlocks.ArrayHelpers as SBBA
+import qualified Stan.BuildingBlocks.Data as ABBD
 
 {-
 import qualified Stan.ModelBuilder.TypedExpressions.Types as TE
@@ -39,8 +40,6 @@ import qualified Stan.ModelBuilder.TypedExpressions.StanFunctions as TE
 -}
 
 
-import qualified Stan.ModelBuilder.BuildingBlocks as SBB
-import qualified Stan.ModelBuilder as SB
 
 import qualified Control.Foldl as FL
 import qualified Control.Scanl as SL
@@ -196,7 +195,7 @@ rowPartFromBoundedEnumFunctions encodeAsZerosM name f = DesignMatrixRowPart name
 
 -- adds matrix (name_dataSetName)
 -- adds K_name (or given index) for col dimension (also <NamedDim name_Cols>)
--- row dimension should be N_dataSetName (which is <NamedDim dataSetName)
+-- row dimension should be N_dataSetName (which is <NamedDim dataSetName>)
 -- E.g., if name="Design" and dataSetName="myDat"
 -- In data
 -- "Int N_myDat;" (was already there)
