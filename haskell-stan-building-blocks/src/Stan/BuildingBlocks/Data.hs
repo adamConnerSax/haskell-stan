@@ -41,8 +41,8 @@ import Effectful (Eff)
 addFixedInt :: SB.AddConstJsonC SB.ModelDataT es => Text -> Int -> Eff es SL.IntE
 addFixedInt t n = SB.addFixedIntJson SB.ErrIfDuplicate SB.ModelData t Nothing n
 
-addIntData :: SB.AddJsonC r es
-           => SB.RowTypeTag r
+addIntData :: SB.AddJsonC i r es
+           => SB.RowTypeTag i r
            -> SL.VarName
            -> Maybe Int
            -> Maybe Int
@@ -53,15 +53,15 @@ addIntData rtt varName mLower mUpper f = do
       ndsF lE = SL.NamedDeclSpec varName $ SL.addVMs cs $ SL.intArraySpec lE
   SB.addColumnJson SB.ErrIfDuplicate rtt ndsF (SB.dataSetSizeE rtt) f
 
-addCountData :: SB.AddJsonC r es
-             => SB.RowTypeTag r
+addCountData :: SB.AddJsonC i r es
+             => SB.RowTypeTag i r
              -> SL.VarName
              -> (r -> Int)
              -> Eff es SL.IntArrayE
 addCountData rtt varName f = addIntData rtt varName (Just 0) Nothing f
 
-addRealData :: SB.AddJsonC r es
-            => SB.RowTypeTag r
+addRealData :: SB.AddJsonC i r es
+            => SB.RowTypeTag i r
             -> SL.VarName
             -> Maybe Double
             -> Maybe Double
@@ -72,8 +72,8 @@ addRealData rtt varName mLower mUpper f = do
       ndsF lE = SL.NamedDeclSpec varName $ SL.addVMs cs $ SL.vectorSpec lE
   SB.addColumnJson  SB.ErrIfDuplicate rtt ndsF (SB.dataSetSizeE rtt) f
 
-addIntArrayData :: SB.AddJsonC r es
-                => SB.RowTypeTag r
+addIntArrayData :: SB.AddJsonC i r es
+                => SB.RowTypeTag i r
                 -> SL.VarName
                 -> SL.IntE
                 -> Maybe Int
@@ -85,8 +85,8 @@ addIntArrayData rtt varName innerSizeE mLower mUpper f = do
       ndsF lE = SL.NamedDeclSpec varName $ SL.array1Spec lE (SL.array1Spec innerSizeE $ SL.addVMs cs SL.intSpec)
   SB.addColumnJson  SB.ErrIfDuplicate rtt ndsF (SB.dataSetSizeE rtt) f
 
-add2dMatrixData :: SB.AddJsonC r es
-                => SB.RowTypeTag r
+add2dMatrixData :: (SB.AddJsonC i r es, SB.AddConstJsonC i es)
+                => SB.RowTypeTag i r
                 -> SB.MatrixRowFromData r
                 -> Maybe Double
                 -> Maybe Double
@@ -94,13 +94,14 @@ add2dMatrixData :: SB.AddJsonC r es
 add2dMatrixData rtt mrfd@(SB.MatrixRowFromData rowName ciM rl _) mLower mUpper = do
   let cs = maybe SL.NoModifiers (SL.Modifiers . pure . SL.lowerM . SL.realE) mLower <> maybe SL.NoModifiers (SL.Modifiers . pure . SL.upperM . SL.realE) mUpper
       colName = fromMaybe ("K_" <> rowName) ciM
-  colE <- SB.addFixedIntJson SB.IgnoreIfDuplicate (SB.inputDataType $ SB.inputDataT rtt) colName (Just 1) rl -- add col
-  mE <- SB.add2dMatrixJson rtt mrfd cs -- (SB.NamedDim $ SB.dataSetName rtt)  --stanType bounds f
+  colE <- SB.addFixedIntJson SB.IgnoreIfDuplicate (SB.dataSetInputData rtt) colName (Just 1) rl -- add col
+  let rowE = SB.dataSetSizeE rtt
+  mE <- SB.add2dMatrixJson SB.ErrIfDuplicate rtt mrfd cs rowE colE -- (SB.NamedDim $ SB.dataSetName rtt)  --stanType bounds f
   pure (mE, colE)
 
 -- This is specifically useful for things like categorical/multinomial
-addArrayOfIntArrays :: SB.AddJsonC r es
-                    => SB.RowTypeTag r
+addArrayOfIntArrays :: (SB.AddJsonC i r es, SB.AddConstJsonC i es)
+                    => SB.RowTypeTag i r
                     -> SL.VarName
                     -> Maybe SL.VarName
                     -> Int
@@ -109,9 +110,9 @@ addArrayOfIntArrays :: SB.AddJsonC r es
                     -> Maybe Int
                     -> Eff es (SL.ArrayE (SL.EArray1 SL.EInt), SL.IntE)
 addArrayOfIntArrays rtt varName widthNameM width dataFromRowF mLower mUpper = do
-  let cs = maybe [] (pure . SL.lowerM . SL.intE) mLower ++ maybe [] (pure . SL.upperM . SL.intE) mUpper
+  let cs = maybe SL.NoModifiers (SL.Modifiers . pure . SL.lowerM . SL.intE) mLower <> maybe SL.NoModifiers (SL.Modifiers . pure . SL.upperM . SL.intE) mUpper
       widthName = fromMaybe ("K_" <> varName) widthNameM
       ndsF rowsE = SL.NamedDeclSpec varName $ SL.array1Spec rowsE (SL.addVMs cs $ SL.intArraySpec (SL.namedE widthName SL.SInt))
-  widthE <- SB.addFixedIntJson (SB.inputDataT rtt) widthName Nothing width
-  arrE <- SB.addColumnJson rtt ndsF dataFromRowF
+  widthE <- SB.addFixedIntJson SB.IgnoreIfDuplicate (SB.dataSetInputData rtt) widthName Nothing width
+  arrE <- SB.addColumnJson SB.ErrIfDuplicate rtt ndsF widthE dataFromRowF
   pure (arrE, widthE)

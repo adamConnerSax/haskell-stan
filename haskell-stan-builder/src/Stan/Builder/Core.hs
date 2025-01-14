@@ -76,17 +76,11 @@ instance Hashable (InputDataType i) where
 inputDataT :: InputDataType i -> InputDataT
 inputDataT ModelData = ModelDataT
 inputDataT GQData = GQDataT
-{-
-class InputDataTypeT a where
-  inputDataTypeT :: InputDataT
 
-instance InputDataTypeT (InputDataTypeT i) where
-  inputDataTypeT = ModelDataT
-
-instance InputDataTypeT GQData  where
-  inputDataTypeT = GQDataT
--}
---data ConstJsonFolds = ConstJsonFolds { modelCJ :: JSONSeriesFold (), gqCJ :: JSONSeriesFold () }
+caseInputDataType :: a -> a -> InputDataType i -> a
+caseInputDataType aModel aGQ = \case
+  ModelData -> aModel
+  GQData -> aGQ
 
 type RowInfoMakers i = DHash.DHashMap (RowTypeTag i) (GroupIndexAndIntMapMakers (DataSource i))
 
@@ -109,10 +103,9 @@ type StanBuilderEffs =
   , EffF.Fail
   ]
 
-
 type StanBuildLogC es = EffW.Writer (Seq.Seq Text) :> es
 type StanCodeC es = (EffF.Fail :> es, EffS.State StanCode :> es)
-type StanFunctionsC es = (StanCodeC es, EffS.State (Set Text) :> es)
+type StanFunctionsC es = (StanCodeC es, EffS.State FunctionNames :> es)
 type StanParametersC es = (EffS.State SBPT.BParameterCollection :> es, EffF.Fail :> es)
 
 type StanBuilderEff a = Eff StanBuilderEffs a
