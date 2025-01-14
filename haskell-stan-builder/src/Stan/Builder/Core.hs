@@ -1,5 +1,7 @@
 {-# LANGUAGE AllowAmbiguousTypes #-}
 {-# LANGUAGE DataKinds #-}
+{-# LANGUAGE DeriveAnyClass #-}
+{-# LANGUAGE DerivingVia #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE GADTs #-}
@@ -7,6 +9,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE StandaloneDeriving #-}
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE TypeOperators #-}
 
@@ -53,31 +56,47 @@ type TransformedParametersBlock = T.Text
 type ModelBlock = T.Text
 type GeneratedQuantitiesBlock = T.Text
 
-type family DataSource r :: Type
+type family DataSource (i :: InputDataT) :: Type
 
-type family SourceType (i :: InputDataT) :: Type
+--type family SourceType (i :: InputDataT) :: Type
 
 data InputDataType (i :: InputDataT) where
   ModelData :: InputDataType ModelDataT
   GQData :: InputDataType GQDataT
 
+deriving stock instance Eq (InputDataType i)
+deriving stock instance Show (InputDataType i)
+
+instance Hashable (InputDataType i) where
+  hashWithSalt n ModelData = hashWithSalt n ModelDataT
+  hashWithSalt n GQData = hashWithSalt n GQDataT
+
 inputDataT :: InputDataType i -> InputDataT
 inputDataT ModelData = ModelDataT
 inputDataT GQData = GQDataT
+{-
+class InputDataTypeT a where
+  inputDataTypeT :: InputDataT
 
+instance InputDataTypeT (InputDataTypeT i) where
+  inputDataTypeT = ModelDataT
+
+instance InputDataTypeT GQData  where
+  inputDataTypeT = GQDataT
+-}
 --data ConstJsonFolds = ConstJsonFolds { modelCJ :: JSONSeriesFold (), gqCJ :: JSONSeriesFold () }
 
-type RowInfoMakers d = DHash.DHashMap RowTypeTag (GroupIndexAndIntMapMakers d)
+type RowInfoMakers i d = DHash.DHashMap (RowTypeTag i) (GroupIndexAndIntMapMakers d)
 
 
 newtype FunctionNames = FunctionNames { unFunctionNames :: Set.Set SLT.FunctionName } deriving newtype (Show)
 newtype JSONNames = JSONNames { unJSONNames :: Set.Set Text } deriving newtype (Show)
 
 type StanBuilderEffs md gq =
-  [ EffS.State (RowInfoMakers md)
-  , EffS.State (RowInfos md)
-  , EffS.State (RowInfoMakers gq)
-  , EffS.State (RowInfos gq)
+  [ EffS.State (RowInfoMakers ModelDataT md)
+  , EffS.State (RowInfos ModelDataT md)
+  , EffS.State (RowInfoMakers GQDataT gq)
+  , EffS.State (RowInfos GQDataT gq)
   , EffS.State SBPT.BParameterCollection
   , EffS.State StanCode
   , EffS.State FunctionNames
@@ -113,8 +132,8 @@ buildEither = either buildError pure
 
 data BuilderState md gq = BuilderState { --declaredVars :: !ScopedDeclarations
 --                                       , indexBindings :: !SLA.IndexLookupCtxt
-  modelRowBuilders :: !(RowInfos md)
-  , gqRowBuilders :: !(RowInfos gq)
+  modelRowBuilders :: !(RowInfos ModelDataT md)
+  , gqRowBuilders :: !(RowInfos GQDataT gq)
   , constModelJSON :: JSONConstFold md  -- json for things which are attached to no data set.
   , constGQJSON :: JSONConstFold gq
   , hasFunctions :: !(Set.Set Text)
@@ -122,7 +141,7 @@ data BuilderState md gq = BuilderState { --declaredVars :: !ScopedDeclarations
   , code :: !StanCode
   }
 
-initialBuilderState :: RowInfos md -> RowInfos gq -> BuilderState md gq
+initialBuilderState :: RowInfos ModelDataT md -> RowInfos GQDataT gq -> BuilderState md gq
 initialBuilderState modelRowInfos gqRowInfos =
   BuilderState
 --  initialScopedDeclarations
@@ -143,7 +162,6 @@ dumpBuilderState bs = -- (BuilderState dvs ibs ris js hf c) =
   <> "\n gq row-info-keys: " <> show (DHash.keys $ gqRowBuilders bs)
   <> "\n functions: " <> show (hasFunctions bs)
   <> "\n parameterCollection (keys)" <> show (DM.keys $ SBPT.pdm $ parameterCollection bs)
-
 
 
 intMapsForDataSetFoldM :: GroupIntMapBuilders r -> Foldl.FoldM (Either Text) r (GroupIntMaps r)
@@ -194,34 +212,33 @@ data ToFoldable d row where
   ToFoldable :: Foldable f => (d -> f row) -> ToFoldable d row
 
 -- key for dependepent map.
-data RowTypeTag r where
-  RowTypeTag :: Typeable r => InputDataT -> Text -> RowTypeTag r
+data RowTypeTag (i :: InputDataT) r where
+  RowTypeTag :: (Typeable i, Typeable r) => InputDataType i -> Text -> RowTypeTag i r
 
-dataSetName :: RowTypeTag r -> Text
+dataSetName :: RowTypeTag i r -> Text
 dataSetName (RowTypeTag _ n) = n
 
-dataSetInputDataT :: RowTypeTag r -> InputDataT
-dataSetInputDataT (RowTypeTag idt _) = idt
-
+dataSetInputData :: RowTypeTag i r -> InputDataType i
+dataSetInputData (RowTypeTag idt _) = idt
 
 -- we need the empty constructors here to bring in the Typeable constraints in the GADT
-instance GADT.GEq RowTypeTag where
+instance GADT.GEq (RowTypeTag i) where
   geq rta@(RowTypeTag idt1 n1) rtb@(RowTypeTag idt2 n2) =
     case Reflection.eqTypeRep (Reflection.typeOf rta) (Reflection.typeOf rtb) of
       Just Reflection.HRefl -> if (n1 == n2) && (idt1 == idt2) then Just Reflection.Refl  else Nothing
       _ -> Nothing
 
-instance GADT.GShow RowTypeTag where
+instance GADT.GShow (RowTypeTag i) where
   gshowsPrec _ (RowTypeTag idt n) s = s ++ "RTT (name=)" ++ toString n ++ "; inputType=" ++ show idt ++ ")"
 
-instance Hashable.Hashable (Some.Some RowTypeTag) where
+instance Hashable.Hashable (Some.Some (RowTypeTag i)) where
   hash (Some.Some (RowTypeTag idt n)) = Hashable.hash idt `Hashable.hashWithSalt` n
   hashWithSalt s (Some.Some (RowTypeTag idt n)) = Hashable.hashWithSalt s idt `Hashable.hashWithSalt` n
 
 data GroupTypeTag k where
   GroupTypeTag :: Typeable k => Text -> SLE.IntE -> GroupTypeTag k
 
-groupIndexVarName :: RowTypeTag r -> GroupTypeTag k -> SLT.VarName
+groupIndexVarName :: RowTypeTag i r -> GroupTypeTag k -> SLT.VarName
 groupIndexVarName rtt gtt = dataSetName rtt <> "_" <> taggedGroupName gtt
 {-# INLINEABLE groupIndexVarName #-}
 
@@ -237,7 +254,7 @@ groupSizeE (GroupTypeTag _ lE) = lE
 --addEnumGroup :: (Enum k, Bounded k) => (EffS.State StanCode )Text -> GroupTypeTag k
 --addEnumGroup name size = GroupTypeTag name (TE.namedE ""size $ intE size)
 
-dataByGroupIndexName :: RowTypeTag r -> GroupTypeTag g -> Text
+dataByGroupIndexName :: RowTypeTag i r -> GroupTypeTag g -> Text
 dataByGroupIndexName rtt gtt = dataSetName rtt <> "_" <> taggedGroupName gtt
 
 -- should depend on length expressions as well. FIX
@@ -282,20 +299,20 @@ newtype GroupIntMapBuilders r = GroupIntMapBuilders (DHash.DHashMap GroupTypeTag
 
 -- r is a Phantom type here
 newtype GroupIntMaps r = GroupIntMaps (DHash.DHashMap GroupTypeTag IntMap.IntMap)
-type DataSetGroupIntMaps = DHash.DHashMap RowTypeTag GroupIntMaps
+type DataSetGroupIntMaps i = DHash.DHashMap (RowTypeTag i) GroupIntMaps
 
-displayDataSetGroupIntMaps :: DataSetGroupIntMaps -> Text
+displayDataSetGroupIntMaps :: DataSetGroupIntMaps i -> Text
 displayDataSetGroupIntMaps = DHash.foldrWithKey g ""
   where
-    g rtt gims t = t <> "rtt=" <> dataSetName rtt <> " (idt=" <> show (dataSetInputDataT rtt) <> "): " <> displayGroupIntMaps gims <> "\n"
+    g rtt gims t = t <> "rtt=" <> dataSetName rtt <> " (idt=" <> show (dataSetInputData rtt) <> "): " <> displayGroupIntMaps gims <> "\n"
 
 displayGroupIntMaps :: GroupIntMaps k -> Text
 displayGroupIntMaps (GroupIntMaps gim) = h gim where
   h = DHash.foldrWithKey (\gtt _im t -> t <> ", " <> taggedGroupName gtt) ""
 
 data GroupIndexAndIntMapMakers d r where
-  GroupIndexAndIntMapMakers :: DataSource r ~ d
-                            => ToFoldable d r
+  GroupIndexAndIntMapMakers :: {- DataSource r ~ d
+                            =>-} ToFoldable d r
                             -> GroupIndexMakers r
                             -> GroupIntMapBuilders r
                             -> GroupIndexAndIntMapMakers d r
@@ -310,8 +327,8 @@ contraIndexMap :: (a -> b) -> IndexMap b k -> IndexMap a k
 contraIndexMap f (IndexMap rgi ggi gigk rg) = IndexMap (contramap f rgi) ggi gigk (rg . f)
 
 data RowInfo d r where
-  RowInfo :: DataSource r ~ d
-          => ToFoldable d r
+  RowInfo :: {- DataSource r ~ d
+          => -}ToFoldable d r
           -> GroupIndexes r
           -> GroupIntMapBuilders r
           -> JSONSeriesFold r
@@ -326,7 +343,7 @@ groupIndexes (RowInfo _ gi _ _) = gi
 groupIntMapBuilders :: RowInfo d r -> GroupIntMapBuilders r
 groupIntMapBuilders (RowInfo _ _ gimb _) = gimb
 
-intMapsFromRowInfos :: RowInfos d -> d -> Either Text DataSetGroupIntMaps
+intMapsFromRowInfos :: RowInfos i d -> d -> Either Text (DataSetGroupIntMaps i)
 intMapsFromRowInfos rowInfos d =
   let f :: d -> RowInfo d r -> Either Text (GroupIntMaps r)
       f d' (RowInfo (ToFoldable h) _ gims _) = Foldl.foldM (intMapsForDataSetFoldM gims) (h d')
@@ -336,5 +353,5 @@ jsonSeries :: RowInfo d r -> JSONSeriesFold r
 jsonSeries (RowInfo _ _ _ jsf) = jsf
 
 -- the key is a name for the data-set.  The tag carries the toDataSet function
-type RowBuilder d = DSum.DSum RowTypeTag (RowInfo d)
-type RowInfos d = DHash.DHashMap RowTypeTag (RowInfo d)
+type RowBuilder i d = DSum.DSum (RowTypeTag i) (RowInfo d)
+type RowInfos i d = DHash.DHashMap (RowTypeTag i) (RowInfo d)

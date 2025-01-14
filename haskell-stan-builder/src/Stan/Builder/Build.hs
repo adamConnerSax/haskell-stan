@@ -175,14 +175,12 @@ addCodeAbove ma = do
   addProgramBelow pBelow
   pure a
 
-
-
-withRowInfo :: forall x es y r . EffS.State (SBC.RowInfos x) :> es
+withRowInfo :: forall x es y i r . EffS.State (SBC.RowInfos i x) :> es
             => Eff es y
             -> (forall z . SBC.RowInfo z r -> Eff es y)
-            -> SBC.RowTypeTag r
+            -> SBC.RowTypeTag i r
             -> Eff es y
-withRowInfo missing presentF rtt = EffS.get @(SBC.RowInfos x) >>= maybe missing presentF . DHash.lookup rtt
+withRowInfo missing presentF rtt = EffS.get @(SBC.RowInfos i x) >>= maybe missing presentF . DHash.lookup rtt
 {-
 varScopeBlock :: SLP.StanBlock -> SBC.StanBuilderM md gq ()
 varScopeBlock sb = case sb of

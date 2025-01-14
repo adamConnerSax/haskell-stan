@@ -16,7 +16,7 @@
 module Stan.Language.CodeWriter
   (
     CodeWriter(CodeWriter)
-  , MaybeCWc(..)
+  , MaybeCW(..)
   , asCW
   , cwStmt
   , cwStmt_

@@ -76,14 +76,14 @@ indexFold _ start =  Foldl.Fold step Set.empty done where
     mapToInt = Map.fromList keyedList
 
 
-addGroupIndexForData :: forall r k es . (EffF.Fail :> es, EffS.State (SBC.RowInfoMakers (SBC.DataSource r)) :> es)
+addGroupIndexForData :: forall i r k es . (EffF.Fail :> es, EffS.State (SBC.RowInfoMakers i (SBC.DataSource i)) :> es)
                      => SBC.GroupTypeTag k
-                     -> SBC.RowTypeTag r
+                     -> SBC.RowTypeTag i r
                      -> SBC.MakeIndex r k
                      -> Eff es ()
-addGroupIndexForData gtt rtt mkIndex = withRowInfoMakers @(SBC.DataSource r) f where
-  idt = SBC.dataSetInputDataT rtt
-  f :: forall x. SBC.RowInfoMakers x -> Eff es (Maybe (SBC.RowInfoMakers x), ())
+addGroupIndexForData gtt rtt mkIndex = withRowInfoMakers @i f where
+  idt = SBC.dataSetInputData rtt
+  f :: forall x. SBC.RowInfoMakers i x -> Eff es (Maybe (SBC.RowInfoMakers i x), ())
   f rowInfoMakers = do
     case DHash.lookup rtt rowInfoMakers of
       Nothing -> SBC.buildError $ "Data-set \"" <> SBC.dataSetName rtt <> "\" needs to be added to " <> show idt <> " before groups can be added to it."
@@ -122,13 +122,13 @@ dataToIntMapFromKeyedRow :: (r -> k) -> SBC.DataToIntMap r k
 dataToIntMapFromKeyedRow key = SBC.DataToIntMap $ Foldl.generalize fld where
   fld = fmap (IntMap.fromList . zip [1..]) $ Foldl.premap key Foldl.list
 
-addGroupIntMapForData :: forall r k es . (EffF.Fail :> es, EffS.State (SBC.RowInfoMakers (SBC.DataSource r)) :> es)
+addGroupIntMapForData :: forall i r k es . (EffF.Fail :> es, EffS.State (SBC.RowInfoMakers i (SBC.DataSource i)) :> es)
                       => SBC.GroupTypeTag k
-                      -> SBC.RowTypeTag r
+                      -> SBC.RowTypeTag i r
                       -> SBC.DataToIntMap r k
                       -> Eff es ()
-addGroupIntMapForData gtt rtt mkIntMap = withRowInfoMakers @(SBC.DataSource r) f where
-  f :: forall x. SBC.RowInfoMakers x -> Eff es (Maybe (SBC.RowInfoMakers x), ())
+addGroupIntMapForData gtt rtt mkIntMap = withRowInfoMakers @i f where
+  f :: forall x. SBC.RowInfoMakers i x -> Eff es (Maybe (SBC.RowInfoMakers i x), ())
   f rowInfoMakers = do
     case DHash.lookup rtt rowInfoMakers of
       Nothing -> SBC.buildError
@@ -139,15 +139,12 @@ addGroupIntMapForData gtt rtt mkIntMap = withRowInfoMakers @(SBC.DataSource r) f
           let newRims = DHash.insert rtt (SBC.GroupIndexAndIntMapMakers tf gims (SBC.GroupIntMapBuilders $ DHash.insert gtt mkIntMap gimbs)) rowInfoMakers
           pure (Just newRims, ())
 
-
-
-
-withRowInfoMakers :: forall x es y . EffS.State (SBC.RowInfoMakers x) :> es
-                  => (forall z. SBC.RowInfoMakers z -> Eff es (Maybe (SBC.RowInfoMakers z), y)) -> Eff es y
+withRowInfoMakers :: forall i es y . EffS.State (SBC.RowInfoMakers i (SBC.DataSource i)) :> es
+                  => (forall z. SBC.RowInfoMakers i z -> Eff es (Maybe (SBC.RowInfoMakers i z), y)) -> Eff es y
 withRowInfoMakers f = do
-  rims <- EffS.get @(SBC.RowInfoMakers x)
+  rims <- EffS.get @(SBC.RowInfoMakers i (SBC.DataSource i))
   (mRims, y) <- f rims
   case mRims of
     Nothing -> pure ()
-    Just newRims -> EffS.put @(SBC.RowInfoMakers x) newRims
+    Just newRims -> EffS.put @(SBC.RowInfoMakers i (SBC.DataSource i)) newRims
   pure y

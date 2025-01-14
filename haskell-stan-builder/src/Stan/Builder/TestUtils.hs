@@ -1,3 +1,4 @@
+{-# LANGUAGE DataKinds #-}
 module Stan.Builder.TestUtils
   (
     module Stan.Builder.TestUtils
@@ -10,7 +11,9 @@ import qualified Stan.Builder as SB
 import qualified Data.Aeson as A
 import qualified Data.Text as T
 
-testBuild :: md -> gq ->  SB.StanBuilderEff md gq () -> IO ()
+testBuild :: SB.DataSource SB.ModelDataT
+          -> SB.DataSource SB.GQDataT
+          ->  SB.StanBuilderEff (SB.DataSource SB.ModelDataT) (SB.DataSource SB.GQDataT) () -> IO ()
 testBuild md gq stanBuilder = do
   case SB.runStanBuilderDAG md gq stanBuilder of
     Left err -> putTextLn $ "Error in runStanBuilder: " <> err

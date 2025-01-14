@@ -91,6 +91,9 @@ declType (MatrixSpec st _ _ _) = st
 declType (ArraySpec n _ ds) = StanArray n (declType ds)
 declType (TupleSpec ts) = StanTuple $ SLR.hfmap declType ts
 
+declSType :: DeclSpec SLE.UExpr t -> SType t
+declSType = sTypeFromStanType . declType
+
 replaceDeclVMs :: SLS.VarModifiers r (ScalarType t) -> DeclSpec r t -> DeclSpec r t
 replaceDeclVMs vms = \case
   ScalarSpec st _ -> ScalarSpec st vms

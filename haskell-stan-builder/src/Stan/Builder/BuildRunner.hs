@@ -39,17 +39,21 @@ import qualified Effectful.Writer.Static.Local as EffW
 import qualified Effectful.Fail as EffF
 
 -- This weirdness avoids overlapping instances issues
-runGroupBuilder :: forall es x a . (EffF.Fail :> es, EffS.State SBC.StanCode :> es, EffS.State SBC.JSONNames :> es)
-                   => x -> Eff (EffS.State (SBC.RowInfoMakers x) ': EffS.State (SBC.RowInfos x) ': es) a -> Eff (EffS.State (SBC.RowInfos x) ': es) a
+runGroupBuilder :: forall es i a . (EffF.Fail :> es, EffS.State SBC.StanCode :> es, EffS.State SBC.JSONNames :> es)
+                => (SBC.DataSource i)
+                -> Eff (EffS.State (SBC.RowInfoMakers i (SBC.DataSource i)) ': EffS.State (SBC.RowInfos i (SBC.DataSource i)) ': es) a
+                -> Eff (EffS.State (SBC.RowInfos i (SBC.DataSource i)) ': es) a
 runGroupBuilder x m = do
   (a, rowInfoMakers) <- EffS.runState DHash.empty m
   let rowInfos = DHash.mapWithKey (buildRowInfo x) rowInfoMakers
   EffS.put rowInfos
-  addDataLengths @x
-  buildGroupIndexes @x
+  addDataLengths @i
+  buildGroupIndexes @i
   pure a
 
-runStanBuilderEff :: forall md gq a . md -> gq -> SBC.StanBuilderEff md gq a -> Either Text (SBC.BuilderState md gq, [Text], a)
+runStanBuilderEff :: forall a . SBC.DataSource SBC.ModelDataT -> SBC.DataSource SBC.GQDataT
+                  -> SBC.StanBuilderEff (SBC.DataSource SBC.ModelDataT) (SBC.DataSource SBC.GQDataT) a
+                  -> Either Text (SBC.BuilderState (SBC.DataSource SBC.ModelDataT) (SBC.DataSource SBC.GQDataT), [Text], a)
 runStanBuilderEff md gq m = do
   let effRes =  Eff.runPureEff
                 . EffF.runFail
@@ -71,7 +75,7 @@ runStanBuilderEff md gq m = do
       pure (SBC.BuilderState mRBs gqRBs mCJFs gqCJFs (SBC.unFunctionNames hf) pc c, Foldl.fold Foldl.list logs, a)
 
 -- build a new RowInfo from the row index and IntMap builders
-buildRowInfo :: d -> SBC.RowTypeTag r -> SBC.GroupIndexAndIntMapMakers d r -> SBC.RowInfo d r
+buildRowInfo :: d -> SBC.RowTypeTag i r -> SBC.GroupIndexAndIntMapMakers d r -> SBC.RowInfo d r
 buildRowInfo d _rtt (SBC.GroupIndexAndIntMapMakers tf@(SBC.ToFoldable f) ims imbs) = Foldl.fold fld $ f d  where
   gisFld = indexBuildersForDataSetFold ims
 --  uBindings = Map.insert (dataSetName rtt) (SLE.namedLIndex ("N_" <> dataSetName rtt))
@@ -99,28 +103,27 @@ mapToIndexMap h m = indxMap where
   intIndex = SBC.IntIndex (Map.size m) (lookupK . h)
   indxMap = SBC.IndexMap intIndex lookupK (toIntMap m) h
 
-addDataLengths :: forall x es . (EffF.Fail :> es
+addDataLengths :: forall i es . (EffF.Fail :> es
                                 , EffS.State SBC.StanCode :> es
-                                , EffS.State (SBC.RowInfos x) :> es
+                                , EffS.State (SBC.RowInfos i (SBC.DataSource i)) :> es
                                 , EffS.State SBC.JSONNames :> es
                                 )
                => Eff es ()
 addDataLengths = do
-  let addDataLength :: SBC.RowTypeTag r -> SBC.RowInfo x r -> Eff es (Maybe r)
+  let addDataLength :: SBC.RowTypeTag i r -> SBC.RowInfo (SBC.DataSource i) r -> Eff es (Maybe r)
       addDataLength rtt ri = case ri of
         SBC.RowInfo {} -> SBJ.addLengthJson SBJ.ErrIfDuplicate rtt ("N_" <> SBC.dataSetName rtt) >> pure Nothing
-  _ <- EffS.get @(SBC.RowInfos x) >>= DHash.traverseWithKey addDataLength
+  _ <- EffS.get @(SBC.RowInfos i (SBC.DataSource i)) >>= DHash.traverseWithKey addDataLength
   pure ()
 
-buildGroupIndexes :: forall x es . (EffF.Fail :> es
+buildGroupIndexes :: forall i es . (EffF.Fail :> es
                                    , EffS.State SBC.StanCode :> es
-                                   , EffS.State (SBC.RowInfos x) :> es
+                                   , EffS.State (SBC.RowInfos i (SBC.DataSource i)) :> es
                                    , EffS.State SBC.JSONNames :> es
                                    )
                   => Eff es ()
 buildGroupIndexes = do
-  let buildIndexJSONFold :: (EffS.State (SBC.RowInfos (SBC.DataSource r)) :> es)
-                         => SBC.RowTypeTag r -> SBC.GroupTypeTag k -> SBC.IndexMap r k -> Eff es (Maybe k)
+  let buildIndexJSONFold :: SBC.RowTypeTag i r -> SBC.GroupTypeTag k -> SBC.IndexMap r k -> Eff es (Maybe k)
       buildIndexJSONFold rtt gtt@(SBC.GroupTypeTag _gName lE) (SBC.IndexMap (SBC.IntIndex _gSize mIntF) _ _ _) = do
         let indexName = SBC.groupIndexVarName rtt gtt --dsName <> "_" <> gName
             ndsF x = SLS.NamedDeclSpec indexName $  SLS.addVMs (SLS.Modifiers [SLS.lowerM $ SLE.intE 1]) $ SLS.intArraySpec x
@@ -129,10 +132,10 @@ buildGroupIndexes = do
               Right y -> Right y
         _ <- SBJ.addColumnMJson SBJ.ErrIfDuplicate rtt ndsF lE mIntF'
         pure Nothing
-      buildRowFolds :: EffS.State (SBC.RowInfos d) :> es => SBC.RowTypeTag r -> SBC.RowInfo d r -> Eff es (Maybe r)
+      buildRowFolds :: SBC.RowTypeTag i r -> SBC.RowInfo d r -> Eff es (Maybe r)
       buildRowFolds rtt ri  = case ri of
         SBC.RowInfo _ (SBC.GroupIndexes gis) _ _ -> do
           _ <- DHash.traverseWithKey (buildIndexJSONFold rtt) gis
           pure Nothing
-  _ <- EffS.get @(SBC.RowInfos x) >>= DHash.traverseWithKey buildRowFolds
+  _ <- EffS.get @(SBC.RowInfos i (SBC.DataSource i)) >>= DHash.traverseWithKey buildRowFolds
   pure ()

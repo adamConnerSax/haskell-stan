@@ -30,9 +30,8 @@ newtype ModelData = ModelData { rows :: [Row]}
 -- set up source type families
 -- each row type needs a source
 -- And one source each for ModelData and GQData
-type instance SB.DataSource Row = ModelData
-type instance SB.SourceType SB.ModelDataT = ModelData
-type instance SB.SourceType SB.GQDataT = ()
+type instance SB.DataSource SB.ModelDataT = ModelData
+type instance SB.DataSource SB.GQDataT = ()
 
 modelData :: ModelData
 modelData = ModelData [Row "a1" A 12 1.1 1.2
