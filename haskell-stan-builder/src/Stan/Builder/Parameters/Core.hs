@@ -158,12 +158,12 @@ rawName t = t <> "_raw"
 
 -- should be used in place of runStanBuilder
 runStanBuilderDAG :: forall a .
-                     SBC.DataSource SBC.ModelDataT
-                  -> SBC.DataSource SBC.GQDataT
-                  -> SBC.StanBuilderEff (SBC.DataSource SBC.ModelDataT) (SBC.DataSource SBC.GQDataT) a
-                  -> Either Text (SBC.BuilderState (SBC.DataSource SBC.ModelDataT) (SBC.DataSource SBC.GQDataT), [Text], a)
+                     SBC.ModelSource
+                  -> SBC.GQSource
+                  -> SBC.StanBuilderEff a
+                  -> Either Text (SBC.BuilderState, [Text], a)
 runStanBuilderDAG md gq sb =
-  let sb' :: SBC.StanBuilderEff (SBC.DataSource SBC.ModelDataT) (SBC.DataSource SBC.GQDataT) a
+  let sb' :: SBC.StanBuilderEff a
       sb' = do
         a <- sb
         -- we need the parameter code to come before anything written assuming it exists

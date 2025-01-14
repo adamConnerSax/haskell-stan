@@ -83,7 +83,7 @@ addScopedFromCodeWriter :: SBC.StateAndFailEff SBC.StanCode es => SLC.CodeWriter
 addScopedFromCodeWriter cw = addStmtsToCode [SLS.scoped $ SLS.grouped stmts] >> return a
   where (stmts, a) = SLC.cwStmtList cw
 
-modifyCode' :: (SLP.StanProgram -> SLP.StanProgram) -> SBC.BuilderState md gq -> SBC.BuilderState md gq
+modifyCode' :: (SLP.StanProgram -> SLP.StanProgram) -> SBC.BuilderState -> SBC.BuilderState
 modifyCode' f bs = let (SBC.StanCode currentBlock oldProg) = SBC.code bs in bs { SBC.code = SBC.StanCode currentBlock $ f oldProg }
 
 modifyCode :: (EffS.State SBC.StanCode :> es)
@@ -94,7 +94,7 @@ modifyCode f = EffS.modify $ \(SBC.StanCode cb p) -> SBC.StanCode cb (f p)
 modifyCodeE :: (EffF.Fail :> es, EffS.State SBC.StanCode :> es) => Either Text (SLP.StanProgram -> SLP.StanProgram) -> Eff es ()
 modifyCodeE fE = SBC.buildEither fE >>= modifyCode
 
-setBlock' :: SLP.StanBlock -> SBC.BuilderState md gq -> SBC.BuilderState md gq
+setBlock' :: SLP.StanBlock -> SBC.BuilderState -> SBC.BuilderState
 setBlock' b bs = bs { SBC.code = (SBC.code bs) { SBC.curBlock = b} } -- lenses!
 
 setBlock :: EffS.State SBC.StanCode :> es => SLP.StanBlock -> Eff es ()
@@ -117,7 +117,7 @@ printExpr t e = addStmtToCode $ SLS.print (SLE.stringE ("\"" <> t <> "\"=") SLT.
 printTarget :: SBC.StanCodeC es => Text -> Eff es ()
 printTarget _ = printExpr "target" SF.targetVal
 
-modifyFunctionNames :: (Set Text -> Set Text) -> SBC.BuilderState md gq -> SBC.BuilderState md gq
+modifyFunctionNames :: (Set Text -> Set Text) -> SBC.BuilderState -> SBC.BuilderState
 modifyFunctionNames f bs = bs { SBC.hasFunctions = f (SBC.hasFunctions bs)}
 --(BuilderState dv vbs mrb gqrb cj hf c) = BuilderState dv vbs mrb gqrb cj (f hf) c
 
@@ -175,12 +175,12 @@ addCodeAbove ma = do
   addProgramBelow pBelow
   pure a
 
-withRowInfo :: forall x es y i r . EffS.State (SBC.RowInfos i x) :> es
+withRowInfo :: forall i es y r . EffS.State (SBC.RowInfos i) :> es
             => Eff es y
             -> (forall z . SBC.RowInfo z r -> Eff es y)
             -> SBC.RowTypeTag i r
             -> Eff es y
-withRowInfo missing presentF rtt = EffS.get @(SBC.RowInfos i x) >>= maybe missing presentF . DHash.lookup rtt
+withRowInfo missing presentF rtt = EffS.get @(SBC.RowInfos i) >>= maybe missing presentF . DHash.lookup rtt
 {-
 varScopeBlock :: SLP.StanBlock -> SBC.StanBuilderM md gq ()
 varScopeBlock sb = case sb of

@@ -41,8 +41,8 @@ import qualified Effectful.Fail as EffF
 -- This weirdness avoids overlapping instances issues
 runGroupBuilder :: forall es i a . (EffF.Fail :> es, EffS.State SBC.StanCode :> es, EffS.State SBC.JSONNames :> es)
                 => (SBC.DataSource i)
-                -> Eff (EffS.State (SBC.RowInfoMakers i (SBC.DataSource i)) ': EffS.State (SBC.RowInfos i (SBC.DataSource i)) ': es) a
-                -> Eff (EffS.State (SBC.RowInfos i (SBC.DataSource i)) ': es) a
+                -> Eff (EffS.State (SBC.RowInfoMakers i) ': EffS.State (SBC.RowInfos i) ': es) a
+                -> Eff (EffS.State (SBC.RowInfos i) ': es) a
 runGroupBuilder x m = do
   (a, rowInfoMakers) <- EffS.runState DHash.empty m
   let rowInfos = DHash.mapWithKey (buildRowInfo x) rowInfoMakers
@@ -52,8 +52,8 @@ runGroupBuilder x m = do
   pure a
 
 runStanBuilderEff :: forall a . SBC.DataSource SBC.ModelDataT -> SBC.DataSource SBC.GQDataT
-                  -> SBC.StanBuilderEff (SBC.DataSource SBC.ModelDataT) (SBC.DataSource SBC.GQDataT) a
-                  -> Either Text (SBC.BuilderState (SBC.DataSource SBC.ModelDataT) (SBC.DataSource SBC.GQDataT), [Text], a)
+                  -> SBC.StanBuilderEff a
+                  -> Either Text (SBC.BuilderState, [Text], a)
 runStanBuilderEff md gq m = do
   let effRes =  Eff.runPureEff
                 . EffF.runFail
@@ -105,7 +105,7 @@ mapToIndexMap h m = indxMap where
 
 addDataLengths :: forall i es . (EffF.Fail :> es
                                 , EffS.State SBC.StanCode :> es
-                                , EffS.State (SBC.RowInfos i (SBC.DataSource i)) :> es
+                                , EffS.State (SBC.RowInfos i) :> es
                                 , EffS.State SBC.JSONNames :> es
                                 )
                => Eff es ()
@@ -113,12 +113,12 @@ addDataLengths = do
   let addDataLength :: SBC.RowTypeTag i r -> SBC.RowInfo (SBC.DataSource i) r -> Eff es (Maybe r)
       addDataLength rtt ri = case ri of
         SBC.RowInfo {} -> SBJ.addLengthJson SBJ.ErrIfDuplicate rtt ("N_" <> SBC.dataSetName rtt) >> pure Nothing
-  _ <- EffS.get @(SBC.RowInfos i (SBC.DataSource i)) >>= DHash.traverseWithKey addDataLength
+  _ <- EffS.get @(SBC.RowInfos i) >>= DHash.traverseWithKey addDataLength
   pure ()
 
 buildGroupIndexes :: forall i es . (EffF.Fail :> es
                                    , EffS.State SBC.StanCode :> es
-                                   , EffS.State (SBC.RowInfos i (SBC.DataSource i)) :> es
+                                   , EffS.State (SBC.RowInfos i) :> es
                                    , EffS.State SBC.JSONNames :> es
                                    )
                   => Eff es ()
@@ -137,5 +137,5 @@ buildGroupIndexes = do
         SBC.RowInfo _ (SBC.GroupIndexes gis) _ _ -> do
           _ <- DHash.traverseWithKey (buildIndexJSONFold rtt) gis
           pure Nothing
-  _ <- EffS.get @(SBC.RowInfos i (SBC.DataSource i)) >>= DHash.traverseWithKey buildRowFolds
+  _ <- EffS.get @(SBC.RowInfos i) >>= DHash.traverseWithKey buildRowFolds
   pure ()

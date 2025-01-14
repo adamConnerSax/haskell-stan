@@ -27,9 +27,8 @@ data Row = Row { rowId :: Text, letterCode :: LetterCode, count :: Int, val1 :: 
 
 newtype ModelData = ModelData { rows :: [Row]}
 
--- set up source type families
--- each row type needs a source
--- And one source each for ModelData and GQData
+-- set up source type family
+-- One source each for ModelData and GQData
 type instance SB.DataSource SB.ModelDataT = ModelData
 type instance SB.DataSource SB.GQDataT = ()
 
@@ -39,7 +38,7 @@ modelData = ModelData [Row "a1" A 12 1.1 1.2
                       , Row "b1" B 7 0.7 1.1
                       ]
 
-stanBuilder :: SB.StanBuilderEff ModelData () ()
+stanBuilder :: SB.StanBuilderEff ()
 stanBuilder = do
   modelDataT <- SB.addData modelData "D1" SB.ModelData (SB.ToFoldable rows)
   letterGroupT <- SB.addEnumGroup @LetterCode "LC"

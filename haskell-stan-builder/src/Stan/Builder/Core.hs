@@ -57,6 +57,8 @@ type ModelBlock = T.Text
 type GeneratedQuantitiesBlock = T.Text
 
 type family DataSource (i :: InputDataT) :: Type
+type ModelSource = DataSource ModelDataT
+type GQSource = DataSource GQDataT
 
 --type family SourceType (i :: InputDataT) :: Type
 
@@ -86,22 +88,22 @@ instance InputDataTypeT GQData  where
 -}
 --data ConstJsonFolds = ConstJsonFolds { modelCJ :: JSONSeriesFold (), gqCJ :: JSONSeriesFold () }
 
-type RowInfoMakers i d = DHash.DHashMap (RowTypeTag i) (GroupIndexAndIntMapMakers d)
+type RowInfoMakers i = DHash.DHashMap (RowTypeTag i) (GroupIndexAndIntMapMakers (DataSource i))
 
 
 newtype FunctionNames = FunctionNames { unFunctionNames :: Set.Set SLT.FunctionName } deriving newtype (Show)
 newtype JSONNames = JSONNames { unJSONNames :: Set.Set Text } deriving newtype (Show)
 
-type StanBuilderEffs md gq =
-  [ EffS.State (RowInfoMakers ModelDataT md)
-  , EffS.State (RowInfos ModelDataT md)
-  , EffS.State (RowInfoMakers GQDataT gq)
-  , EffS.State (RowInfos GQDataT gq)
+type StanBuilderEffs =
+  [ EffS.State (RowInfoMakers ModelDataT)
+  , EffS.State (RowInfos ModelDataT)
+  , EffS.State (RowInfoMakers GQDataT)
+  , EffS.State (RowInfos GQDataT)
   , EffS.State SBPT.BParameterCollection
   , EffS.State StanCode
   , EffS.State FunctionNames
-  , EffS.State (JSONConstFold md)
-  , EffS.State (JSONConstFold gq)
+  , EffS.State (JSONConstFold ModelSource)
+  , EffS.State (JSONConstFold GQSource)
   , EffS.State JSONNames
   , EffW.Writer (Seq.Seq Text)
   , EffF.Fail
@@ -113,8 +115,7 @@ type StanCodeC es = (EffF.Fail :> es, EffS.State StanCode :> es)
 type StanFunctionsC es = (StanCodeC es, EffS.State (Set Text) :> es)
 type StanParametersC es = (EffS.State SBPT.BParameterCollection :> es, EffF.Fail :> es)
 
-type StanBuilderEff md gq a = Eff (StanBuilderEffs md gq) a
-
+type StanBuilderEff a = Eff StanBuilderEffs a
 
 type StateAndFailEff s es = (EffS.State s :> es, EffF.Fail :> es)
 
@@ -130,18 +131,18 @@ buildMaybe msg = maybe (buildError msg) pure
 buildEither :: EffF.Fail :> es => Either Text a -> Eff es a
 buildEither = either buildError pure
 
-data BuilderState md gq = BuilderState { --declaredVars :: !ScopedDeclarations
+data BuilderState = BuilderState { --declaredVars :: !ScopedDeclarations
 --                                       , indexBindings :: !SLA.IndexLookupCtxt
-  modelRowBuilders :: !(RowInfos ModelDataT md)
-  , gqRowBuilders :: !(RowInfos GQDataT gq)
-  , constModelJSON :: JSONConstFold md  -- json for things which are attached to no data set.
-  , constGQJSON :: JSONConstFold gq
+  modelRowBuilders :: !(RowInfos ModelDataT)
+  , gqRowBuilders :: !(RowInfos GQDataT)
+  , constModelJSON :: JSONConstFold ModelSource  -- json for things which are attached to no data set.
+  , constGQJSON :: JSONConstFold GQSource
   , hasFunctions :: !(Set.Set Text)
   , parameterCollection :: SBPT.BParameterCollection
   , code :: !StanCode
   }
 
-initialBuilderState :: RowInfos ModelDataT md -> RowInfos GQDataT gq -> BuilderState md gq
+initialBuilderState :: RowInfos ModelDataT -> RowInfos GQDataT -> BuilderState
 initialBuilderState modelRowInfos gqRowInfos =
   BuilderState
 --  initialScopedDeclarations
@@ -154,7 +155,7 @@ initialBuilderState modelRowInfos gqRowInfos =
   (SBPT.BParameterCollection mempty mempty)
   (StanCode SLP.SBData SLP.emptyStanProgram)
 
-dumpBuilderState :: BuilderState md gq -> Text
+dumpBuilderState :: BuilderState -> Text
 dumpBuilderState bs = -- (BuilderState dvs ibs ris js hf c) =
 --  "Declared Vars: " <> show (declaredVars bs)
 --  <> "\n index-bindings: " <> SLF.printLookupCtxt (indexBindings bs)
@@ -311,8 +312,7 @@ displayGroupIntMaps (GroupIntMaps gim) = h gim where
   h = DHash.foldrWithKey (\gtt _im t -> t <> ", " <> taggedGroupName gtt) ""
 
 data GroupIndexAndIntMapMakers d r where
-  GroupIndexAndIntMapMakers :: {- DataSource r ~ d
-                            =>-} ToFoldable d r
+  GroupIndexAndIntMapMakers :: ToFoldable d r
                             -> GroupIndexMakers r
                             -> GroupIntMapBuilders r
                             -> GroupIndexAndIntMapMakers d r
@@ -327,8 +327,7 @@ contraIndexMap :: (a -> b) -> IndexMap b k -> IndexMap a k
 contraIndexMap f (IndexMap rgi ggi gigk rg) = IndexMap (contramap f rgi) ggi gigk (rg . f)
 
 data RowInfo d r where
-  RowInfo :: {- DataSource r ~ d
-          => -}ToFoldable d r
+  RowInfo :: ToFoldable d r
           -> GroupIndexes r
           -> GroupIntMapBuilders r
           -> JSONSeriesFold r
@@ -343,7 +342,7 @@ groupIndexes (RowInfo _ gi _ _) = gi
 groupIntMapBuilders :: RowInfo d r -> GroupIntMapBuilders r
 groupIntMapBuilders (RowInfo _ _ gimb _) = gimb
 
-intMapsFromRowInfos :: RowInfos i d -> d -> Either Text (DataSetGroupIntMaps i)
+intMapsFromRowInfos :: RowInfos i -> DataSource i -> Either Text (DataSetGroupIntMaps i)
 intMapsFromRowInfos rowInfos d =
   let f :: d -> RowInfo d r -> Either Text (GroupIntMaps r)
       f d' (RowInfo (ToFoldable h) _ gims _) = Foldl.foldM (intMapsForDataSetFoldM gims) (h d')
@@ -353,5 +352,5 @@ jsonSeries :: RowInfo d r -> JSONSeriesFold r
 jsonSeries (RowInfo _ _ _ jsf) = jsf
 
 -- the key is a name for the data-set.  The tag carries the toDataSet function
-type RowBuilder i d = DSum.DSum (RowTypeTag i) (RowInfo d)
-type RowInfos i d = DHash.DHashMap (RowTypeTag i) (RowInfo d)
+type RowBuilder i = DSum.DSum (RowTypeTag i) (RowInfo (DataSource i))
+type RowInfos i = DHash.DHashMap (RowTypeTag i) (RowInfo (DataSource i))

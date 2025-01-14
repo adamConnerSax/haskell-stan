@@ -21,10 +21,10 @@ import Effectful ((:>), Eff)
 import qualified Effectful.State.Static.Local as EffS
 import qualified Effectful.Fail as EffF
 
-addData :: forall es r i . (Typeable r, Typeable i, EffF.Fail :> es, EffS.State (SBC.RowInfoMakers i (SBC.DataSource i)) :> es)
+addData :: forall es r i . (Typeable r, Typeable i, EffF.Fail :> es, EffS.State (SBC.RowInfoMakers i) :> es)
         => SBC.DataSource i -> Text -> SBC.InputDataType i  -> SBC.ToFoldable (SBC.DataSource i) r -> Eff es (SBC.RowTypeTag i r)
 addData _d name idt tf = do
-  rowInfoMakers <- EffS.get @(SBC.RowInfoMakers i (SBC.DataSource i))
+  rowInfoMakers <- EffS.get @(SBC.RowInfoMakers i)
   let rtt = SBC.RowTypeTag idt name
   case DHash.lookup rtt rowInfoMakers of
     Just _ -> SBC.buildError $ "Attempt to add data of matching type and name (\"" <> name <> "\" to model-data."
