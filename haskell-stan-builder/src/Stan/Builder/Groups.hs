@@ -30,12 +30,12 @@ import Effectful ((:>), Eff)
 import qualified Effectful.State.Static.Local as EffS
 import qualified Effectful.Fail as EffF
 
-type AddGroup k es = (Typeable k, EffF.Fail :> es, EffS.State (SBC.JSONConstFold (SBC.SourceType SBC.ModelDataT)) :> es, EffS.State SBC.StanCode :> es)
+type AddGroup k es = (Typeable k, SBJ.AddConstJsonC SBC.ModelDataT es)
 
 addGroup :: forall k es . AddGroup k es
          => Text -> Int -> Eff es (SBC.GroupTypeTag k)
 addGroup groupName size = do
-  lE <- SBJ.addFixedIntJson SBC.ModelData ("J_" <> groupName) (Just 1) size
+  lE <- SBJ.addFixedIntJson SBJ.ErrIfDuplicate SBC.ModelData ("J_" <> groupName) (Just 1) size
   pure $ SBC.GroupTypeTag groupName lE
 
 addEnumGroup :: forall k es . (Enum k, Bounded k, AddGroup k es)

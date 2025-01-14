@@ -70,7 +70,8 @@ inputDataT GQData = GQDataT
 type RowInfoMakers d = DHash.DHashMap RowTypeTag (GroupIndexAndIntMapMakers d)
 
 
-type FunctionNames = Set.Set SLT.FunctionName
+newtype FunctionNames = FunctionNames { unFunctionNames :: Set.Set SLT.FunctionName } deriving newtype (Show)
+newtype JSONNames = JSONNames { unJSONNames :: Set.Set Text } deriving newtype (Show)
 
 type StanBuilderEffs md gq =
   [ EffS.State (RowInfoMakers md)
@@ -82,6 +83,7 @@ type StanBuilderEffs md gq =
   , EffS.State FunctionNames
   , EffS.State (JSONConstFold md)
   , EffS.State (JSONConstFold gq)
+  , EffS.State JSONNames
   , EffW.Writer (Seq.Seq Text)
   , EffF.Fail
   ]

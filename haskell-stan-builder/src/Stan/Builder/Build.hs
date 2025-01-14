@@ -117,9 +117,72 @@ printExpr t e = addStmtToCode $ SLS.print (SLE.stringE ("\"" <> t <> "\"=") SLT.
 printTarget :: SBC.StanCodeC es => Text -> Eff es ()
 printTarget _ = printExpr "target" SF.targetVal
 
+modifyFunctionNames :: (Set Text -> Set Text) -> SBC.BuilderState md gq -> SBC.BuilderState md gq
+modifyFunctionNames f bs = bs { SBC.hasFunctions = f (SBC.hasFunctions bs)}
+--(BuilderState dv vbs mrb gqrb cj hf c) = BuilderState dv vbs mrb gqrb cj (f hf) c
 
---inBlock ::
+addFunctionCodeOnce :: (EffF.Fail :> es, EffS.State SBC.FunctionNames :> es, EffS.State SBC.StanCode :> es) => Text -> SLS.UStmt -> Eff es ()
+addFunctionCodeOnce functionsName fCode = do
+  fNames <- EffS.gets SBC.unFunctionNames
+  Control.Monad.unless (functionsName `Set.member` fNames) $ do
+    addStmtToBlock SLP.SBFunctions fCode
+    EffS.modify $ SBC.FunctionNames . Set.insert functionsName . SBC.unFunctionNames
 
+addFunctionOnce :: (EffF.Fail :> es, EffS.State SBC.FunctionNames :> es, EffS.State SBC.StanCode :> es)
+                => SLF.Function rt ats
+                -> SLF.TypedArgNames ats
+                -> (SLE.ExprList ats -> (SLS.UStmt, SLE.UExpr rt))
+                -> Eff es (SLF.Function rt ats)
+addFunctionOnce f@(SLF.Function fn) argNames fBF = do
+  fNames <- EffS.gets SBC.unFunctionNames
+  unless (fn `Set.member` fNames) $ do
+    addStmtToBlock SLP.SBFunctions $ SLS.function f argNames fBF
+    EffS.modify (SBC.FunctionNames . Set.insert fn . SBC.unFunctionNames)
+  pure f
+
+addFunctionOnce f@(SLF.IdentityFunction) _ _ = pure f
+
+
+addDensityOnce :: (SLT.GenSType gt, EffF.Fail :> es, EffS.State SBC.FunctionNames :> es, EffS.State SBC.StanCode :> es)
+               => SLF.Density gt ats
+               -> SLF.TypedArgNames (gt ': ats)
+               -> (SLE.ExprList (gt ': ats) -> (SLS.UStmt, SLE.UExpr SLT.EReal))
+               -> Eff es (SLF.Density gt ats)
+addDensityOnce f@(SLF.Density fn) argNames fBF = do
+  fsNames <- EffS.gets SBC.unFunctionNames
+  unless (fn `Set.member` fsNames) $ do
+    addStmtToBlock SLP.SBFunctions $  SLS.function (SLF.densityAsFunction f) argNames fBF
+    EffS.modify (SBC.FunctionNames . Set.insert fn . SBC.unFunctionNames)
+  pure f
+
+
+getAndEmptyProgram :: EffS.State SBC.StanCode :> es => Eff es SLP.StanProgram
+getAndEmptyProgram = do
+  (SBC.StanCode cb p) <- EffS.get
+  EffS.put $ SBC.StanCode cb SLP.emptyStanProgram
+  pure p
+
+addProgramBelow :: EffS.State SBC.StanCode :> es => SLP.StanProgram -> Eff es ()
+addProgramBelow pBelow = do
+  (SBC.StanCode cb pTop) <- EffS.get
+  EffS.put $
+    SBC.StanCode cb $ pTop <> pBelow
+
+addCodeAbove :: EffS.State SBC.StanCode :> es => Eff es () -> Eff es ()
+addCodeAbove ma = do
+  pBelow <- getAndEmptyProgram
+  a <- ma
+  addProgramBelow pBelow
+  pure a
+
+
+
+withRowInfo :: forall x es y r . EffS.State (SBC.RowInfos x) :> es
+            => Eff es y
+            -> (forall z . SBC.RowInfo z r -> Eff es y)
+            -> SBC.RowTypeTag r
+            -> Eff es y
+withRowInfo missing presentF rtt = EffS.get @(SBC.RowInfos x) >>= maybe missing presentF . DHash.lookup rtt
 {-
 varScopeBlock :: SLP.StanBlock -> SBC.StanBuilderM md gq ()
 varScopeBlock sb = case sb of
@@ -236,12 +299,6 @@ alreadyDeclaredAllScopes sd sn st =
     Left _ -> pure ()
 -}
 
-withRowInfo :: forall x es y r . EffS.State (SBC.RowInfos x) :> es
-            => Eff es y
-            -> (forall z . SBC.RowInfo z r -> Eff es y)
-            -> SBC.RowTypeTag r
-            -> Eff es y
-withRowInfo missing presentF rtt = EffS.get @(SBC.RowInfos x) >>= maybe missing presentF . DHash.lookup rtt
 
 {-
 withRowInfo' :: forall md gq es y r . EffS.State (SBC.RowBuilders md gq) :> es
@@ -352,7 +409,7 @@ addScopedDeclBindings dbs' m = do
   modify $ modifyIndexBindings $ const oldBindings
   return a
 -}
-
+{-
 modifyModelRowInfosA :: Applicative t
                    => (SBC.RowInfos md -> t (SBC.RowInfos md))
                    -> SBC.BuilderState md gq
@@ -366,7 +423,7 @@ modifyGQRowInfosA :: Applicative t
                    -> t (SBC.BuilderState md gq)
 modifyGQRowInfosA f bs = (\x -> bs {SBC.gqRowBuilders = x}) <$> f (SBC.gqRowBuilders bs)
 --(BuilderState dv vbs mrb gqrb cj hf c) = (\x -> BuilderState dv vbs mrb x cj hf c) <$> f gqrb
-
+-}
 {-
 modifyConstJson :: SBC.InputDataType -> (SBC.JSONSeriesFold () -> SBC.JSONSeriesFold ()) -> SBC.BuilderState md gq -> SBC.BuilderState md gq
 modifyConstJson idt f bs = case idt of
@@ -377,90 +434,3 @@ modifyConstJson idt f bs = case idt of
 addConstJson :: SBC.InputDataType -> SBC.JSONSeriesFold () -> SBC.BuilderState md gq -> SBC.BuilderState md gq
 addConstJson idt jf = modifyConstJson idt (<> jf)
 -}
-modifyFunctionNames :: (Set Text -> Set Text) -> SBC.BuilderState md gq -> SBC.BuilderState md gq
-modifyFunctionNames f bs = bs { SBC.hasFunctions = f (SBC.hasFunctions bs)}
---(BuilderState dv vbs mrb gqrb cj hf c) = BuilderState dv vbs mrb gqrb cj (f hf) c
-
-
-
-addFunctionCodeOnce :: (EffF.Fail :> es, EffS.State SBC.FunctionNames :> es, EffS.State SBC.StanCode :> es) => Text -> SLS.UStmt -> Eff es ()
-addFunctionCodeOnce functionsName fCode = do
-  fNames <- EffS.get
-  Control.Monad.unless (functionsName `Set.member` fNames) $ do
-    addStmtToBlock SLP.SBFunctions fCode
-    EffS.modify $ Set.insert functionsName
-
-
-addFunctionOnce :: (EffF.Fail :> es, EffS.State SBC.FunctionNames :> es, EffS.State SBC.StanCode :> es)
-                => SLF.Function rt ats
-                -> SLF.TypedArgNames ats
-                -> (SLE.ExprList ats -> (SLS.UStmt, SLE.UExpr rt))
-                -> Eff es (SLF.Function rt ats)
-addFunctionOnce f@(SLF.Function fn) argNames fBF = do
-  fNames <- EffS.get
-  unless (fn `Set.member` fNames) $ do
-    addStmtToBlock SLP.SBFunctions $ SLS.function f argNames fBF
-    EffS.modify (Set.insert fn)
-  pure f
-
-addFunctionOnce f@(SLF.IdentityFunction) _ _ = pure f
-
-{-
-addFunctionOnce :: SLT.AllGenSTypes ats
-                => SLF.Function rt ats
-                -> SLF.TypedArgNames ats
-                -> (SLE.ExprList ats -> (SLS.UStmt, SLE.UExpr rt))
-                -> SBC.StanBuilderM md gq (SLF.Function rt ats)
-addFunctionOnce f@(SLF.Function fn _ _) argNames fBF = do
-  fsNames <- gets SBC.hasFunctions
-  when (not $  fn `Set.member` fsNames) $ do
-    inBlock SLP.SBFunctions $ addStmtToCode $ SLS.function f argNames fBF
-    modify $ modifyFunctionNames (Set.insert fn)
-  pure f
-addFunctionOnce f@(SLF.IdentityFunction _) _ _ = pure f
--}
-
-addDensityOnce :: (SLT.GenSType gt, EffF.Fail :> es, EffS.State SBC.FunctionNames :> es, EffS.State SBC.StanCode :> es)
-               => SLF.Density gt ats
-               -> SLF.TypedArgNames (gt ': ats)
-               -> (SLE.ExprList (gt ': ats) -> (SLS.UStmt, SLE.UExpr SLT.EReal))
-               -> Eff es (SLF.Density gt ats)
-addDensityOnce f@(SLF.Density fn) argNames fBF = do
-  fsNames <- EffS.get
-  unless (fn `Set.member` fsNames) $ do
-    addStmtToBlock SLP.SBFunctions $  SLS.function (SLF.densityAsFunction f) argNames fBF
-    EffS.modify (Set.insert fn)
-  pure f
-
-{-
-addDensityOnce :: (SLT.AllGenSTypes ats, SLT.GenSType gt)
-               => SLF.Density gt ats
-               -> SLF.TypedArgNames (gt ': ats)
-               -> (SLE.ExprList (gt ': ats) -> (SLS.UStmt, SLE.UExpr SLT.EReal))
-               -> SBC.StanBuilderM md gq (SLF.Density gt ats)
-addDensityOnce f@(SLF.Density fn _ _) argNames fBF = do
-  fsNames <- gets SBC.hasFunctions
-  unless (fn `Set.member` fsNames) $ do
-    inBlock SLP.SBFunctions $ addStmtToCode $ SLS.function (SLF.densityAsFunction f) argNames fBF
-    modify $ modifyFunctionNames (Set.insert fn)
-  pure f
--}
-
-getAndEmptyProgram :: EffS.State SBC.StanCode :> es => Eff es SLP.StanProgram
-getAndEmptyProgram = do
-  (SBC.StanCode cb p) <- EffS.get
-  EffS.put $ SBC.StanCode cb SLP.emptyStanProgram
-  pure p
-
-addProgramBelow :: EffS.State SBC.StanCode :> es => SLP.StanProgram -> Eff es ()
-addProgramBelow pBelow = do
-  (SBC.StanCode cb pTop) <- EffS.get
-  EffS.put $
-    SBC.StanCode cb $ pTop <> pBelow
-
-addCodeAbove :: EffS.State SBC.StanCode :> es => Eff es () -> Eff es ()
-addCodeAbove ma = do
-  pBelow <- getAndEmptyProgram
-  a <- ma
-  addProgramBelow pBelow
-  pure a
