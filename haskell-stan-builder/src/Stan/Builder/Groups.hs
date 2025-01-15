@@ -17,6 +17,7 @@ module Stan.Builder.Groups
 where
 
 import qualified Stan.Builder.Core as SBC
+import qualified Stan.Builder.Build as SBB
 import qualified Stan.Builder.JSON as SBJ
 
 import Prelude hiding (All)
@@ -148,3 +149,17 @@ withRowInfoMakers f = do
     Nothing -> pure ()
     Just newRims -> EffS.put @(SBC.RowInfoMakers i) newRims
   pure y
+
+indexMap :: forall i r k es . (EffF.Fail :> es, EffS.State (SBC.RowInfos i) :> es)
+         => SBC.RowTypeTag i r -> SBC.GroupTypeTag k -> Eff es (SBC.IndexMap r k)
+indexMap rtt gtt = SBB.withRowInfo err f rtt where
+  err = SBC.buildError $ "ModelBuilder.indexMap: \"" <> SBC.dataSetName rtt <> "\" not present in row builders."
+  f :: forall x. SBC.RowInfo x r -> Eff es (SBC.IndexMap r k)
+  f rowInfo = do
+    case DHash.lookup gtt ((\(SBC.GroupIndexes x) -> x) $ SBC.groupIndexes rowInfo) of
+      Nothing -> SBC.buildError
+                 $ "ModelBuilder.indexMap: \""
+                 <> SBC.taggedGroupName gtt
+                 <> "\" not present in indexes for \""
+                 <> SBC.dataSetName rtt <> "\" (" <> show (SBC.dataSetInputData rtt) <> ")"
+      Just im -> return im

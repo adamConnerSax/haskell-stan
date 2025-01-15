@@ -3,7 +3,6 @@
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE OverloadedStrings #-}
---{-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE TypeFamilies #-}
@@ -45,15 +44,8 @@ import qualified Knit.Report as K
 import qualified Polysemy as P
 import qualified Say
 
---import Effectful (Eff)
-
 import qualified Control.Exception as X
 import qualified GHC.IO.Exception as X
-
---import Effectful ((:>), Eff)
---import qualified Effectful.State.Static.Local as EffS
---import qualified Effectful.Writer.Static.Local as EffW
---import qualified Effectful.Fail as EffF
 
 -- simplified runner for common cases
 runModel' :: forall st cd (b :: SB.InputDataT -> Type) c r.

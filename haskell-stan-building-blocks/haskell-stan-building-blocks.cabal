@@ -55,6 +55,7 @@ library
                , aeson >= 1.4 && < 2.3
                , bytestring >= 0.10 && < 0.14
                , cereal-vector >= 0.2 && < 0.3
+               , hs-cmdstan >= 0.1 && < 0.2
                , containers
                , dependent-hashmap >= 0.1.0.1 && < 0.2
                , dependent-map >= 0.4 && < 0.5

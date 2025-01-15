@@ -22,6 +22,7 @@ where
 import qualified Stan.Builder.JSON.JSONUtils as SJ
 import qualified Stan.Language.Types as SLT
 import qualified Stan.Language.Program as SLP
+import qualified Stan.Language.Expression as SLE
 import qualified Stan.Language.Expressions as SLE
 import qualified Stan.Builder.Parameters.Types as SBPT
 
@@ -107,6 +108,7 @@ type StanBuildLogC es = EffW.Writer (Seq.Seq Text) :> es
 type StanCodeC es = (EffF.Fail :> es, EffS.State StanCode :> es)
 type StanFunctionsC es = (StanCodeC es, EffS.State FunctionNames :> es)
 type StanParametersC es = (EffS.State SBPT.BParameterCollection :> es, EffF.Fail :> es)
+type StanGroupC i es = (EffF.Fail :> es, StanBuildLogC es, EffS.State (RowInfoMakers i) :> es)
 
 type StanBuilderEff a = Eff StanBuilderEffs a
 
@@ -250,6 +252,9 @@ groupSizeE (GroupTypeTag _ lE) = lE
 
 dataByGroupIndexName :: RowTypeTag i r -> GroupTypeTag g -> Text
 dataByGroupIndexName rtt gtt = dataSetName rtt <> "_" <> taggedGroupName gtt
+
+dataByGroupIndexE :: RowTypeTag i r -> GroupTypeTag k -> SLE.UExpr SLT.EIndexArray
+dataByGroupIndexE rtt gtt = SLE.namedE (dataByGroupIndexName rtt gtt) SLT.sIndexArray
 
 -- should depend on length expressions as well. FIX
 instance GADT.GEq GroupTypeTag where

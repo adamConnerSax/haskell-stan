@@ -1067,9 +1067,10 @@ dataSetSizeE rtt = TE.namedE (dataSetSizeName rtt) TE.SInt
 groupSizeE :: GroupTypeTag k -> TE.UExpr TE.EInt
 groupSizeE gtt = TE.namedE (groupSizeName gtt) TE.SInt
 
+{- Moved to Stan.Builder.Core
 byGroupIndexE :: RowTypeTag r -> GroupTypeTag k -> TE.UExpr TE.EIndexArray
 byGroupIndexE rtt gtt = TE.namedE (dataByGroupIndexName rtt gtt) TE.sIndexArray
-
+-}
 -- build an index from each data-sets relationship to the common group.
 -- only works when both data sets are model data or both are GQ data.
 -- add Json and use-binding
@@ -1107,6 +1108,7 @@ gqRowInfo rtt = do
     Nothing -> stanBuildError $ "gqRowInfo: data-set=" <> dataSetName rtt <> " not found in " <> show (inputDataType rtt) <> " rowBuilders."
     Just ri -> return ri
 
+{- Moved to Stan.Builder.Groups
 indexMap :: forall r k md gq . RowTypeTag r -> GroupTypeTag k -> StanBuilderM md gq (IndexMap r k)
 indexMap rtt gtt = withRowInfo err f rtt where
   err = stanBuildError $ "ModelBuilder.indexMap: \"" <> dataSetName rtt <> "\" not present in row builders."
@@ -1119,6 +1121,7 @@ indexMap rtt gtt = withRowInfo err f rtt where
                  <> "\" not present in indexes for \""
                  <> dataSetName rtt <> "\" (" <> show (inputDataType rtt) <> ")"
       Just im -> return im
+-}
 {-
   rowInfos <- rowBuilders <$> get
   case DHash.lookup rtt rowInfos of
