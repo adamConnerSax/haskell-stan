@@ -37,46 +37,50 @@ import qualified Stan.Builder as SB
 
 import Effectful (Eff)
 
-generatePosteriorPrediction :: SB.RowTypeTag r
+generatePosteriorPrediction :: SB.StanCodeC es
+                            => SB.RowTypeTag i r
                             -> SL.NamedDeclSpec (SL.EArray1 t)
-                            -> SMD.StanDist t pts rts
+                            -> SBD.StanDist t pts rts
                             -> SL.CodeWriter (SL.IntE -> SL.ExprList rts)
-                            -> SB.StanBuilderM md gq (SL.ArrayE t)
+                            -> Eff es (SL.ArrayE t)
 generatePosteriorPrediction rtt nds sDist psFCW = generatePosteriorPrediction' rtt nds rngE psFCW (const id)
-  where rngE f n = SMD.familyRNG sDist (f n)
+  where rngE f n = SBD.familyRNG sDist (f n)
 
-generatePosteriorPrediction' :: SB.RowTypeTag r
+generatePosteriorPrediction' :: SB.StanCodeC es
+                             => SB.RowTypeTag i r
                              -> SL.NamedDeclSpec (SL.EArray1 t)
                              -> ((SL.IntE -> SL.ExprList rts) -> SL.IntE -> SL.UExpr t) --SMD.StanDist t pts rts
                              -> SL.CodeWriter (SL.IntE -> SL.ExprList rts)
                              -> (SL.IntE -> SL.UExpr t -> SL.UExpr t)
-                             -> SB.StanBuilderM md gq (SL.ArrayE t)
-generatePosteriorPrediction' rtt nds rngF psFCW f = SB.inBlock SB.SBPosteriorPrediction $ do
-  ppE <- SB.stanDeclareN nds
+                             -> Eff es (SL.ArrayE t)
+generatePosteriorPrediction' rtt nds rngF psFCW f = SB.inBlock SL.SBPosteriorPrediction $ do
+  ppE <- SB.addFromCodeWriter $ SL.declareNW nds
   SB.addScopedFromCodeWriter $ do
     psF <- psFCW
     SL.addStmt
       $ SL.for "n" (SL.SpecificNumbered (SL.intE 1) (SL.namedE (SB.dataSetSizeName rtt) SL.SInt))
-      $ \nE -> [SL.sliceE SL.s0 nE ppE `SL.assign` f nE (rngF psF nE)]
+      $ \nE -> SL.sliceE SL.s0 nE ppE SL.|=| f nE (rngF psF nE)
     return ppE
 
-generatePosteriorPredictionV' :: SL.NamedDeclSpec t'
-                              -> SMD.StanDist t pts rts
+generatePosteriorPredictionV' :: SB.StanCodeC es
+                              => SL.NamedDeclSpec t'
+                              -> SBD.StanDist t pts rts
                               -> SL.MaybeCW (SL.ExprList rts)
                               -> (SL.UExpr t -> SL.UExpr t')
-                              -> SB.StanBuilderM md gq (SL.UExpr t')
-generatePosteriorPredictionV' nds sDist psMCW f = SB.inBlock SB.SBPosteriorPrediction $ do
+                              -> Eff es (SL.UExpr t')
+generatePosteriorPredictionV' nds sDist psMCW f = SB.inBlock SL.SBPosteriorPrediction $ do
   case psMCW of
     SL.NeedsCW psCW -> do
-      pp <- SB.stanDeclareN nds
+      pp <- SB.addFromCodeWriter $ SL.declareNW nds
       SB.addScopedFromCodeWriter $ do
         ps <- psCW
-        SL.addStmt $ pp `SL.assign` f (SMD.familyRNG sDist ps)
+        SL.addStmt $ pp SL.|=| f (SBD.familyRNG sDist ps)
         pure pp
-    SL.NoCW ps -> SB.addFromCodeWriter $ SL.declareRHSNW nds $ f (SMD.familyRNG sDist ps)
+    SL.NoCW ps -> SB.addFromCodeWriter $ SL.declareRHSNW nds $ f (SBD.familyRNG sDist ps)
 
-generatePosteriorPredictionV :: SL.NamedDeclSpec t
-                             -> SMD.StanDist t pts rts
+generatePosteriorPredictionV :: SB.StanCodeC es
+                             => SL.NamedDeclSpec t
+                             -> SBD.StanDist t pts rts
                              -> SL.MaybeCW (SL.ExprList rts)
-                             -> SB.StanBuilderM md gq (SL.UExpr t)
+                             -> Eff es (SL.UExpr t)
 generatePosteriorPredictionV nds sDist psMCW = generatePosteriorPredictionV' nds sDist psMCW id

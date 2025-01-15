@@ -2,27 +2,26 @@
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE StrictData #-}
-module Stan.Runner.SamplerCSV where
+module Stan.Runner.SamplerCSV
+  (
+    module Stan.Runner.SamplerCSV
+  )
+  where
 
 import Prelude hiding (many, some)
 import Text.Megaparsec
 import Text.Megaparsec.Char
 import qualified Text.Megaparsec.Char.Lexer as L
 
-import qualified Data.Massiv.Vector as MV
 import qualified Data.Massiv.Array as M
 
 import qualified Control.Foldl as FL
 import qualified Data.Map as Map
 import qualified Data.Text as T
---import qualified Data.Text.IO as T
 import qualified Data.Text.Lazy.Builder as TB
 import qualified Data.Text.Lazy as TL
-import qualified Data.Text.Lazy.IO as TL
 import qualified Data.Scientific as SCI
-import qualified Data.List as L
 import qualified System.Directory as Dir
-import Control.Exception (throwIO)
 import GHC.IO.Exception (userError)
 import qualified Say
 
@@ -99,15 +98,18 @@ gqCSV = do
   return $ GQCSV details header gqSamples'
 {-# INLINEABLE gqCSV #-}
 
+readFromFileAsText :: MonadIO m => FilePath -> m Text
+readFromFileAsText = fmap decodeUtf8 . readFileBS
+
 mergeSamplerAndGQCSVs :: FilePath -> FilePath -> FilePath -> IO ()
 mergeSamplerAndGQCSVs samplerFP gqFP mergedFP = do
   fmap not (Dir.doesFileExist samplerFP)
-    >>= flip when (M.throwM $ userError $ "mergeSamplerAndGQCSVs: "++ samplerFP ++ " does not exist!")
+    >>= flip when (M.throwM $ userError $ "mergeSamplerAndGQCSVs: " ++ samplerFP ++ " does not exist!")
   fmap not (Dir.doesFileExist gqFP)
-    >>= flip when (M.throwM $ userError $ "mergeSamplerAndGQCSVs: "++ gqFP ++ " does not exist!")
+    >>= flip when (M.throwM $ userError $ "mergeSamplerAndGQCSVs: " ++ gqFP ++ " does not exist!")
   let handleParse t = either (M.throwM . userError . ((t <> ": ") <>) . errorBundlePretty) return
-  s <-  parse samplerCSV samplerFP <$> readFileText samplerFP >>= handleParse "(mergeSamplerAndGQCSVs) parsing samplerCSV"
-  gq <- parse gqCSV gqFP <$> readFileText gqFP >>= handleParse "(mergeSamplerAndGQCSVs) parsing GQCSV"
+  s <-  parse samplerCSV samplerFP <$> readFromFileAsText samplerFP >>= handleParse "(mergeSamplerAndGQCSVs) parsing samplerCSV"
+  gq <- parse gqCSV gqFP <$> readFromFileAsText gqFP >>= handleParse "(mergeSamplerAndGQCSVs) parsing GQCSV"
   s' <- addReplaceGQToSamplerCSV gq s
   Say.say $ "Merge complete.  Writing " <> toText mergedFP
   writeFileText mergedFP $ samplerCSVText s'
@@ -116,9 +118,9 @@ mergeSamplerAndGQCSVs samplerFP gqFP mergedFP = do
 addReplaceGQToSamplerCSV :: M.MonadThrow m => GQCSV M.U -> SamplerCSV M.U -> m (SamplerCSV M.U)
 addReplaceGQToSamplerCSV gq s = do
   let m = Map.fromList $ zip (samplerHeader s) $ zip [0..] (Left <$> [0..])
-      replaceOrAdd m (h, n) = case Map.lookup h m of
-        Nothing -> Map.insert h (Map.size m, Right n) m
-        Just (i, _) -> Map.insert h (i, Right n) m
+      replaceOrAdd m' (h, n) = case Map.lookup h m' of
+        Nothing -> Map.insert h (Map.size m', Right n) m'
+        Just (i, _) -> Map.insert h (i, Right n) m'
       dropIndex (h, (_, c)) = (h, c)
       index = fst . snd
       colChoiceMap = FL.fold (FL.Fold replaceOrAdd m id) $ zip (gqHeader gq) [0..]
@@ -131,12 +133,12 @@ addReplaceGQToSamplerCSV gq s = do
 appendGQsToSamplerCSV :: FilePath -> FilePath -> FilePath -> IO ()
 appendGQsToSamplerCSV samplerFP gqFP mergedFP = do
   fmap not (Dir.doesFileExist samplerFP)
-    >>= flip when (M.throwM $ userError $ "mergeSamplerAndGQCSVs: "++ samplerFP ++ " does not exist!")
+    >>= flip when (M.throwM $ userError $ "mergeSamplerAndGQCSVs: " ++ samplerFP ++ " does not exist!")
   fmap not (Dir.doesFileExist gqFP)
-    >>= flip when (M.throwM $ userError $ "mergeSamplerAndGQCSVs: "++ gqFP ++ " does not exist!")
+    >>= flip when (M.throwM $ userError $ "mergeSamplerAndGQCSVs: " ++ gqFP ++ " does not exist!")
   let handleParse t = either (M.throwM . userError . ((t <> ": ") <>) . errorBundlePretty) return
-  s <-  parse samplerCSV samplerFP <$> readFileText samplerFP >>= handleParse "(appendGQToSamplerCSV) parsing samplerCSV "
-  gq <- parse gqCSV gqFP <$> readFileText gqFP >>= handleParse "(appendGQToSamplerCSV) parsing gqCSV "
+  s <-  parse samplerCSV samplerFP <$> readFromFileAsText samplerFP >>= handleParse "(appendGQToSamplerCSV) parsing samplerCSV "
+  gq <- parse gqCSV gqFP <$> readFromFileAsText gqFP >>= handleParse "(appendGQToSamplerCSV) parsing gqCSV "
   s' <- appendGQSamples gq s
   Say.say $ "Merge complete.  Writing " <> toText mergedFP
   writeFileText mergedFP $ samplerCSVText s'

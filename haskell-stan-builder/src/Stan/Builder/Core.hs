@@ -293,10 +293,10 @@ newtype GroupIntMapBuilders r = GroupIntMapBuilders (DHash.DHashMap GroupTypeTag
 
 -- r is a Phantom type here
 newtype GroupIntMaps r = GroupIntMaps (DHash.DHashMap GroupTypeTag IntMap.IntMap)
-type DataSetGroupIntMaps i = DHash.DHashMap (RowTypeTag i) GroupIntMaps
+newtype DataSetGroupIntMaps (i :: InputDataT) = DataSetGroupIntMaps { unDataSetGroupIntMaps :: DHash.DHashMap (RowTypeTag i) GroupIntMaps }
 
 displayDataSetGroupIntMaps :: DataSetGroupIntMaps i -> Text
-displayDataSetGroupIntMaps = DHash.foldrWithKey g ""
+displayDataSetGroupIntMaps = DHash.foldrWithKey g "" . unDataSetGroupIntMaps
   where
     g rtt gims t = t <> "rtt=" <> dataSetName rtt <> " (idt=" <> show (dataSetInputData rtt) <> "): " <> displayGroupIntMaps gims <> "\n"
 
@@ -339,7 +339,7 @@ intMapsFromRowInfos :: RowInfos i -> DataSource i -> Either Text (DataSetGroupIn
 intMapsFromRowInfos rowInfos d =
   let f :: d -> RowInfo d r -> Either Text (GroupIntMaps r)
       f d' (RowInfo (ToFoldable h) _ gims _) = Foldl.foldM (intMapsForDataSetFoldM gims) (h d')
-  in DHash.traverse (f d) rowInfos
+  in DataSetGroupIntMaps <$> DHash.traverse (f d) rowInfos
 
 jsonSeries :: RowInfo d r -> JSONSeriesFold r
 jsonSeries (RowInfo _ _ _ jsf) = jsf

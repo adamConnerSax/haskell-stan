@@ -9,6 +9,8 @@
 {-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE UndecidableInstances #-}
+{-# OPTIONS_GHC -fno-warn-x-partial #-} -- Ugh
+
 module Stan.Runner.Parameters.Massiv
   (
     module Stan.Runner.Parameters.Massiv
@@ -40,6 +42,7 @@ onlyNamed :: Text -> Map String CS.StanStatistic -> Map String CS.StanStatistic
 onlyNamed name = Map.filterWithKey (\k _ -> name == fst (T.break (== '[') (toText k)))
 
 -- These need to be right folds for the strides to be right!!
+
 
 parse1D ::  Text -> Map String CS.StanStatistic -> Either T.Text (M.Vector M.DL CS.StanStatistic)
 parse1D name m = do
@@ -125,7 +128,7 @@ index1D im v = do
     <> show ni <> " results and IntMap = " <> show im
   return $ Map.fromList $ zip (IntMap.elems im) (M.toList $ M.compute @M.B v)
 
-addIndexedMapLayer :: (Ord ka, Ord kb, Ord kc, M.Load r M.Ix1  (Map kb a), M.Size r)
+addIndexedMapLayer :: (Ord kc, M.Load r M.Ix1  (Map kb a), M.Size r)
               => (ka -> kb -> kc)
               -> IntMap.IntMap ka
               -> M.Vector r (Map kb a)
@@ -142,8 +145,7 @@ addIndexedMapLayer combineKeys ima vb  = do
   return $ Map.fromList (zip (IntMap.elems ima) (M.toList $ M.compute @M.B vb) >>= g)
 
 index2D :: forall ki kj r a.
-           (Show ki
-           , Ord ki
+           (Ord ki
            , Show kj
            , Ord kj
 --           , M.Load (M.R r) M.Ix1 a
@@ -174,14 +176,10 @@ index2D' imi imj a = M.traverseA @M.B (index1D imj) (M.outerSlices $ M.compute @
 
 
 index3D :: forall ki kj kk r a.
-           (Show ki
-           , Ord ki
-           , Show kj
+           (Ord ki
            , Ord kj
            , Show kk
            , Ord kk
---           , M.Load (M.R (M.R r)) M.Ix1 a
---           , M.Load (M.R r) M.Ix2 a
            , M.Load r M.Ix3 a
            )
         => IntMap.IntMap ki
@@ -193,17 +191,11 @@ index3D imi imj imk a = M.traverseA @M.B (index2D imj imk) (M.outerSlices $ M.co
                         >>= addIndexedMapLayer (\ki (kj, kk) -> (ki, kj, kk)) imi
 
 index4D :: forall ki kj kk kl r a.
-           (Show ki
-           , Ord ki
-           , Show kj
+           (Ord ki
            , Ord kj
-           , Show kk
            , Ord kk
            , Show kl
            , Ord kl
---           , M.Load (M.R (M.R (M.R r))) M.Ix1 a
---           , M.Load (M.R (M.R r)) M.Ix2 a
---           , M.Load (M.R r) M.Ix3 a
            , M.Load r M.Ix4 a
            )
         => IntMap.IntMap ki

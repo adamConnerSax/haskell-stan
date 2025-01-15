@@ -97,7 +97,7 @@ class InnerSlice (n :: Dim) where
   innerSlice :: ParameterStatistics n a -> InnerSliced n a
 
 instance InnerSlice D0 where
-  innerSlice = undefined
+  innerSlice = error "Stan.Runner.Parameters innerSlice called on somethign with dimension 0"
 
 instance InnerSlice D1  where
   innerSlice = id
@@ -146,16 +146,28 @@ instance ParseIndex D0 where
   parseIndex _t = Right ()
 
 instance ParseIndex D1 where
-  parseIndex t = (\[i] -> i) <$> parseIndex' 1 t
+  parseIndex t = listToTuple <$> parseIndex' 1 t where
+    listToTuple = \case
+      [i] -> i
+      _ -> error "Stan.Runner.Parameters: parseIndex called for one dimension but received list of other than one element"
 
 instance ParseIndex D2 where
-  parseIndex t = (\[i, j] -> (i, j)) <$> parseIndex' 2 t
+  parseIndex t = listToTuple <$> parseIndex' 2 t where
+     listToTuple = \case
+      [i, j] -> (i, j)
+      _ -> error "Stan.Runner.Parameters: parseIndex called for 2 dimensions but received list of other than 2 elements"
 
 instance ParseIndex D3 where
-  parseIndex t = (\[i, j, k] -> (i, j, k)) <$> parseIndex' 3 t
+  parseIndex t = listToTuple <$> parseIndex' 3 t where
+    listToTuple = \case
+      [i, j, k] -> (i, j, k)
+      _ -> error "Stan.Runner.Parameters: parseIndex called for 3 dimensions but received list of other than 3 elements"
 
 instance ParseIndex D4 where
-  parseIndex t = (\[i, j, k, l] -> (i, j, k, l)) <$> parseIndex' 4 t
+  parseIndex t = listToTuple <$> parseIndex' 4 t where
+    listToTuple = \case
+      [i, j, k, l] -> (i, j, k, l)
+      _ -> error "Stan.Runner.Parameters: parseIndex called for 4 dimensions but received list of other than 4 elements"
 
 parseIndex' :: Int -> T.Text -> Either T.Text [Int]
 parseIndex' n t = do

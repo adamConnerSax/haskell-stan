@@ -8,6 +8,7 @@
 {-# LANGUAGE KindSignatures #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE TypeFamilies #-}
 
 module Stan.Runner.Config
   (
@@ -202,9 +203,12 @@ noDiagnose sc = sc { mrcRunDiagnose = False }
 data InputDataType = ModelData | GQData deriving stock (Show, Eq, Ord, Enum, Bounded, Generic)
 instance Hashable InputDataType
 -}
+
+data ConstT (a :: SB.InputDataT) = ConstT
+
 -- produce indexes and json producer from the data as well as a data-set to predict.
-data DataIndexerType (b :: Type) where
-  NoIndex :: DataIndexerType ()
+data DataIndexerType (b :: SB.InputDataT -> Type) where
+  NoIndex :: DataIndexerType ConstT
   TransientIndex :: DataIndexerType b
   CacheableIndex :: (ModelRunnerConfig -> SB.InputDataT -> Text) -> DataIndexerType b
 
@@ -216,54 +220,56 @@ data Cacheable st b where
 
 data JSONSeries = JSONSeries { modelSeries :: A.Series, gqSeries :: A.Series}
 
-type Wrangler a b = a -> (Either T.Text b, a -> Either T.Text A.Series)
+type Wrangler i b = SB.DataSource i -> (Either T.Text (b i), SB.DataSource i -> Either T.Text A.Series)
 
+{-
 unitWrangle :: Wrangler () b
 unitWrangle _ = (Left "Wrangle Error. Attempt to build index using a \"Wrangle () _\""
                 , const $ Left "Wrangle Error. Attempt to build json using a \"Wrangle () _\""
                 )
+-}
 
-data DataWrangler md gq b p where
+data DataWrangler (b :: SB.InputDataT -> Type) p where
   Wrangle :: DataIndexerType b
-          -> Wrangler md b
-          -> Maybe (Wrangler gq b)
-          -> DataWrangler md gq b ()
+          -> Wrangler SB.ModelDataT b
+          -> Maybe (Wrangler SB.GQDataT b)
+          -> DataWrangler b ()
   WrangleWithPredictions :: DataIndexerType b
-                         -> Wrangler md b
-                         -> Maybe (Wrangler gq b)
-                         -> (Either T.Text b -> p -> Either T.Text A.Series)
-                         -> DataWrangler md gq b p
+                         -> Wrangler SB.ModelDataT b
+                         -> Maybe (Wrangler SB.GQDataT b)
+                         -> (Either T.Text (b SB.ModelDataT) -> Either T.Text (b SB.GQDataT) -> p -> Either T.Text A.Series)
+                         -> DataWrangler b p
 
-noPredictions :: DataWrangler md gq b p -> DataWrangler md gq b ()
+noPredictions :: DataWrangler b p -> DataWrangler b ()
 noPredictions w@(Wrangle _ _ _) = w
 noPredictions (WrangleWithPredictions x y z _) = Wrangle x y z
 
-dataIndexerType :: DataWrangler md gq b p -> DataIndexerType b
+dataIndexerType :: DataWrangler b p -> DataIndexerType b
 dataIndexerType (Wrangle i _ _) = i
 dataIndexerType (WrangleWithPredictions i _ _ _) = i
 
-modelWrangler :: DataWrangler md gq b p -> Wrangler md b -- -> (Either T.Text b, a -> Either T.Text JSONSeries)
+modelWrangler :: DataWrangler b p -> Wrangler SB.ModelDataT b -- -> (Either T.Text b, a -> Either T.Text JSONSeries)
 modelWrangler (Wrangle _ x _) = x
 modelWrangler (WrangleWithPredictions _ x _ _) = x
 
-mGQWrangler :: DataWrangler md gq b p -> Maybe (Wrangler gq b)  -- -> (Either T.Text b, a -> Either T.Text JSONSeries)
+mGQWrangler :: DataWrangler b p -> Maybe (Wrangler SB.GQDataT b)  -- -> (Either T.Text b, a -> Either T.Text JSONSeries)
 mGQWrangler (Wrangle _ _ x) = x
 mGQWrangler (WrangleWithPredictions _ _ x _) = x
 
 -- produce a result of type b from the data and the model summary
 -- NB: the cache time will give you newest of data, indices and stan output
-type ResultF r md gq b p c
+type ResultF r (b :: SB.InputDataT -> Type) p c
   = p
-    -> K.ActionWithCacheTime r (md, Either T.Text b)
-    -> Maybe (K.ActionWithCacheTime r (gq, Either T.Text b))
+    -> K.ActionWithCacheTime r (SB.DataSource SB.ModelDataT, Either T.Text (b SB.ModelDataT))
+    -> Maybe (K.ActionWithCacheTime r (SB.DataSource SB.GQDataT, Either T.Text (b SB.GQDataT)))
     -> K.Sem r c
 
-data ResultAction r md gq b p c where
-  UseSummary :: (CS.StanSummary -> ResultF r md gq b p c) -> ResultAction r md gq b p c
-  SkipSummary :: ResultF r md gq b p c -> ResultAction r md gq b p c
-  DoNothing :: ResultAction r md gq b p ()
+data ResultAction r (b :: SB.InputDataT -> Type) p c where
+  UseSummary :: (CS.StanSummary -> ResultF r b p c) -> ResultAction r b p c
+  SkipSummary :: ResultF r b p c -> ResultAction r b p c
+  DoNothing :: ResultAction r b p ()
 
-emptyResult :: ResultAction r md gq b p ()
+emptyResult :: ResultAction r b p ()
 emptyResult = SkipSummary $ \_ _ _ -> pure ()
 
 sampleFile :: T.Text -> Maybe Int -> FilePath

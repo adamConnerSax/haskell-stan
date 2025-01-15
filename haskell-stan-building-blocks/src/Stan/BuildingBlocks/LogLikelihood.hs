@@ -37,13 +37,14 @@ import qualified Stan.Builder as SB
 
 import Effectful (Eff)
 
-generateLogLikelihood :: SB.RowTypeTag r
-                      -> SMD.StanDist t pts rts
+generateLogLikelihood :: SB.StanCodeC es
+                      => SB.RowTypeTag i r
+                      -> SBD.StanDist t pts rts
                       -> SL.CodeWriter (SL.IntE -> SL.ExprList pts)
                       -> SL.CodeWriter (SL.IntE -> SL.UExpr t)
-                      -> SB.StanBuilderM md gq ()
+                      -> Eff es ()
 generateLogLikelihood rtt sDist slicedArgsFCW slicedYFCW =
-  generateLogLikelihood' $ addToLLSet rtt (LLDetails (SMD.familyLDF sDist) slicedArgsFCW slicedYFCW) emptyLLSet
+  generateLogLikelihood' $ addToLLSet rtt (LLDetails (SBD.familyLDF sDist) slicedArgsFCW slicedYFCW) emptyLLSet
 
 -- 2nd arg returns something which might need slicing at the loop index for paramters that depend on the index
 -- 3rd arg also
@@ -58,39 +59,39 @@ newtype LLDetailsList r = LLDetailsList [LLDetails r]
 addDetailsLists :: LLDetailsList r -> LLDetailsList r -> LLDetailsList r
 addDetailsLists (LLDetailsList x) (LLDetailsList y) = LLDetailsList (x <> y)
 
-type LLSet = DHash.DHashMap SB.RowTypeTag LLDetailsList
+type LLSet i = DHash.DHashMap (SB.RowTypeTag i) LLDetailsList
 
-emptyLLSet :: LLSet
+emptyLLSet :: LLSet i
 emptyLLSet = DHash.empty
 
-addToLLSet :: SB.RowTypeTag r -> LLDetails r -> LLSet  -> LLSet
+addToLLSet :: SB.RowTypeTag i r -> LLDetails r -> LLSet i  -> LLSet i
 addToLLSet rtt d llSet = DHash.insertWith addDetailsLists rtt (LLDetailsList [d]) llSet
 
-mergeLLSets ::  LLSet  -> LLSet -> LLSet
+mergeLLSets ::  LLSet i -> LLSet i -> LLSet i
 mergeLLSets = DHash.unionWith addDetailsLists
 
 -- we return RowTypeTag from doOne so that DHash traversal can infer types, I think.
-generateLogLikelihood' :: LLSet -> SB.StanBuilderM md gq ()
-generateLogLikelihood' llSet =  SB.inBlock SB.SBLogLikelihood $ do
+generateLogLikelihood' :: forall i es . SB.StanCodeC es => LLSet i -> Eff es ()
+generateLogLikelihood' llSet =  SB.inBlock SL.SBLogLikelihood $ do
   let prependSizeName rtt (LLDetailsList ds) ls = Prelude.replicate (Prelude.length ds) (SB.dataSetSizeName rtt) ++ ls
   llSizeListNE <- case nonEmpty (DHash.foldrWithKey prependSizeName [] llSet) of
-    Nothing -> SB.stanBuildError "generateLogLikelihood': empty set of log-likelihood details given"
+    Nothing -> SB.buildError "generateLogLikelihood': empty set of log-likelihood details given"
     Just x -> return x
   let namedIntE n = SL.namedE n SL.SInt
       llSizeE = SL.multiOpE SL.SAdd $ fmap namedIntE llSizeListNE
-  logLikE <- SB.stanDeclareN $ SL.NamedDeclSpec "log_lik" $ SL.vectorSpec llSizeE []
-  let doOne :: SB.RowTypeTag a -> LLDetails a -> StateT [SL.UExpr SL.EInt] (SB.StanBuilderM md gq) (SB.RowTypeTag a)
+  logLikE <- SB.addFromCodeWriter $ SL.declareNW $ SL.NamedDeclSpec "log_lik" $ SL.vectorSpec llSizeE
+  let doOne :: SB.RowTypeTag i a -> LLDetails a -> StateT [SL.UExpr SL.EInt] (Eff es) (SB.RowTypeTag i a)
       doOne rtt (LLDetails df pFCW yFCW) = do
         prevSizes <- get
         let --sizeE =  SL.multiOpE SL.SAdd $ namedIntE "n" :| prevSizes
         lift $ SB.addScopedFromCodeWriter $ do
           pF <- pFCW
           yF <- yFCW
-          SL.addStmt $ SL.for "n" (SL.SpecificNumbered (SL.intE 1) (namedIntE $ dataSetSizeName rtt))
-            $ \nE -> [SL.sliceE SL.s0 nE logLikE `SL.assign` df (yF nE) (pF nE)]
+          SL.addStmt $ SL.for "n" (SL.SpecificNumbered (SL.intE 1) (SB.dataSetSizeE rtt))
+            $ \nE -> SL.sliceE SL.s0 nE logLikE `SL.assign` df (yF nE) (pF nE)
         put $ SL.namedE (SB.dataSetSizeName rtt) SL.SInt: prevSizes
         pure rtt
-      doList ::  SB.RowTypeTag a -> LLDetailsList a -> StateT [SL.UExpr SL.EInt] (SB.StanBuilderM md gq) (SB.RowTypeTag a)
+      doList :: SB.RowTypeTag i a -> LLDetailsList a -> StateT [SL.UExpr SL.EInt] (Eff es) (SB.RowTypeTag i a)
       doList rtt (LLDetailsList lls) = traverse_ (doOne rtt) lls >> pure rtt
   _ <- evalStateT (DHash.traverseWithKey doList llSet) []
   pure ()
