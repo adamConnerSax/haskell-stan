@@ -203,7 +203,7 @@ rowPartFromBoundedEnumFunctions encodeAsZerosM name f = DesignMatrixRowPart name
 -- "Int K_Design;"
 -- "matrix[N_myDat, K_Design] Design_myDat;"
 -- with accompanying json
-addDesignMatrix :: SB.AddJsonC i r es => SB.RowTypeTag i r -> DesignMatrixRow r -> Maybe SL.IndexKey -> Eff es (SL.UExpr SL.EMat)
+addDesignMatrix :: (SB.AddJsonC i r es, SB.AddConstJsonC i es) => SB.RowTypeTag i r -> DesignMatrixRow r -> Maybe SL.IndexKey -> Eff es (SL.UExpr SL.EMat)
 addDesignMatrix rtt dmr colIndexM = fst <$> SBBD.add2dMatrixData rtt (matrixFromRowData dmr colIndexM) Nothing Nothing
 {-# INLINEABLE addDesignMatrix #-}
 
@@ -426,11 +426,6 @@ shiftAndScaleDataMatrixFunction =  do
           in colk newMatrix SL.|=| ((colk m |-| atk means) |/| atk sds)
     return newMatrix
 
-codeBlock :: SBC.InputDataType i -> SLP.StanBlock
-codeBlock = \case
-  SBC.ModelData -> SLP.SBTransformedData
-  SBC.GQData -> SLP.S
-
 centerDataMatrix :: (SB.StanFunctionsC es, SB.StanCodeC es)
                  => DMStandardization
                  -> SL.UExpr SL.EMat -- matrix
@@ -467,8 +462,7 @@ centerDataMatrix dms m mwgtsV namePrefix = do
               $ SL.declareRHSNW (SL.NamedDeclSpec (namePrefix <> "_standardized") $ SL.matrixSpec (SF.rows m) (SF.cols m))
               $ stdize m
       let centerF idt m' n = do
---            let block = if idt == SB.ModelData then SL.SBTransformedData else SL.SBTransformedDataGQ
-            SB.inBlock (codeBlock idt) $ SB.addFromCodeWriter
+            SB.inBlock (SB.caseInputDataType SL.SBTransformedData SL.SBTransformedDataGQ idt) $ SB.addFromCodeWriter
               $ SL.declareRHSNW (SL.NamedDeclSpec n $ SL.matrixSpec (SF.cols m') (SF.cols m')) $ stdize m'
       return (mStd, centerF)
     DMCenterOnly -> do
@@ -486,11 +480,10 @@ centerDataMatrix dms m mwgtsV namePrefix = do
                    $ SL.declareRHSNW (SL.NamedDeclSpec (namePrefix <> "_centered") $ SL.matrixSpec (SF.rows m) (SF.cols m))
                    $ centered m
       let centerF idt m' n = do
-            let block = if idt == SB.ModelData then SL.SBTransformedData else SL.SBTransformedDataGQ
-            SB.inBlock block
+            SB.inBlock (SB.caseInputDataType SL.SBTransformedData SL.SBTransformedDataGQ idt)
               $ SB.addFromCodeWriter
               $ SL.declareRHSNW (SL.NamedDeclSpec n $ SL.matrixSpec (SF.rows m') (SF.cols m')) $ centered m'
-      return (mCentered, centerF)
+      pure (mCentered, centerF)
 
 
 
@@ -522,7 +515,7 @@ thinQR xE xName mThetaBeta = do
           SB.addFromCodeWriter $ do
             beta <- SL.declareNW betaNDS
             SL.addStmt $ SL.for "j" (SL.SpecificNumbered (SL.intE 0) arrSizeE)
-                               $ \j -> let atj = SL.sliceE SL.s0 j in [atj beta `SL.assign` (rI `SL.timesE` atj theta)]
+                               $ \j -> let atj = SL.sliceE SL.s0 j in atj beta `SL.assign` (rI `SL.timesE` atj theta)
             pure beta
 
         Nothing -> SB.buildError $ "DesignMatrix.thinQR array of dimension other than 1 given for theta."
