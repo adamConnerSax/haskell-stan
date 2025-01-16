@@ -24,9 +24,7 @@ where
 import Prelude hiding (Nat, sum, All)
 
 import qualified Stan.Language as SL
-import qualified Stan.Language.Statement as SL
 import Stan.Language (TypedList(..))
-import Stan.Language.Recursion (hfmap)
 import qualified Stan.Functions as SF
 import Stan.Functions.Operators
 import qualified Stan.Builder as SB
@@ -97,6 +95,7 @@ flattenCW sn ds e =
           fv <- SL.declareNW $ SL.NamedDeclSpec (sn <> "_flat") $ flatDS ds
           flattenLoop "k" arrDims fv e
           pure fv
+        _ -> error "flattenCW: Given an array of something other than matrices!"
     _ -> error "flattenCW: Given type of something other than matrix or array of matrices!"
 
 flattenACW :: (ParamC t)
@@ -108,6 +107,7 @@ flattenACW ds e eFlat =
     SL.ArraySpec DT.SS arrDims mds -> do
       case mds of
         SL.MatrixSpec SL.StanMatrix _ _ _ -> flattenLoop "k" arrDims eFlat e
+        _ -> error "flattenCW: Given an array of something other than matrices!"
     _ -> error "flattenCW: Given type of something other than matrix or array of matrices!"
 
 
@@ -244,7 +244,6 @@ matrixMultiNormalParameter :: forall t es .
                               (ParamC t
                               ,SF.MultiNormalDensityC (FlatParamT t)
                               , SB.StanParametersC es
-                              , SB.StanCodeC es
                               )
                            => MatrixCovarianceStructure
                            -> Centering
@@ -258,14 +257,11 @@ matrixMultiNormalParameter cs cent muP sigmaP nds = do
       multiNormalD x muFlat dSigma = SL.sample x SF.multi_normal (muFlat :> dSigma :> TNil)
       ds = SL.decl nds
       fDS = flatDS ds
-      givenName = SL.declName nds
+--      givenName = SL.declName nds
       justDeclare _ = SB.DeclCodeF $ const $ pure ()
       noPriorCode _ _ = pure ()
       flatSigmaP = SB.mapped flatten sigmaP
-  zeroE <- case cent of
-    NonCentered -> SB.inBlock SL.SBTransformedData $ SB.addFromCodeWriter $ zeroVecE givenName fDS
-    Centered -> pure $ SL.namedE "ERROR" $ SL.genSType @(FlatParamT t)
---  pTag <- DAG.addBuildParameter $ DAG.TransformedP nds [] TNil DAG.ModelBlock justDeclare TNil noPriorCode
+
   p <- SB.addBuildParameter $ SB.UntransformedP nds [] TNil noPriorCode
   let rawNDS = SL.NamedDeclSpec (SL.declName nds <> "_raw") fDS
       sampleF e fm s = case cs of
@@ -285,6 +281,11 @@ matrixMultiNormalParameter cs cent muP sigmaP nds = do
       pure p
     NonCentered -> SB.buildError "matrixMultiNormalParameter: Unsupported Non-Centered structure"
 {-
+      zeroE <- case cent of
+      NonCentered -> SB.inBlock SL.SBTransformedData $ SB.addFromCodeWriter $ zeroVecE givenName fDS
+      Centered -> pure $ SL.namedE "ERROR" $ SL.genSType @(FlatParamT t)
+--    pTag <- DAG.addBuildParameter $ DAG.TransformedP nds [] TNil DAG.ModelBlock justDeclare TNil noPriorCode
+
       flatMuP <- DAG.build
                  $ DAG.addBuildParameter
                  $ DAG.TransformedP
@@ -314,9 +315,7 @@ nonCentered :: SL.DeclSpec SL.UExpr t
               -> SL.UExpr t
               -> SL.CodeWriter ()
 nonCentered ds ncE muE sigmaE rawE = do
-  let --qfd m v = SL.functionE SF.quadFormDiag (m :> v :> TNil)
-      eltMultiply = SL.binaryOpE (SL.SElementWise SL.SMultiply)
-      ncF :: SL.ExprList '[SL.ECVec, SL.ECVec] -> SL.VectorE
+  let ncF :: SL.ExprList '[SL.ECVec, SL.ECVec] -> SL.VectorE
       ncF (mu :> raw :> TNil) = mu |+| (raw |.*| sigmaE)
   case ds of
     SL.VectorSpec SL.StanVector _ _ -> SL.addStmt $ ncE SL.|=| ncF (muE :> rawE :> TNil)

@@ -74,7 +74,7 @@ addStmtToCodeTop = addToCurrentBlock SLP.addStmtToBlockTop
 addStmtsToCodeTop :: (Traversable f, SBC.StanCodeC es) =>  f SLS.UStmt -> Eff es ()
 addStmtsToCodeTop = addToCurrentBlock SLP.addStmtsToBlockTop
 
-addFromCodeWriter :: SBC.StateAndFailEff SBC.StanCode es => SLC.CodeWriter a -> Eff es a
+addFromCodeWriter :: SBC.StanCodeC es => SLC.CodeWriter a -> Eff es a
 addFromCodeWriter cw = addStmtsToCode stmts >> return a
   where (stmts, a) = SLC.cwStmtList cw
 

@@ -39,8 +39,8 @@ import qualified Effectful.Writer.Static.Local as EffW
 import qualified Effectful.Fail as EffF
 
 -- This weirdness avoids overlapping instances issues
-runGroupBuilder :: forall es i a . (EffF.Fail :> es, EffS.State SBC.StanCode :> es, EffS.State SBC.JSONNames :> es)
-                => (SBC.DataSource i)
+runGroupBuilder :: forall es i a . (SBC.StanCodeC es, EffS.State SBC.JSONNames :> es)
+                => SBC.DataSource i
                 -> Eff (EffS.State (SBC.RowInfoMakers i) ': EffS.State (SBC.RowInfos i) ': es) a
                 -> Eff (EffS.State (SBC.RowInfos i) ': es) a
 runGroupBuilder x m = do
@@ -103,12 +103,7 @@ mapToIndexMap h m = indxMap where
   intIndex = SBC.IntIndex (Map.size m) (lookupK . h)
   indxMap = SBC.IndexMap intIndex lookupK (toIntMap m) h
 
-addDataLengths :: forall i es . (EffF.Fail :> es
-                                , EffS.State SBC.StanCode :> es
-                                , EffS.State (SBC.RowInfos i) :> es
-                                , EffS.State SBC.JSONNames :> es
-                                )
-               => Eff es ()
+addDataLengths :: forall i es . SBC.StanJsonC i es => Eff es ()
 addDataLengths = do
   let addDataLength :: SBC.RowTypeTag i r -> SBC.RowInfo (SBC.DataSource i) r -> Eff es (Maybe r)
       addDataLength rtt ri = case ri of
@@ -116,11 +111,7 @@ addDataLengths = do
   _ <- EffS.get @(SBC.RowInfos i) >>= DHash.traverseWithKey addDataLength
   pure ()
 
-buildGroupIndexes :: forall i es . (EffF.Fail :> es
-                                   , EffS.State SBC.StanCode :> es
-                                   , EffS.State (SBC.RowInfos i) :> es
-                                   , EffS.State SBC.JSONNames :> es
-                                   )
+buildGroupIndexes :: forall i es . SBC.StanJsonC i es
                   => Eff es ()
 buildGroupIndexes = do
   let buildIndexJSONFold :: SBC.RowTypeTag i r -> SBC.GroupTypeTag k -> SBC.IndexMap r k -> Eff es (Maybe k)

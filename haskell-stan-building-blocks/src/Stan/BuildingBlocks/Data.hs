@@ -22,26 +22,16 @@ where
 import Prelude hiding (sum, All)
 
 import qualified Stan.Language as SL
-import qualified Stan.Language.Statement as SL
-import Stan.Language (TypedList(..))
-import Stan.Language.Recursion (hfmap)
-import qualified Stan.Functions as SF
-import Stan.Functions.Operators
 import qualified Stan.Builder as SB
-import qualified Stan.BuildingBlocks.ArrayHelpers as SBBA
-import qualified Stan.BuildingBlocks.Distributions as SBD
 
-
-import qualified Data.Dependent.HashMap as DHash
 import qualified Data.Vector.Unboxed as VU
-import qualified Stan.Builder as SB
 
 import Effectful (Eff)
 
-addFixedInt :: SB.AddConstJsonC SB.ModelDataT es => Text -> Int -> Eff es SL.IntE
+addFixedInt :: SB.StanConstJsonC SB.ModelDataT es => Text -> Int -> Eff es SL.IntE
 addFixedInt t n = SB.addFixedIntJson SB.ErrIfDuplicate SB.ModelData t Nothing n
 
-addIntData :: SB.AddJsonC i r es
+addIntData :: SB.StanJsonC i es
            => SB.RowTypeTag i r
            -> SL.VarName
            -> Maybe Int
@@ -53,14 +43,14 @@ addIntData rtt varName mLower mUpper f = do
       ndsF lE = SL.NamedDeclSpec varName $ SL.addVMs cs $ SL.intArraySpec lE
   SB.addColumnJson SB.ErrIfDuplicate rtt ndsF (SB.dataSetSizeE rtt) f
 
-addCountData :: SB.AddJsonC i r es
+addCountData :: SB.StanJsonC i es
              => SB.RowTypeTag i r
              -> SL.VarName
              -> (r -> Int)
              -> Eff es SL.IntArrayE
 addCountData rtt varName f = addIntData rtt varName (Just 0) Nothing f
 
-addRealData :: SB.AddJsonC i r es
+addRealData :: SB.StanJsonC i es
             => SB.RowTypeTag i r
             -> SL.VarName
             -> Maybe Double
@@ -72,7 +62,7 @@ addRealData rtt varName mLower mUpper f = do
       ndsF lE = SL.NamedDeclSpec varName $ SL.addVMs cs $ SL.vectorSpec lE
   SB.addColumnJson  SB.ErrIfDuplicate rtt ndsF (SB.dataSetSizeE rtt) f
 
-addIntArrayData :: SB.AddJsonC i r es
+addIntArrayData :: SB.StanJsonC i es
                 => SB.RowTypeTag i r
                 -> SL.VarName
                 -> SL.IntE
@@ -85,7 +75,7 @@ addIntArrayData rtt varName innerSizeE mLower mUpper f = do
       ndsF lE = SL.NamedDeclSpec varName $ SL.array1Spec lE (SL.array1Spec innerSizeE $ SL.addVMs cs SL.intSpec)
   SB.addColumnJson  SB.ErrIfDuplicate rtt ndsF (SB.dataSetSizeE rtt) f
 
-add2dMatrixData :: (SB.AddJsonC i r es, SB.AddConstJsonC i es)
+add2dMatrixData :: (SB.StanJsonC i es, SB.StanConstJsonC i es)
                 => SB.RowTypeTag i r
                 -> SB.MatrixRowFromData r
                 -> Maybe Double
@@ -100,7 +90,7 @@ add2dMatrixData rtt mrfd@(SB.MatrixRowFromData rowName ciM rl _) mLower mUpper =
   pure (mE, colE)
 
 -- This is specifically useful for things like categorical/multinomial
-addArrayOfIntArrays :: (SB.AddJsonC i r es, SB.AddConstJsonC i es)
+addArrayOfIntArrays :: (SB.StanJsonC i es, SB.StanConstJsonC i es)
                     => SB.RowTypeTag i r
                     -> SL.VarName
                     -> Maybe SL.VarName

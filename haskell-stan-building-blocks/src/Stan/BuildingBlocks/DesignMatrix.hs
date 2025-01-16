@@ -21,24 +21,12 @@ where
 import Prelude hiding (All)
 
 import qualified Stan.Language as SL
-import qualified Stan.Language.Statement as SL
 import Stan.Language (TypedList(..))
-import Stan.Language.Recursion (hfmap)
 import qualified Stan.Functions as SF
 import Stan.Functions.Operators
 import qualified Stan.Builder as SB
-import qualified Stan.BuildingBlocks.ArrayHelpers as SBBA
 import qualified Stan.BuildingBlocks.Data as SBBD
 import qualified Stan.BuildingBlocks.Misc as SBBM
-
-{-
-import qualified Stan.ModelBuilder.TypedExpressions.Types as TE
-import qualified Stan.ModelBuilder.TypedExpressions.Indexing as TE
-import Stan.ModelBuilder.TypedExpressions.TypedList (TypedList(..))
-import qualified Stan.ModelBuilder.TypedExpressions.Expressions as TE
-import qualified Stan.ModelBuilder.TypedExpressions.Statements as TE
-import qualified Stan.ModelBuilder.TypedExpressions.StanFunctions as TE
--}
 
 import qualified Control.Foldl as FL
 import qualified Control.Scanl as SL
@@ -47,9 +35,6 @@ import qualified Data.Massiv.Array as MA
 import qualified Data.Massiv.Vector as MV
 import qualified Data.Massiv.Array.Numeric as MN
 import qualified Data.Vector.Unboxed as V
---import qualified Stan.ModelConfig as SB
---import qualified Stan.ModelBuilder.TypedExpressions.Operations as TE
---import qualified Stan.ModelBuilder as TE
 import qualified Data.Type.Nat as DT
 import Data.Type.Equality ((:~:)(..), TestEquality (..))
 
@@ -203,7 +188,7 @@ rowPartFromBoundedEnumFunctions encodeAsZerosM name f = DesignMatrixRowPart name
 -- "Int K_Design;"
 -- "matrix[N_myDat, K_Design] Design_myDat;"
 -- with accompanying json
-addDesignMatrix :: (SB.AddJsonC i r es, SB.AddConstJsonC i es) => SB.RowTypeTag i r -> DesignMatrixRow r -> Maybe SL.IndexKey -> Eff es (SL.UExpr SL.EMat)
+addDesignMatrix :: (SB.StanJsonC i es, SB.StanConstJsonC i es) => SB.RowTypeTag i r -> DesignMatrixRow r -> Maybe SL.IndexKey -> Eff es (SL.UExpr SL.EMat)
 addDesignMatrix rtt dmr colIndexM = fst <$> SBBD.add2dMatrixData rtt (matrixFromRowData dmr colIndexM) Nothing Nothing
 {-# INLINEABLE addDesignMatrix #-}
 
@@ -234,7 +219,7 @@ designMatrixPartIndexName dmr dmrp = "I_" <> dmName dmr <> "_" <> dmrpName dmrp
 
 
 -- declares S_DesignName_PartName (size of part) and I_DesignName_PartName (starting index of part) and for all parts of design matrix row
-addDesignMatrixIndexes :: SB.AddConstJsonC i es
+addDesignMatrixIndexes :: SB.StanConstJsonC i es
                        => SB.RowTypeTag i r -> DesignMatrixRow r -> Eff es [(DesignMatrixRowPart r, SL.UExpr SL.EInt, SL.UExpr SL.EInt)]
 addDesignMatrixIndexes rtt dmr = do
   let addEach (rp, gSize, gStart) = do

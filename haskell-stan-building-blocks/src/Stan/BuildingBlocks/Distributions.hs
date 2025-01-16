@@ -19,13 +19,10 @@ where
 import Prelude hiding (All)
 
 import qualified Stan.Language as SL
-import qualified Stan.Language.Statement as SL
 import Stan.Language (TypedList(..))
-import Stan.Language.Recursion (hfmap)
 import qualified Stan.Functions as SF
 import Stan.Functions.Operators
 import qualified Stan.Builder as SB
-import qualified Stan.BuildingBlocks.ArrayHelpers as SBBA
 import Data.Type.Equality ((:~:)(Refl),TestEquality(testEquality))
 
 import Effectful (Eff)
@@ -294,8 +291,7 @@ scaledIntVec :: SL.UExpr SL.EReal
              -> SL.UExpr SL.ECVec
 scaledIntVec x iv = x `SL.timesE` intsToVec iv
 
-countScaledBetaBinomialDist :: forall t t'.(SF.BinDensityC t t'
-                                           , SL.TypeOneOf t' '[SL.EReal, SL.ECVec])
+countScaledBetaBinomialDist :: forall t t' . (SF.BinDensityC t t')
                             => Bool -> SimpleDist t '[t, t', t']
 countScaledBetaBinomialDist sampleWithConstants = StanDist Discrete sample lpmf lupmf rng
   where
@@ -307,6 +303,7 @@ countScaledBetaBinomialDist sampleWithConstants = StanDist Discrete sample lpmf 
       SL.SReal -> case testEquality (SL.genSType @t) (SL.genSType @SL.EInt)  of
         Just Refl -> (|*|) x
         _ -> error "The impossible happened in countScaledBinomialDist" -- this case can't occur based on the constraint above
+      _ -> error "counstScaledBinomialDist: The impossible happened in countScaledBinomialDist" -- this case can't occur based on the constraint above
 --    sample :: SL.UExpr (SL.EArray1 SL.EInt) -> SL.ExprList [SL.EArray1 SL.EInt, SL.ECVec, SL.ECVec] -> SL.UStmt
     sample x (t :> a :> b :> TNil) = if sampleWithConstants
                                      then SL.target $ SL.densityE SF.beta_binomial_lpmf x (t :> f a t :> f b t :> TNil)

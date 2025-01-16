@@ -25,6 +25,7 @@ module Stan.Functions.Operators
 import qualified Stan.Language.Expression as SLE
 import qualified Stan.Language.Expressions as SLE
 import qualified Stan.Language.Operations as SLO
+import qualified Stan.Language.Indexing as SLO
 
 --vectorizedRealFunction :: SFC.VectorizedReal t => Text -> SLE.UExpr t -> SLE.UExpr t
 --vectorizedRealFunction fName t = SLE.functionE (SLF.simpleFunction fName) (t :> TNil)
@@ -80,6 +81,9 @@ infixr 7 |^|, |.^|
 (|!=|) :: SLE.UExpr ta -> SLE.UExpr tb -> SLE.UExpr (SLO.BoolResultT SLO.BNEq ta tb)
 (|!=|) = SLE.boolOpE SLO.SNEq
 
+(|/=|) :: SLE.UExpr ta -> SLE.UExpr tb -> SLE.UExpr (SLO.BoolResultT SLO.BNEq ta tb)
+(|/=|) = SLE.boolOpE SLO.SNEq
+
 (|<|) :: SLE.UExpr ta -> SLE.UExpr tb -> SLE.UExpr (SLO.BoolResultT SLO.BLT ta tb)
 (|<|) = SLE.boolOpE SLO.SLT
 
@@ -95,3 +99,6 @@ infixr 7 |^|, |.^|
 (<&&>), (<||>) :: SLE.BoolE -> SLE.BoolE -> SLE.BoolE
 (<&&>) = SLE.boolOpE SLO.SAnd
 (<||>) = SLE.boolOpE SLO.SOr
+
+(!!) ::  SLE.UExpr t -> SLE.IntE -> SLE.UExpr (SLO.Sliced SLO.N0 t)
+(!!) = SLE.at

@@ -22,14 +22,10 @@ where
 import Prelude hiding (sum, All)
 
 import qualified Stan.Language as SL
-import qualified Stan.Language.Statement as SL
 import Stan.Language (TypedList(..))
-import Stan.Language.Recursion (hfmap)
 import qualified Stan.Functions as SF
 import Stan.Functions.Operators
 import qualified Stan.Builder as SB
-import qualified Stan.BuildingBlocks.ArrayHelpers as SBBA
-import qualified Stan.BuildingBlocks.Distributions as SBD
 
 import Effectful (Eff)
 

@@ -31,7 +31,7 @@ import Effectful ((:>), Eff)
 import qualified Effectful.State.Static.Local as EffS
 import qualified Effectful.Fail as EffF
 
-type AddGroup k es = (Typeable k, SBJ.AddConstJsonC SBC.ModelDataT es)
+type AddGroup k es = (Typeable k, SBC.StanConstJsonC SBC.ModelDataT es)
 
 addGroup :: forall k es . AddGroup k es
          => Text -> Int -> Eff es (SBC.GroupTypeTag k)

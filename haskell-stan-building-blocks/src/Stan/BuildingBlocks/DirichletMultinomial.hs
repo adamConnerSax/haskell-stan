@@ -22,14 +22,9 @@ where
 
 import qualified Stan.Language as SL
 import Stan.Language (TypedList(..))
-import Stan.Language.Recursion (hfmap)
 import qualified Stan.Functions as SF
 import Stan.Functions.Operators
 import qualified Stan.Builder as SB
-
-import qualified Data.Vec.Lazy as Vec
-import qualified Data.Type.Nat as DT
-import Data.Type.Equality (type (:~:)(..))
 
 import Effectful (Eff)
 
@@ -37,10 +32,6 @@ import Effectful (Eff)
 addDirichletMultinomialLPMF :: forall t es . (SB.StanFunctionsC es
                                              , SF.RealContainer t
                                              , SF.RealContainer (SL.BinaryResultT SL.BAdd t SL.ECVec)
-                                             , SL.GenSType t
-                                             , SL.GenSType (SL.BinaryResultT SL.BAdd t SL.ECVec)
-                                             , SL.ScalarType t ~ SL.EReal
-                                             , SL.ScalarType (SL.BinaryResultT SL.BAdd t SL.ECVec) ~ SL.EReal
                                              )
                             => Eff es (SL.Density SL.EIntArray '[t])
 addDirichletMultinomialLPMF = do
@@ -60,7 +51,6 @@ addDirichletMultinomialLPMF = do
 
 addDirichletMultinomialRNG :: forall t es . (SB.StanFunctionsC es
                                             , SL.TypeOneOf t [SL.ECVec, SL.ERVec]
-                                            , SL.TypeOneOf t [SL.ECVec, SL.ERVec]
                                             , SL.GenSType t
                                                )
                            => Eff es (SL.Function (SL.EArray1 SL.EInt) '[t, SL.EInt])
@@ -76,11 +66,7 @@ dirichletMultinomial ::  forall t t' es . (SB.StanFunctionsC es
                                           , SL.TypeOneOf t' [SL.ECVec, SL.ERVec]
                                           , SF.RealContainer t
                                           , SF.RealContainer (SL.BinaryResultT SL.BAdd t SL.ECVec)
-                                          , SL.GenSType t
                                           , SL.GenSType t'
-                                          , SL.GenSType (SL.BinaryResultT SL.BAdd t SL.ECVec)
-                                          , SL.ScalarType t ~ SL.EReal
-                                          , SL.ScalarType (SL.BinaryResultT SL.BAdd t SL.ECVec) ~ SL.EReal
                                           )
                      => Eff es (SL.Density SL.EIntArray '[t]
                                , SL.Density SL.EIntArray '[t]

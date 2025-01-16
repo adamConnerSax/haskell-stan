@@ -104,11 +104,15 @@ type StanBuilderEffs =
   , EffF.Fail
   ]
 
-type StanBuildLogC es = EffW.Writer (Seq.Seq Text) :> es
-type StanCodeC es = (EffF.Fail :> es, EffS.State StanCode :> es)
+type StanFail es = EffF.Fail :> es
+type StanBuildLogC es = (StanFail es, EffW.Writer (Seq.Seq Text) :> es)
+type StanCodeC es = (StanBuildLogC es, EffS.State StanCode :> es)
 type StanFunctionsC es = (StanCodeC es, EffS.State FunctionNames :> es)
-type StanParametersC es = (EffS.State SBPT.BParameterCollection :> es, EffF.Fail :> es)
-type StanGroupC i es = (EffF.Fail :> es, StanBuildLogC es, EffS.State (RowInfoMakers i) :> es)
+type StanParametersC es = (StanBuildLogC es, EffS.State SBPT.BParameterCollection :> es)
+type StanGroupC i es = (StanBuildLogC es, EffS.State (RowInfoMakers i) :> es)
+type StanRowInfoC i es = (StanBuildLogC es, EffS.State (RowInfos i) :> es)
+type StanJsonC i es = (StanRowInfoC i es, StanCodeC es, EffS.State JSONNames :> es)
+type StanConstJsonC i es = (StanCodeC es, EffS.State JSONNames :> es, EffS.State (JSONConstFold (DataSource i)) :> es)
 
 type StanBuilderEff a = Eff StanBuilderEffs a
 

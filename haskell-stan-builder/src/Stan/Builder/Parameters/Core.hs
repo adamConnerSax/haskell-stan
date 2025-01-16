@@ -85,7 +85,7 @@ addDAGStmt = SB.addStmtToCode
 addDAGStmts :: (EffS.State SBC.StanCode :> es, Traversable f) => f SLS.UStmt -> Eff es ()
 addDAGStmts = SB.addStmtsToCode
 -}
-declareAndAddCode :: (EffS.State SBC.StanCode :> es, EffF.Fail :> es) => SLP.StanBlock -> SLS.NamedDeclSpec t -> PT.DeclCode t -> Eff es (SLE.UExpr t)
+declareAndAddCode :: SBC.StanCodeC es => SLP.StanBlock -> SLS.NamedDeclSpec t -> PT.DeclCode t -> Eff es (SLE.UExpr t)
 declareAndAddCode sb nds dc =
   case dc of
     PT.DeclRHS e -> do
@@ -97,7 +97,7 @@ declareAndAddCode sb nds dc =
       SB.addStmtsToBlock sb $ declS : SLC.cwStmtList_ (sF v)
       pure v
 
-addParameterToCodeAndMap :: (EffF.Fail :> es, EffS.State SBC.FunctionNames :> es, EffS.State SBC.StanCode :> es)
+addParameterToCodeAndMap :: SBC.StanFunctionsC es
                          => DM.DMap PT.ParameterTag SLE.UExpr
                          -> PhantomP
                          -> Eff es (DM.DMap PT.ParameterTag SLE.UExpr)
@@ -146,7 +146,7 @@ addParameterToCodeAndMap eMap (PhantomP bp) = do
   pure $ newMapF eMap
 
 -- reverse here because we are adding from top, so
-addAllParametersInCollection :: forall es . (EffF.Fail :> es, EffS.State SBC.FunctionNames :> es, EffS.State SBC.StanCode :> es)
+addAllParametersInCollection :: forall es . SBC.StanFunctionsC es
                              => PT.BParameterCollection -> Eff es ()
 addAllParametersInCollection = FL.foldM makeFold . reverse . depOrderedPParameters
   where makeFold :: FL.FoldM (Eff es) PhantomP ()

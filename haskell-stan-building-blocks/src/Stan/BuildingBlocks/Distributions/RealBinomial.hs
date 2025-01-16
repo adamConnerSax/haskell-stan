@@ -13,32 +13,20 @@
 {-# HLINT ignore "Use camelCase" #-}
 {-# LANGUAGE QuantifiedConstraints #-}
 
-module Stan.BuildingBlocks.Distributions.RealBinomial where
+module Stan.BuildingBlocks.Distributions.RealBinomial
+  (
+    module Stan.BuildingBlocks.Distributions.RealBinomial
+  )
+where
 
 import qualified Stan.Language as SL
-import qualified Stan.Language.Statement as SL
 import Stan.Language (TypedList(..))
-import Stan.Language.Recursion (hfmap)
 import qualified Stan.Functions as SF
 import Stan.Functions.Operators
 import qualified Stan.Builder as SB
 import qualified Stan.BuildingBlocks.Distributions as SBD
-import qualified Stan.BuildingBlocks.ArrayHelpers as SBBA
 
 import Effectful (Eff)
-
-{-
-import Data.Type.Equality (type (~))
-
-import qualified Stan.ModelBuilder.TypedExpressions.Types as TE
-import Stan.ModelBuilder.TypedExpressions.TypedList (TypedList(..))
-import qualified Stan.ModelBuilder.TypedExpressions.Statements as TE
-import qualified Stan.ModelBuilder.TypedExpressions.Indexing as TE
-import qualified Stan.ModelBuilder.TypedExpressions.Operations as TE
-import qualified Stan.ModelBuilder.TypedExpressions.StanFunctions as TE
-import qualified Stan.ModelBuilder.Distributions as SD
-import qualified Stan.ModelBuilder as SB
--}
 
 realBinomialLogitDistM :: forall t es . (SB.StanFunctionsC es, RealBinomialT t) => Eff es (SBD.SimpleDist t '[t, t])
 realBinomialLogitDistM = do
@@ -51,7 +39,7 @@ realBinomialLogitDistM = do
       rng = SL.functionE rngF
   pure $ SBD.StanDist SBD.Continuous sample lpdf lupdf rng
 
-realBinomialLogitDistSM :: forall t es . SB.StanFunctionsC es => Eff es (SBD.SimpleDist SL.EReal '[SL.EReal, SL.EReal])
+realBinomialLogitDistSM :: forall es . SB.StanFunctionsC es => Eff es (SBD.SimpleDist SL.EReal '[SL.EReal, SL.EReal])
 realBinomialLogitDistSM = do
   sampleD <- realBinomialLogitS
   lpdfD <- realBinomialLogitLPDF_S
@@ -64,8 +52,8 @@ realBinomialLogitDistSM = do
   pure $ SBD.StanDist SBD.Continuous sample lpdf lupdf rng
 
 type RealBinomialT t = (SF.VectorizedReal t
-                       , SL.TypeOneOf t [SL.ECVec, SL.ERVec, SL.EMat, SL.ESqMat, SL.ERealArray]
-                       , SL.TypeOneOf t [SL.ECVec, SL.ERVec]
+--                       , SL.TypeOneOf t [SL.ECVec, SL.ERVec, SL.EMat, SL.ESqMat, SL.ERealArray]
+                       , SL.TypeOneOf t [SL.ECVec, SL.ERVec, SL.EReal]
                        , SL.BinaryResultT (SL.BElementWise SL.BMultiply) t t ~ t
                        , SL.BinaryResultT (SL.BElementWise SL.BSubtract) t t ~ t
                        , SL.BinaryResultT (SL.BElementWise SL.BAdd) t t ~ t
@@ -95,7 +83,7 @@ realBinomialLogitLPDF = do
       SL.SReal -> do
         p <- SL.declareRHSNW (SL.NamedDeclSpec "p" $ SL.realSpec) $ SF.inv_logit lp
         pure $ SF.lChoose t s |+| (s |*| SF.log p) |+| ((t |-| s) |*| SF.log1m p)
-      _ -> error "realBinomialLogitLPMF: Impossible type!"
+--      _ -> error "realBinomialLogitLPMF: Impossible type!"
 
 realBinomialLogitLUPDF :: forall t es . (RealBinomialT t, SB.StanFunctionsC es)
                       => Eff es (SL.Density t [t, t])
@@ -114,7 +102,7 @@ realBinomialLogitLUPDF = do
       SL.SReal -> do
         p <- SL.declareRHSNW (SL.NamedDeclSpec "p" $ SL.realSpec) $ SF.inv_logit lp
         pure $ (s |*| SF.log p) |+| ((t |-| s) |*| SF.log1m p)
-      _ -> error "realBinomialLogitLUPMF: Impossible type!"
+--      _ -> error "realBinomialLogitLUPMF: Impossible type!"
 
 
 -- we do this via rejection sampling, using a uniform distribution for now.
@@ -147,7 +135,7 @@ realBinomialLogitRng = do
        pure samples
      SL.SReal -> SB.addFunctionOnce f (SL.DataArg "trials" :> SL.Arg "lp" :> TNil)
        $ \ (n :> lp :> TNil) -> SL.cwStmt $ pure $ scalarLogitRng n lp
-     _ -> error "realBinomialLogitLPMF: Impossible type!"
+--     _ -> error "realBinomialLogitLPMF: Impossible type!"
 
 realBinomialLogitS :: forall es . SB.StanFunctionsC es => Eff es (SL.Density SL.EReal [SL.EReal, SL.EReal])
 realBinomialLogitS = do
