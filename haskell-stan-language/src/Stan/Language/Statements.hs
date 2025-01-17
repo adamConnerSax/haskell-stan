@@ -28,7 +28,7 @@ import qualified Stan.Language.Expression as SLE
 import Stan.Language.Expressions
   (intE,
    namedE,
-   namedSizeE,
+--   namedSizeE,
    ExprList,
    IntE)
 import Stan.Language.Types
@@ -257,7 +257,7 @@ for :: forall t . GenSType (SLS.ForEachSlice t)
     => Text -> SLS.ForType t -> (SLE.UExpr (SLS.ForEachSlice t) -> SLS.UStmt) -> SLS.UStmt
 for loopCounter ft bodyF = case ft of
   SLS.SpecificNumbered se' ee' -> scoped $ SLS.SFor loopCounter se' ee' $ bodyF (namedE loopCounter SInt)
-  SLS.IndexedLoop ik -> scoped $ SLS.SFor loopCounter (intE 1) (namedSizeE ik) $ bodyF (namedE loopCounter SInt)
+--  SLS.IndexedLoop ik -> scoped $ SLS.SFor loopCounter (intE 1) (namedSizeE ik) $ bodyF (namedE loopCounter SInt)
   SLS.SpecificIn e -> scoped $ SLS.SForEach loopCounter e $ bodyF loopCounterE
 --  IndexedIn _ e -> SForEach loopCounter e $ bodyF loopCounterE
   where

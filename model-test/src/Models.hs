@@ -20,34 +20,6 @@ import qualified Stan.BuildingBlocks as SBB
 import qualified Stan.Runner as SR
 import qualified CmdStan as CS
 
-
-{-}
-import qualified Stan.ModelBuilder.TypedExpressions.DAG as DAG
-import qualified Stan.ModelBuilder.TypedExpressions.DAGTypes as DAG
-import qualified Stan.ModelBuilder.TypedExpressions.Indexing as TE
-import qualified Stan.ModelBuilder.TypedExpressions.Types as TE
-import qualified Stan.ModelBuilder.TypedExpressions.TypedList as TE
-import Stan.ModelBuilder.TypedExpressions.TypedList (TypedList(..))
-import qualified Stan.ModelBuilder.TypedExpressions.Expressions as TE
-import qualified Stan.ModelBuilder.TypedExpressions.Statements as TE
-import qualified Stan.ModelBuilder.TypedExpressions.StanFunctions as TE
-import Stan.ModelBuilder.TypedExpressions.Recursion (hfmap)
-
-import qualified Stan.ModelBuilder.BuildingBlocks as SBB
---import qualified Stan.ModelBuilder.Expressions as SE
-import qualified Stan.ModelBuilder.Distributions as SD
---import qualified Stan.ModelBuilder.GroupModel as SGM
-import qualified Stan.ModelConfig as SC
-import qualified Stan.Parameters as SP
-
-import qualified Stan.ModelBuilder.TypedExpressions.DAG as SB
-import qualified Stan.ModelBuilder.TypedExpressions.DAG as DAG
-import Stan.ModelBuilder (groupSizeE)
-import qualified Stan.ModelBuilder as TE
-import qualified Stan.ModelBuilder as DS
-
--}
-
 import qualified Frames as F hiding (tableTypes)
 import qualified Frames.Streamly.TH as F
 import qualified Frames.Streamly.LoadInCore as F
@@ -99,17 +71,18 @@ fbMatchups n = do
 
 data HomeField = FavoriteField | UnderdogField deriving (Show, Eq, Ord, Enum, Bounded)
 
+data ModelDataPkg =
+  ModelDataPkg { resultsT :: SB.RowTypeTag SB.ModelDataT FB_Result
+               , homeFieldG :: SB.GroupTypeTag HomeField
+               , favoriteG :: SB.GroupTypeTag Text
+               , favoriteSize :: SL.IntE
+               , underDogG :: SB.GroupTypeTag Text
+               }
+
+data GQDataPkg = GQDataPkg { matchupsT :: SB.RowTypeTag SB.GQDataT FB_Matchup }
+
 homeField :: FB_Result -> HomeField
 homeField r = if r ^. home then FavoriteField else UnderdogField
-
---homeFieldG :: SB.GroupTypeTag HomeField = SB.GroupTypeTag "HomeField"
-
---favoriteG :: SB.GroupTypeTag Text = SB.GroupTypeTag "Favorite"
-
---underdogG :: SB.GroupTypeTag Text = SB.GroupTypeTag "Underdog"
-
--- spread :: F.Record FB_Results -> Double
--- spread = F.rgetField @Spread
 
 scoreDiff :: FB_Result -> Double
 scoreDiff r = realToFrac (r ^. favorite) - realToFrac (r ^. underdog)
@@ -117,20 +90,27 @@ scoreDiff r = realToFrac (r ^. favorite) - realToFrac (r ^. underdog)
 spreadDiff :: FB_Result -> Double
 spreadDiff r = r ^. spread - scoreDiff r
 
-spreadDiffNormal :: Foldable f => f Text -> SB.StanBuilderEff ()
-spreadDiffNormal teams = do
-  -- data
-  resultsData <- SB.addData "Results" SB.ModelData (SB.ToFoldable id)
+modelDataBuilder :: Foldable f => f Text -> SB.StanDataBuilderEff SB.ModelDataT ModelDataPkg
+modelDataBuilder teams = do
+  resultsT <- SB.addData "Results" SB.ModelData (SB.ToFoldable id)
   (homeFieldG, _) <- SB.addGroup "HomeField" 2
   (favoriteG, favoriteSize) <- SB.addGroup "Favorite" $ FL.fold FL.length teams
   (underdogG, _) <- SB.addGroup @Text "Underdog" $ FL.fold FL.length teams
-  SB.addGroupIndexForData homeFieldG resultsData $ SB.makeIndexFromEnum homeField
-  SB.addGroupIndexForData favoriteG resultsData $ SB.makeIndexFromFoldable show (F.rgetField @FavoriteName) teams
-  SB.addGroupIntMapForData favoriteG resultsData $ SB.dataToIntMapFromFoldable (F.rgetField @FavoriteName) teams
-  matchupData <- SB.addData "Matchups" SB.GQData (SB.ToFoldable id)
-  SB.addGroupIndexForData favoriteG matchupData $ SB.makeIndexFromFoldable show (F.rgetField @FavoriteName) teams
+  SB.addGroupIndexForData homeFieldG resultsT $ SB.makeIndexFromEnum homeField
+  SB.addGroupIndexForData favoriteG resultsT $ SB.makeIndexFromFoldable show (F.rgetField @FavoriteName) teams
+  SB.addGroupIntMapForData favoriteG resultsT $ SB.dataToIntMapFromFoldable (F.rgetField @FavoriteName) teams
+  pure $ ModelDataPkg resultsT homeFieldG favoriteG favoriteSize underdogG
 
-  spreadDiffE <- SBB.addRealData resultsData "diff" Nothing Nothing spreadDiff
+gqDataBuilder :: Foldable f => f Text -> ModelDataPkg -> SB.StanDataBuilderEff SB.GQDataT GQDataPkg
+gqDataBuilder teams mdp = do
+   matchupDataT <- SB.addData "Matchups" SB.GQData (SB.ToFoldable id)
+   SB.addGroupIndexForData (favoriteG mdp) matchupDataT $ SB.makeIndexFromFoldable show (F.rgetField @FavoriteName) teams
+   SB.addGroupIntMapForData (favoriteG mdp) matchupDataT $ SB.dataToIntMapFromFoldable (F.rgetField @FavoriteName) teams
+   pure $ GQDataPkg matchupDataT
+
+spreadDiffNormal :: ModelDataPkg -> GQDataPkg -> SB.StanModelBuilderEff ()
+spreadDiffNormal (ModelDataPkg resultsT homeFieldG favoriteG favoriteSize underDogG) (GQDataPkg matchupT) = do
+  spreadDiffE <- SBB.addRealData resultsT "diff" Nothing Nothing spreadDiff
 
   -- parameters
   sigmaMuP <- SB.simpleParameter
@@ -155,19 +135,19 @@ spreadDiffNormal teams = do
   -- model (non-parameter part)
   SB.inBlock SL.SBModel
     $ SB.addStmtToCode
-    $ SBB.familySample SBB.normalDist spreadDiffE (indexed resultsData favoriteG muVecE :> toVec resultsData sigmaE :> TNil)
+    $ SBB.familySample SBB.normalDist spreadDiffE (indexed resultsT favoriteG muVecE :> toVec resultsT sigmaE :> TNil)
 
   -- generated quantities, in this case a prediction
   SB.inBlock SL.SBGeneratedQuantities $ do
-    let ps = indexed matchupData favoriteG muVecE :> toVec matchupData sigmaE :> TNil
+    let ps = indexed matchupT favoriteG muVecE :> toVec matchupT sigmaE :> TNil
 --    SB.addRowKeyIntMap matchupsData favoriteG (F.rgetField @FavoriteName)
-    _ <- SB.addFromCodeWriter $ SL.declareRHSNW (SL.NamedDeclSpec "eScoreDiff" $ SL.vectorSpec (SB.dataSetSizeE matchupData))
+    _ <- SB.addFromCodeWriter $ SL.declareRHSNW (SL.NamedDeclSpec "eScoreDiff" $ SL.vectorSpec (SB.dataSetSizeE matchupT))
          $ SBB.familyRNG SBB.normalDist ps
     pure ()
 
   -- log-likelihood
-  SBB.generateLogLikelihood resultsData SBB.normalDist
-    (pure (\k -> (indexed resultsData favoriteG muVecE) !! k :> (toVec resultsData sigmaE) !! k :> TNil))
+  SBB.generateLogLikelihood resultsT SBB.normalDist
+    (pure (\k -> (indexed resultsT favoriteG muVecE) !! k :> (toVec resultsT sigmaE) !! k :> TNil))
     (pure $ \k -> spreadDiffE !! k)
 
 --  (return (S.var mu_favV, S.var sigmaV)) spreadDiffV

@@ -61,7 +61,7 @@ type family ForEachSlice (a :: EType) :: EType where
 
 data ForType t where
   SpecificNumbered :: SLE.UExpr EInt -> SLE.UExpr EInt -> ForType EInt
-  IndexedLoop :: SLE.IndexKey -> ForType EInt
+--  IndexedLoop :: SLE.IndexKey -> ForType EInt
   SpecificIn :: SLE.UExpr t -> ForType t
 --  IndexedIn :: IndexKey -> UExpr t -> ForType t
 

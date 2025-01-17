@@ -17,6 +17,7 @@ module Stan.Builder.BuildRunner
 where
 
 import qualified Stan.Builder.Core as SBC
+import qualified Stan.Builder.Data as SBD
 import qualified Stan.Builder.Groups as SBG
 import qualified Stan.Builder.JSON as SBJ
 
@@ -97,11 +98,11 @@ runStanBuilderEff :: forall a b c .
                      SBC.DataSource SBC.ModelDataT
                   -> SBC.DataSource SBC.GQDataT
                   -> SBC.StanDataBuilderEff SBC.ModelDataT a
-                  -> SBC.StanDataBuilderEff SBC.GQDataT b
+                  -> (a -> SBC.StanDataBuilderEff SBC.GQDataT b)
                   -> (a -> b -> SBC.StanModelBuilderEff c)
                   -> Either Text (SBC.BuilderState, [Text], c)
 runStanBuilderEff md gq modelDG gqDG stanBuilderF = do
-  let m' = setupDataAndGroups md modelDG >>= \a -> setupDataAndGroups gq gqDG >>= \b -> stanBuilderF a b
+  let m' = setupDataAndGroups md modelDG >>= \a -> setupDataAndGroups gq (gqDG a) >>= \b -> stanBuilderF a b
   let effRes =  Eff.runPureEff
                 . EffF.runFail
                 . EffW.runWriter
@@ -163,11 +164,13 @@ buildGroupIndexes = do
   let buildIndexJSONFold :: SBC.RowTypeTag i r -> SBC.GroupTypeTag k -> SBC.IndexMap r k -> Eff es (Maybe k)
       buildIndexJSONFold rtt gtt@(SBC.GroupTypeTag _gName) (SBC.IndexMap (SBC.IntIndex _gSize mIntF) _ _ _) = do
         let indexName = SBG.groupIndexVarName rtt gtt --dsName <> "_" <> gName
-            ndsF x = SLS.NamedDeclSpec indexName $  SLS.addVMs (SLS.Modifiers [SLS.lowerM $ SLE.intE 1]) $ SLS.intArraySpec x
+            ndsF x = SLS.NamedDeclSpec indexName
+                     $ SLS.addVMs (SLS.Modifiers [SLS.lowerM $ SLE.intE 1, SLS.upperM $ SBC.groupSizeE gtt])
+                     $ SLS.intArraySpec x
             mIntF' x = case mIntF x of
               Left msg -> Left $ msg <> " (from buildGroupIndexes for indexName=" <> indexName <> ")"
               Right y -> Right y
-        _ <- SBJ.addColumnMJson SBJ.ErrIfDuplicate rtt ndsF (SBC.groupSizeE gtt) mIntF'
+        _ <- SBJ.addColumnMJson SBJ.ErrIfDuplicate rtt ndsF (SBD.dataSetSizeE rtt) mIntF'
         pure Nothing
       buildRowFolds :: SBC.RowTypeTag i r -> SBC.RowInfo d r -> Eff es (Maybe r)
       buildRowFolds rtt ri  = case ri of

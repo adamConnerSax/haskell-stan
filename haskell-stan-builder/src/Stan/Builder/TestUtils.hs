@@ -14,11 +14,11 @@ import qualified Data.Text as T
 testBuild :: SB.ModelSource
           -> SB.GQSource
           -> SB.StanDataBuilderEff SB.ModelDataT a
-          -> SB.StanDataBuilderEff SB.GQDataT b
+          -> (a -> SB.StanDataBuilderEff SB.GQDataT b)
           -> (a -> b  -> SB.StanModelBuilderEff ())
           -> IO ()
-testBuild md gq modelDG gqDG stanBuilderF = do
-  case SB.runStanBuilderDAG md gq modelDG gqDG stanBuilderF of
+testBuild md gq modelDG gqDGF stanBuilderF = do
+  case SB.runStanBuilderDAG md gq modelDG gqDGF stanBuilderF of
     Left err -> putTextLn $ "Error in runStanBuilder: " <> err
     Right (bs, logs, ()) -> do
       let SB.StanCode _ sp = SB.code bs

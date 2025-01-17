@@ -19,7 +19,7 @@ import qualified Data.Aeson as A
 import qualified Data.Text as T
 
 main :: IO ()
-main = SBT.testBuild modelData () modelDataBuilder (pure ()) stanBuilderF
+main = SBT.testBuild modelData () modelDataBuilder (const $ pure ()) stanBuilderF
 
 data LetterCode = A | B | C deriving stock (Show, Eq, Ord, Enum, Bounded)
 

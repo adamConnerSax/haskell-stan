@@ -26,7 +26,7 @@ import Stan.Language.Types
       EIndexArray,
       EType(ESqMat, ERVec, EInt, EBool, EArray, EMat, ECVec, EString,
             EComplex, EReal, ETuple),
-      SType,
+      SType(SInt),
       TypedList,
     )
 import Stan.Language.Indexing
@@ -144,15 +144,17 @@ fstRef e = SLR.IFix $ SLE.UL $ SLE.LIndexedTuple SZ e
 sndRef :: SLE.UExpr t -> SLE.UExpr (IndexedTuple (S Z) t)
 sndRef e = SLR.IFix $ SLE.UL $ SLE.LIndexedTuple (SS' SZ) e
 
-
 rangeIndexE :: SNat n -> Maybe (SLE.UExpr EInt) -> Maybe (SLE.UExpr EInt) -> SLE.UExpr t -> SLE.UExpr (Indexed n t)
 rangeIndexE n leM ueM = indexE n (SLR.IFix $ SLE.UL $ SLE.LIntRange leM ueM)
 
+{-
 namedIndexE :: Text -> SLE.UExpr EIndexArray
 namedIndexE = SLR.IFix . SLE.UIndex
+-}
 
 namedSizeE :: Text -> SLE.UExpr EInt
-namedSizeE = SLR.IFix . SLE.UIndexSize
+namedSizeE t = namedE t SInt --SLR.IFix . SLE.UIndexSize
+
 
 sliceInner :: SLE.UExpr t -> SLE.UExpr EInt -> SLE.UExpr (SliceInnerN (S Z) t)
 sliceInner e i = sliceE SZ i e

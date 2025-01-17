@@ -161,10 +161,10 @@ runStanBuilderDAG :: forall a b c .
                      SBC.ModelSource
                   -> SBC.GQSource
                   -> SBC.StanDataBuilderEff SBC.ModelDataT a
-                  -> SBC.StanDataBuilderEff SBC.GQDataT b
+                  -> (a -> SBC.StanDataBuilderEff SBC.GQDataT b)
                   -> (a -> b -> SBC.StanModelBuilderEff c)
                   -> Either Text (SBC.BuilderState, [Text], c)
-runStanBuilderDAG md gq modelDG gqDG sbF =
+runStanBuilderDAG md gq modelDG gqDGF sbF =
   let sbF' :: a -> b -> SBC.StanModelBuilderEff c
       sbF' a b = do
         c <- sbF a b
@@ -174,7 +174,7 @@ runStanBuilderDAG md gq modelDG gqDG sbF =
           bpc <- EffS.get @PT.BParameterCollection
           addAllParametersInCollection bpc
         return c
-  in SBR.runStanBuilderEff md gq modelDG gqDG sbF'
+  in SBR.runStanBuilderEff md gq modelDG gqDGF sbF'
 
 exprListToParameters :: SLE.ExprList ts  -> PT.Parameters ts
 exprListToParameters = hfmap PT.GivenP
