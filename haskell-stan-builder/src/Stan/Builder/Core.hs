@@ -88,33 +88,41 @@ type RowInfoMakers i = DHash.DHashMap (RowTypeTag i) (GroupIndexAndIntMapMakers 
 
 newtype FunctionNames = FunctionNames { unFunctionNames :: Set.Set SLT.FunctionName } deriving newtype (Show)
 newtype JSONNames = JSONNames { unJSONNames :: Set.Set Text } deriving newtype (Show)
+type BuildLog = Seq.Seq Text
+
+type GroupBuilderS (i :: InputDataT) = EffS.State (RowInfoMakers i)
 
 type StanBuilderEffs =
-  [ EffS.State (RowInfoMakers ModelDataT)
-  , EffS.State (RowInfos ModelDataT)
-  , EffS.State (RowInfoMakers GQDataT)
+  [
+    EffS.State (RowInfos ModelDataT)
   , EffS.State (RowInfos GQDataT)
   , EffS.State SBPT.BParameterCollection
   , EffS.State StanCode
   , EffS.State FunctionNames
-  , EffS.State (JSONConstFold ModelSource)
-  , EffS.State (JSONConstFold GQSource)
+  , EffS.State (JSONConstFold ModelDataT)
+  , EffS.State (JSONConstFold GQDataT)
   , EffS.State JSONNames
-  , EffW.Writer (Seq.Seq Text)
+  , EffW.Writer BuildLog
   , EffF.Fail
   ]
 
 type StanFail es = EffF.Fail :> es
-type StanBuildLogC es = (StanFail es, EffW.Writer (Seq.Seq Text) :> es)
+type StanBuildLogC es = (StanFail es, EffW.Writer BuildLog :> es)
 type StanCodeC es = (StanBuildLogC es, EffS.State StanCode :> es)
 type StanFunctionsC es = (StanCodeC es, EffS.State FunctionNames :> es)
 type StanParametersC es = (StanBuildLogC es, EffS.State SBPT.BParameterCollection :> es)
 type StanGroupC i es = (StanBuildLogC es, EffS.State (RowInfoMakers i) :> es)
 type StanRowInfoC i es = (StanBuildLogC es, EffS.State (RowInfos i) :> es)
 type StanJsonC i es = (StanRowInfoC i es, StanCodeC es, EffS.State JSONNames :> es)
-type StanConstJsonC i es = (StanCodeC es, EffS.State JSONNames :> es, EffS.State (JSONConstFold (DataSource i)) :> es)
+type StanConstJsonC i es = (StanCodeC es, EffS.State JSONNames :> es, EffS.State (JSONConstFold i) :> es)
 
-type StanBuilderEff a = Eff StanBuilderEffs a
+type StanDataBuilderEff i = Eff '[GroupBuilderS i
+                                 , EffS.State StanCode
+                                 , EffS.State (JSONConstFold i)
+                                 , EffS.State JSONNames
+                                 , EffW.Writer BuildLog
+                                 , EffF.Fail]
+type StanModelBuilderEff = Eff StanBuilderEffs
 
 type StateAndFailEff s es = (EffS.State s :> es, EffF.Fail :> es)
 
@@ -134,8 +142,8 @@ data BuilderState = BuilderState { --declaredVars :: !ScopedDeclarations
 --                                       , indexBindings :: !SLA.IndexLookupCtxt
   modelRowBuilders :: !(RowInfos ModelDataT)
   , gqRowBuilders :: !(RowInfos GQDataT)
-  , constModelJSON :: JSONConstFold ModelSource  -- json for things which are attached to no data set.
-  , constGQJSON :: JSONConstFold GQSource
+  , constModelJSON :: JSONConstFold ModelDataT  -- json for things which are attached to no data set.
+  , constGQJSON :: JSONConstFold GQDataT
   , hasFunctions :: !(Set.Set Text)
   , parameterCollection :: SBPT.BParameterCollection
   , code :: !StanCode
@@ -197,13 +205,13 @@ instance Semigroup (JSONSeriesFold row) where
 instance Monoid (JSONSeriesFold row) where
   mempty = JSONSeriesFold $ pure mempty
 
-data JSONConstFold d where
-  JSONConstFold :: SJ.StanJSONF () Aeson.Series -> JSONConstFold d
+data JSONConstFold (i :: InputDataT) where
+  JSONConstFold :: SJ.StanJSONF () Aeson.Series -> JSONConstFold i
 
-instance Semigroup (JSONConstFold d) where
+instance Semigroup (JSONConstFold i) where
   (JSONConstFold a) <> (JSONConstFold b) = JSONConstFold (a <> b)
 
-instance Monoid (JSONConstFold d) where
+instance Monoid (JSONConstFold i) where
   mempty = JSONConstFold $ pure mempty
 
 

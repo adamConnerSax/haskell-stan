@@ -113,15 +113,17 @@ runModel' cacheDirE configE mStanParams dataWrangler stanProgram resultAction rS
 
 -- given cached model data and gq data, a group builder and a model builder
 -- generate a no-predictions data-wrangler and program
-dataWranglerAndCode :: forall r. (K.KnitEffects r)
+dataWranglerAndCode :: forall a b r . (K.KnitEffects r)
                     => K.ActionWithCacheTime r (SB.DataSource SB.ModelDataT)
                     -> K.ActionWithCacheTime r (SB.DataSource SB.GQDataT)
-                    -> SB.StanBuilderEff ()
+                    -> SB.StanDataBuilderEff SB.ModelDataT a
+                    -> SB.StanDataBuilderEff SB.GQDataT b
+                    -> (a -> b -> SB.StanModelBuilderEff ())
                     -> K.Sem r (SRC.DataWrangler SB.DataSetGroupIntMaps (), SLP.StanProgram)
-dataWranglerAndCode modelData_C gqData_C sb = do
+dataWranglerAndCode modelData_C gqData_C modelDB gqDB sbF = do
   modelDat <- K.ignoreCacheTime modelData_C
   gqDat <- K.ignoreCacheTime gqData_C
-  (bs, _builderLogs, ()) <- K.knitEither $ SBPC.runStanBuilderDAG modelDat gqDat sb
+  (bs, _builderLogs, ()) <- K.knitEither $ SBPC.runStanBuilderDAG modelDat gqDat modelDB gqDB sbF
   let modelWrangle x = (SB.intMapsFromRowInfos (SB.modelRowBuilders bs) x,  SB.modelJsonE bs)
       gqWrangle x = (SB.intMapsFromRowInfos (SB.gqRowBuilders bs) x,  SB.gqJsonE bs)
       wrangler ::  SRC.DataWrangler SB.DataSetGroupIntMaps ()

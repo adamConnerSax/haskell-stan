@@ -39,23 +39,69 @@ import qualified Effectful.State.Static.Local as EffS
 import qualified Effectful.Writer.Static.Local as EffW
 import qualified Effectful.Fail as EffF
 
+{-
 -- This weirdness avoids overlapping instances issues
-runGroupBuilder :: forall es i a . (SBC.StanCodeC es, EffS.State SBC.JSONNames :> es)
+runGroupBuilder' :: forall es i a . (SBC.StanCodeC es, EffS.State SBC.JSONNames :> es)
                 => SBC.DataSource i
                 -> Eff (EffS.State (SBC.RowInfoMakers i) ': EffS.State (SBC.RowInfos i) ': es) a
                 -> Eff (EffS.State (SBC.RowInfos i) ': es) a
-runGroupBuilder x m = do
+runGroupBuilder' x m = do
   (a, rowInfoMakers) <- EffS.runState DHash.empty m
   let rowInfos = DHash.mapWithKey (buildRowInfo x) rowInfoMakers
   EffS.put rowInfos
   addDataLengths @i
   buildGroupIndexes @i
   pure a
+-}
 
-runStanBuilderEff :: forall a . SBC.DataSource SBC.ModelDataT -> SBC.DataSource SBC.GQDataT
-                  -> SBC.StanBuilderEff a
-                  -> Either Text (SBC.BuilderState, [Text], a)
-runStanBuilderEff md gq m = do
+setupDataAndGroups :: forall es i a . (SBC.StanConstJsonC i es, SBC.StanRowInfoC i es)
+                   => SBC.DataSource i
+                   -> SBC.StanDataBuilderEff i a
+                   -> Eff es a
+setupDataAndGroups d sgb = do
+  let gbRes = Eff.runPureEff
+              . EffF.runFail
+              . EffW.runWriter
+              . EffS.runState (SBC.JSONNames Set.empty)
+              . EffS.runState mempty
+              . EffS.runState (SBC.StanCode SLP.SBData SLP.emptyStanProgram)
+              . EffS.runState DHash.empty
+              $ sgb
+  case gbRes of
+    Left err -> SBC.buildError $ toText err -- propagate the error state
+    Right (((((a, rowInfoMakers), code), jcf), jsonNames), logs) -> do
+      EffW.tell logs -- add the builder logs
+      mergeCode code
+      checkAndMergeJSONNames jsonNames
+      EffS.put jcf -- add the const folds from groups (group sizes)
+      let rowInfos = DHash.mapWithKey (buildRowInfo d) rowInfoMakers
+      EffS.put rowInfos
+      addDataLengths @i
+      buildGroupIndexes @i
+      pure a
+
+checkAndMergeJSONNames :: (EffF.Fail :> es, EffS.State SBC.JSONNames :> es) => SBC.JSONNames -> Eff es ()
+checkAndMergeJSONNames (SBC.JSONNames newNames) = do
+  existingNames <- EffS.gets SBC.unJSONNames
+  let overlap = Set.intersection newNames existingNames
+  if (Set.size overlap == 0)
+    then EffS.modify $ SBC.JSONNames . Set.union newNames . SBC.unJSONNames
+    else SBC.buildError $ "overlapping names when setting up data & groups: " <> show overlap
+
+mergeCode :: EffS.State SBC.StanCode :> es => SBC.StanCode -> Eff es ()
+mergeCode (SBC.StanCode cb sp) = do
+  let f (SBC.StanCode _ sp') = SBC.StanCode cb (sp' <> sp)
+  EffS.modify f
+
+runStanBuilderEff :: forall a b c .
+                     SBC.DataSource SBC.ModelDataT
+                  -> SBC.DataSource SBC.GQDataT
+                  -> SBC.StanDataBuilderEff SBC.ModelDataT a
+                  -> SBC.StanDataBuilderEff SBC.GQDataT b
+                  -> (a -> b -> SBC.StanModelBuilderEff c)
+                  -> Either Text (SBC.BuilderState, [Text], c)
+runStanBuilderEff md gq modelDG gqDG stanBuilderF = do
+  let m' = setupDataAndGroups md modelDG >>= \a -> setupDataAndGroups gq gqDG >>= \b -> stanBuilderF a b
   let effRes =  Eff.runPureEff
                 . EffF.runFail
                 . EffW.runWriter
@@ -66,10 +112,10 @@ runStanBuilderEff md gq m = do
                 . EffS.runState (SBC.StanCode SLP.SBData SLP.emptyStanProgram)
                 . EffS.runState (SBPT.BParameterCollection mempty mempty)
                 . EffS.runState DHash.empty
-                . runGroupBuilder gq
+--                . runGroupBuilder gq
                 . EffS.runState DHash.empty
-                . runGroupBuilder md
-                $ m
+--                . runGroupBuilder md
+                $ m'
   case effRes of
     Left err -> Left $ toText err
     Right (((((((((a, mRBs), gqRBs), pc), c), hf), mCJFs), gqCJFs), _hj), logs) -> do
@@ -79,9 +125,7 @@ runStanBuilderEff md gq m = do
 buildRowInfo :: d -> SBC.RowTypeTag i r -> SBC.GroupIndexAndIntMapMakers d r -> SBC.RowInfo d r
 buildRowInfo d _rtt (SBC.GroupIndexAndIntMapMakers tf@(SBC.ToFoldable f) ims imbs) = Foldl.fold fld $ f d  where
   gisFld = indexBuildersForDataSetFold ims
---  uBindings = Map.insert (dataSetName rtt) (SLE.namedLIndex ("N_" <> dataSetName rtt))
---                $ useBindingsFromGroupIndexMakers rtt ims
-  fld = SBC.RowInfo tf {- uBindings -} <$> gisFld <*> pure imbs <*> pure mempty
+  fld = SBC.RowInfo tf <$> gisFld <*> pure imbs <*> pure mempty
 
 indexBuildersForDataSetFold :: SBC.GroupIndexMakers r -> Foldl.Fold r (SBC.GroupIndexes r)
 indexBuildersForDataSetFold (SBC.GroupIndexMakers gims) = SBC.GroupIndexes <$> DHash.traverse makeIndexMapF gims
@@ -89,6 +133,7 @@ indexBuildersForDataSetFold (SBC.GroupIndexMakers gims) = SBC.GroupIndexes <$> D
 makeIndexMapF :: SBC.MakeIndex r k -> Foldl.Fold r (SBC.IndexMap r k)
 makeIndexMapF (SBC.GivenIndex m h) = pure $ mapToIndexMap h m
 makeIndexMapF (SBC.FoldToIndex fld h) = fmap (mapToIndexMap h) fld
+
 
 mapLookupE :: Ord k => (k -> Text) -> Map k a -> k -> Either Text a
 mapLookupE errMsg m k = case Map.lookup k m of

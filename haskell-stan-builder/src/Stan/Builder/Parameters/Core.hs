@@ -157,22 +157,24 @@ rawName t = t <> "_raw"
 --
 
 -- should be used in place of runStanBuilder
-runStanBuilderDAG :: forall a .
+runStanBuilderDAG :: forall a b c .
                      SBC.ModelSource
                   -> SBC.GQSource
-                  -> SBC.StanBuilderEff a
-                  -> Either Text (SBC.BuilderState, [Text], a)
-runStanBuilderDAG md gq sb =
-  let sb' :: SBC.StanBuilderEff a
-      sb' = do
-        a <- sb
+                  -> SBC.StanDataBuilderEff SBC.ModelDataT a
+                  -> SBC.StanDataBuilderEff SBC.GQDataT b
+                  -> (a -> b -> SBC.StanModelBuilderEff c)
+                  -> Either Text (SBC.BuilderState, [Text], c)
+runStanBuilderDAG md gq modelDG gqDG sbF =
+  let sbF' :: a -> b -> SBC.StanModelBuilderEff c
+      sbF' a b = do
+        c <- sbF a b
         -- we need the parameter code to come before anything written assuming it exists
         -- so, shenanigans
         SB.addCodeAbove $ do
           bpc <- EffS.get @PT.BParameterCollection
           addAllParametersInCollection bpc
-        return a
-  in SBR.runStanBuilderEff md gq sb'
+        return c
+  in SBR.runStanBuilderEff md gq modelDG gqDG sbF'
 
 exprListToParameters :: SLE.ExprList ts  -> PT.Parameters ts
 exprListToParameters = hfmap PT.GivenP

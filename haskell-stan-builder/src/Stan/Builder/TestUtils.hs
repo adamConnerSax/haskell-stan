@@ -11,9 +11,14 @@ import qualified Stan.Builder as SB
 import qualified Data.Aeson as A
 import qualified Data.Text as T
 
-testBuild :: SB.ModelSource -> SB.GQSource -> SB.StanBuilderEff () -> IO ()
-testBuild md gq stanBuilder = do
-  case SB.runStanBuilderDAG md gq stanBuilder of
+testBuild :: SB.ModelSource
+          -> SB.GQSource
+          -> SB.StanDataBuilderEff SB.ModelDataT a
+          -> SB.StanDataBuilderEff SB.GQDataT b
+          -> (a -> b  -> SB.StanModelBuilderEff ())
+          -> IO ()
+testBuild md gq modelDG gqDG stanBuilderF = do
+  case SB.runStanBuilderDAG md gq modelDG gqDG stanBuilderF of
     Left err -> putTextLn $ "Error in runStanBuilder: " <> err
     Right (bs, logs, ()) -> do
       let SB.StanCode _ sp = SB.code bs

@@ -112,7 +112,7 @@ addConstJson :: forall i t es . SBC.StanConstJsonC i es
              => JSONAddStyle
              -> SLS.NamedDeclSpec t
              -> SBC.InputDataType i
-             -> SBC.JSONConstFold (SBC.DataSource i)
+             -> SBC.JSONConstFold i
              -> Eff es (SLE.UExpr t)
 addConstJson jas nds idt (SBC.JSONConstFold jf) = do
   let jsonName = SLS.declName nds
@@ -122,8 +122,8 @@ addConstJson jas nds idt (SBC.JSONConstFold jf) = do
             then pure $ SLE.namedE jsonName $ SLS.declSType $ SLS.decl nds
             else SBC.buildError $ "addConstJSON: " <> jsonName <> " already added and JSONAddStyle is ErrIfDuplicate"
     False -> do
-      (SBC.JSONConstFold f) <- EffS.get @(SBC.JSONConstFold (SBC.DataSource i))
-      EffS.put @(SBC.JSONConstFold (SBC.DataSource i)) $ SBC.JSONConstFold (f <> jf)
+      (SBC.JSONConstFold f) <- EffS.get @(SBC.JSONConstFold i)
+      EffS.put @(SBC.JSONConstFold i) $ SBC.JSONConstFold (f <> jf)
       EffS.modify (SBC.JSONNames . Set.insert jsonName . SBC.unJSONNames)
       SBB.inBlock (codeBlock idt) $ SBB.addFromCodeWriter $ SLC.declareNW nds
 
@@ -179,10 +179,10 @@ buildJSONF = do
   DHash.traverse bldRowJSONFolds rowInfos
 
 
-buildJSONFromDataM :: forall i es . (SBC.StanRowInfoC i es, EffS.State (SBC.JSONConstFold (SBC.DataSource i)) :> es)
+buildJSONFromDataM :: forall i es . (SBC.StanRowInfoC i es, EffS.State (SBC.JSONConstFold i) :> es)
                    => Eff es (SBC.DataSource i -> Either Text Aeson.Series)
 buildJSONFromDataM = do
-  (SBC.JSONConstFold constJSONFld) <- EffS.get @(SBC.JSONConstFold (SBC.DataSource i))
+  (SBC.JSONConstFold constJSONFld) <- EffS.get @(SBC.JSONConstFold i)
   dataSetJSON <- buildJSONF @i
   pure $ \d ->
     let c = Foldl.foldM constJSONFld (Just ())
