@@ -246,6 +246,7 @@ addIntMapFromGroup rtt gtt rowToGrpF = do
   withRowInfo (stanBuildError dataMissingErr) f rtt
 
 -- To HERE
+{- Moved to Stan.Builder.Groups
 getGroupIndex :: forall r k.
               RowTypeTag r
               -> GroupTypeTag k
@@ -286,7 +287,7 @@ getGroupIndexVar rtt gtt = do
             $ "getGroupIndexVar: group=" <> taggedGroupName gtt
             <> " not found in data-set=" <> dataSetName rtt <> " (input type=" <> show (inputDataType rtt) <> ") not found."
   withRowInfo dsNotFoundErr varIfGroup rtt
-
+-}
 {- Moved to Stan.Builder.CoreTypes
 intMapsForDataSetFoldM :: GroupIntMapBuilders r -> Foldl.FoldM (Either Text) r (GroupIntMaps r)
 intMapsForDataSetFoldM (GroupIntMapBuilders imbs) = GroupIntMaps <$> DHash.traverse unDataToIntMap imbs

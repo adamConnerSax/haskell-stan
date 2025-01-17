@@ -25,9 +25,9 @@ knitToIO c x = K.knitHtml c x >>= either err knitDoc where
 
 defaultConfig :: K.KnitConfig SerializerC CacheData Text
 defaultConfig =
-  let cacheDir :: Text = "haskell-stan/test/.flat-kh-cache/"
-  in  (K.defaultKnitConfig $ Just "haskell-stan-test")
-      { K.outerLogPrefix = Just "haskell-stan-test"
+  let cacheDir :: Text = "haskell-stan/model-test/.flat-kh-cache/"
+  in  (K.defaultKnitConfig $ Just "model-test")
+      { K.outerLogPrefix = Just "model-test"
       , K.logIf = K.logDiagnostic
       , K.serializeDict = flatSerializeDict
       , K.persistCache = KA.persistStrictByteString (\t -> toString (cacheDir <> t))

@@ -17,6 +17,7 @@ module Stan.Builder.BuildRunner
 where
 
 import qualified Stan.Builder.Core as SBC
+import qualified Stan.Builder.Groups as SBG
 import qualified Stan.Builder.JSON as SBJ
 
 import qualified Stan.Language.Program as SLP
@@ -115,13 +116,13 @@ buildGroupIndexes :: forall i es . SBC.StanJsonC i es
                   => Eff es ()
 buildGroupIndexes = do
   let buildIndexJSONFold :: SBC.RowTypeTag i r -> SBC.GroupTypeTag k -> SBC.IndexMap r k -> Eff es (Maybe k)
-      buildIndexJSONFold rtt gtt@(SBC.GroupTypeTag _gName lE) (SBC.IndexMap (SBC.IntIndex _gSize mIntF) _ _ _) = do
-        let indexName = SBC.groupIndexVarName rtt gtt --dsName <> "_" <> gName
+      buildIndexJSONFold rtt gtt@(SBC.GroupTypeTag _gName) (SBC.IndexMap (SBC.IntIndex _gSize mIntF) _ _ _) = do
+        let indexName = SBG.groupIndexVarName rtt gtt --dsName <> "_" <> gName
             ndsF x = SLS.NamedDeclSpec indexName $  SLS.addVMs (SLS.Modifiers [SLS.lowerM $ SLE.intE 1]) $ SLS.intArraySpec x
             mIntF' x = case mIntF x of
               Left msg -> Left $ msg <> " (from buildGroupIndexes for indexName=" <> indexName <> ")"
               Right y -> Right y
-        _ <- SBJ.addColumnMJson SBJ.ErrIfDuplicate rtt ndsF lE mIntF'
+        _ <- SBJ.addColumnMJson SBJ.ErrIfDuplicate rtt ndsF (SBC.groupSizeE gtt) mIntF'
         pure Nothing
       buildRowFolds :: SBC.RowTypeTag i r -> SBC.RowInfo d r -> Eff es (Maybe r)
       buildRowFolds rtt ri  = case ri of

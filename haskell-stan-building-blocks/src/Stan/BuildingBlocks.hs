@@ -9,6 +9,9 @@ module Stan.BuildingBlocks
   , module Stan.BuildingBlocks.Distributions.RealBinomial
   , module Stan.BuildingBlocks.GroupAlpha
   , module Stan.BuildingBlocks.SumToZero
+  , module Stan.BuildingBlocks.LogLikelihood
+  , module Stan.BuildingBlocks.PostStratification
+  , module Stan.BuildingBlocks.PosteriorPrediction
   )
 where
 
@@ -21,3 +24,6 @@ import Stan.BuildingBlocks.Distributions
 import Stan.BuildingBlocks.Distributions.RealBinomial
 import Stan.BuildingBlocks.GroupAlpha
 import Stan.BuildingBlocks.SumToZero
+import Stan.BuildingBlocks.LogLikelihood
+import Stan.BuildingBlocks.PostStratification
+import Stan.BuildingBlocks.PosteriorPrediction

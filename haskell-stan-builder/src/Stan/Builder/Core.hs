@@ -236,20 +236,21 @@ instance Hashable.Hashable (Some.Some (RowTypeTag i)) where
   hashWithSalt s (Some.Some (RowTypeTag idt n)) = Hashable.hashWithSalt s idt `Hashable.hashWithSalt` n
 
 data GroupTypeTag k where
-  GroupTypeTag :: Typeable k => Text -> SLE.IntE -> GroupTypeTag k
+  GroupTypeTag :: Typeable k => Text -> GroupTypeTag k
 
+{-
 groupIndexVarName :: RowTypeTag i r -> GroupTypeTag k -> SLT.VarName
 groupIndexVarName rtt gtt = dataSetName rtt <> "_" <> taggedGroupName gtt
 {-# INLINEABLE groupIndexVarName #-}
-
+-}
 taggedGroupName :: GroupTypeTag k -> Text
-taggedGroupName (GroupTypeTag n _lE) = n
+taggedGroupName (GroupTypeTag n) = n
 
 groupSizeName :: GroupTypeTag k -> Text
 groupSizeName g = "J_" <> taggedGroupName g
 
 groupSizeE :: GroupTypeTag k -> SLE.IntE
-groupSizeE (GroupTypeTag _ lE) = lE
+groupSizeE gtt = SLE.namedE (groupSizeName gtt) SLT.SInt
 
 --addEnumGroup :: (Enum k, Bounded k) => (EffS.State StanCode )Text -> GroupTypeTag k
 --addEnumGroup name size = GroupTypeTag name (TE.namedE ""size $ intE size)
@@ -262,17 +263,17 @@ dataByGroupIndexE rtt gtt = SLE.namedE (dataByGroupIndexName rtt gtt) SLT.sIndex
 
 -- should depend on length expressions as well. FIX
 instance GADT.GEq GroupTypeTag where
-  geq gta@(GroupTypeTag n1 _lE1) gtb@(GroupTypeTag n2 _lE2) =
+  geq gta@(GroupTypeTag n1) gtb@(GroupTypeTag n2) =
     case Reflection.eqTypeRep (Reflection.typeOf gta) (Reflection.typeOf gtb) of
       Just Reflection.HRefl -> if n1 == n2 then Just Reflection.Refl else Nothing
       _ -> Nothing
 
 instance GADT.GShow GroupTypeTag where
-  gshowsPrec _ (GroupTypeTag n _) s = s ++ "GTT (name= " ++ toString n ++ ")"
+  gshowsPrec _ (GroupTypeTag n) s = s ++ "GTT (name= " ++ toString n ++ ")"
 
 instance Hashable.Hashable (Some.Some GroupTypeTag) where
-  hash (Some.Some (GroupTypeTag n _)) = Hashable.hash n
-  hashWithSalt m (Some.Some (GroupTypeTag n _)) = hashWithSalt m n
+  hash (Some.Some (GroupTypeTag n)) = Hashable.hash n
+  hashWithSalt m (Some.Some (GroupTypeTag n)) = hashWithSalt m n
 
 data IntIndex row = IntIndex { i_Size :: Int, i_Index :: row -> Either Text Int }
 

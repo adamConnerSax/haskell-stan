@@ -40,7 +40,7 @@ modelData = ModelData [Row "a1" A 12 1.1 1.2
 
 stanBuilder :: SB.StanBuilderEff ()
 stanBuilder = do
-  modelDataT <- SB.addData modelData "D1" SB.ModelData (SB.ToFoldable rows)
+  modelDataT <- SB.addData "D1" SB.ModelData (SB.ToFoldable rows)
   letterGroupT <- SB.addEnumGroup @LetterCode "LC"
   SB.addGroupIndexForData letterGroupT modelDataT (SB.makeIndexByCounting show letterCode)
   SB.addGroupIntMapForData letterGroupT modelDataT (SB.dataToIntMapFromEnum letterCode)

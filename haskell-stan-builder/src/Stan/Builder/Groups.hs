@@ -16,6 +16,7 @@ module Stan.Builder.Groups
   )
 where
 
+import qualified Stan.Language as SL
 import qualified Stan.Builder.Core as SBC
 import qualified Stan.Builder.Build as SBB
 import qualified Stan.Builder.JSON as SBJ
@@ -34,20 +35,20 @@ import qualified Effectful.Fail as EffF
 type AddGroup k es = (Typeable k, SBC.StanConstJsonC SBC.ModelDataT es)
 
 addGroup :: forall k es . AddGroup k es
-         => Text -> Int -> Eff es (SBC.GroupTypeTag k)
+         => Text -> Int -> Eff es (SBC.GroupTypeTag k, SL.IntE)
 addGroup groupName size = do
   lE <- SBJ.addFixedIntJson SBJ.ErrIfDuplicate SBC.ModelData ("J_" <> groupName) (Just 1) size
-  pure $ SBC.GroupTypeTag groupName lE
+  pure $ (SBC.GroupTypeTag groupName, lE)
 
 addEnumGroup :: forall k es . (Enum k, Bounded k, AddGroup k es)
              => Text
-             -> Eff es (SBC.GroupTypeTag k)
+             -> Eff es (SBC.GroupTypeTag k, SL.IntE)
 addEnumGroup groupName = addGroup groupName size
   where
     size = Foldl.fold Foldl.length $ ([minBound..maxBound] :: [k])
 
 addGroupFromCollection :: forall k f es . (Ord k, Foldable f, AddGroup k es)
-                       => Text -> f k -> Eff es (SBC.GroupTypeTag k)
+                       => Text -> f k -> Eff es (SBC.GroupTypeTag k, SL.IntE)
 addGroupFromCollection groupName c = addGroup groupName size
   where
     size = Set.size $ Foldl.fold Foldl.set c
@@ -163,3 +164,44 @@ indexMap rtt gtt = SBB.withRowInfo err f rtt where
                  <> "\" not present in indexes for \""
                  <> SBC.dataSetName rtt <> "\" (" <> show (SBC.dataSetInputData rtt) <> ")"
       Just im -> return im
+
+getGroupIndex :: forall i r k.
+                 SBC.RowTypeTag i r
+              -> SBC.GroupTypeTag k
+              -> SBC.DataSetGroupIntMaps i
+              -> Either Text (IntMap k)
+getGroupIndex rtt gtt dsgi@(SBC.DataSetGroupIntMaps grpIndexes) =
+  case DHash.lookup rtt grpIndexes of
+    Nothing -> Left
+               $ "getGroupIndex: " <> SBC.dataSetName rtt <> " (idt="
+               <> show (SBC.dataSetInputData rtt) <> ") not found in data-set group int maps: "
+               <> SBC.displayDataSetGroupIntMaps dsgi <> "."
+               <> " If this error is complaining about a data-set key that appears to be present, double check the *types* used when constructing the row-type-tags"
+
+    Just gims@(SBC.GroupIntMaps gim) -> case DHash.lookup gtt gim of
+      Nothing -> Left $ "getGroupIndex: \"" <> SBC.taggedGroupName gtt
+                 <> "\" not found in Group int maps ("
+                 <> SBC.displayGroupIntMaps gims <> ") for data-set \"" <> SBC.dataSetName rtt <> "\""
+      Just im -> Right im
+
+groupIndexVarName :: SBC.RowTypeTag i r -> SBC.GroupTypeTag k -> SL.VarName
+groupIndexVarName rtt gtt = SBC.dataSetName rtt <> "_" <> SBC.taggedGroupName gtt
+{-# INLINEABLE groupIndexVarName #-}
+
+getGroupIndexVar :: forall i r k es. SBC.StanRowInfoC i es
+                 => SBC.RowTypeTag i r
+                 -> SBC.GroupTypeTag k
+                 -> Eff es (SL.UExpr SL.EIndexArray)
+getGroupIndexVar rtt gtt = do
+  let vName = groupIndexVarName rtt gtt
+      dsNotFoundErr = SBC.buildError
+                      $ "getGroupIndexVar: data-set=" <> SBC.dataSetName rtt <> " (input type=" <> show (SBC.dataSetInputData rtt) <> ") not found."
+      varIfGroup :: forall x d . SBC.RowInfo d x -> Eff es (SL.UExpr SL.EIndexArray)
+      varIfGroup ri =
+        let (SBC.GroupIndexes gis) = SBC.groupIndexes ri
+        in case DHash.lookup gtt gis of
+          Just _ -> return $ SL.namedE vName SL.sIndexArray --SME.StanVar varName (SME.StanArray [SME.NamedDim $ dataSetName rtt] SME.StanInt)
+          Nothing -> SBC.buildError
+            $ "getGroupIndexVar: group=" <> SBC.taggedGroupName gtt
+            <> " not found in data-set=" <> SBC.dataSetName rtt <> " (input type=" <> show (SBC.dataSetInputData rtt) <> ") not found."
+  SBB.withRowInfo dsNotFoundErr varIfGroup rtt

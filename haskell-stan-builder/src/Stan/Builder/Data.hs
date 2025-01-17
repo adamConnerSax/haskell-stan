@@ -22,8 +22,8 @@ import qualified Effectful.State.Static.Local as EffS
 import qualified Effectful.Fail as EffF
 
 addData :: forall es r i . (Typeable r, Typeable i, EffF.Fail :> es, EffS.State (SBC.RowInfoMakers i) :> es)
-        => SBC.DataSource i -> Text -> SBC.InputDataType i  -> SBC.ToFoldable (SBC.DataSource i) r -> Eff es (SBC.RowTypeTag i r)
-addData _d name idt tf = do
+        => Text -> SBC.InputDataType i  -> SBC.ToFoldable (SBC.DataSource i) r -> Eff es (SBC.RowTypeTag i r)
+addData name idt tf = do
   rowInfoMakers <- EffS.get @(SBC.RowInfoMakers i)
   let rtt = SBC.RowTypeTag idt name
   case DHash.lookup rtt rowInfoMakers of
