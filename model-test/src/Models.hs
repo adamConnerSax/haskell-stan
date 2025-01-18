@@ -125,10 +125,11 @@ spreadDiffNormal (ModelDataPkg resultsT homeFieldG favoriteG favoriteSize underD
           (SL.NamedDeclSpec "mu_fav" $ SL.vectorSpec favoriteSize)
           (SB.given (SL.realE 0) :> sigmaMuP :> TNil)
           $ SF.normalS
+
   -- get expressions for the parameters we need to model the data
   let (sigmaE :> muVecE :> TNil) = SB.parametersAsExprs (sigmaP :> muVP :> TNil)
 
-  -- helpers for broadcasting sigma and indexing mu
+  -- helper functions
   let toVec rtt x = SF.rep_vector x (SB.dataSetSizeE rtt)
       indexed rtt gtt = SL.indexE SL.s0 (SB.dataByGroupIndexE rtt gtt)
 
@@ -140,7 +141,6 @@ spreadDiffNormal (ModelDataPkg resultsT homeFieldG favoriteG favoriteSize underD
   -- generated quantities, in this case a prediction
   SB.inBlock SL.SBGeneratedQuantities $ do
     let ps = indexed matchupT favoriteG muVecE :> toVec matchupT sigmaE :> TNil
---    SB.addRowKeyIntMap matchupsData favoriteG (F.rgetField @FavoriteName)
     _ <- SB.addFromCodeWriter $ SL.declareRHSNW (SL.NamedDeclSpec "eScoreDiff" $ SL.vectorSpec (SB.dataSetSizeE matchupT))
          $ SBB.familyRNG SBB.normalDist ps
     pure ()
@@ -149,8 +149,6 @@ spreadDiffNormal (ModelDataPkg resultsT homeFieldG favoriteG favoriteSize underD
   SBB.generateLogLikelihood resultsT SBB.normalDist
     (pure (\k -> (indexed resultsT favoriteG muVecE) !! k :> (toVec resultsT sigmaE) !! k :> TNil))
     (pure $ \k -> spreadDiffE !! k)
-
---  (return (S.var mu_favV, S.var sigmaV)) spreadDiffV
 
 
 -- the getParameter function feels like an incantation.  Need to simplify.

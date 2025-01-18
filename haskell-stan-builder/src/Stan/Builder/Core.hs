@@ -260,8 +260,6 @@ groupSizeName g = "J_" <> taggedGroupName g
 groupSizeE :: GroupTypeTag k -> SLE.IntE
 groupSizeE gtt = SLE.namedE (groupSizeName gtt) SLT.SInt
 
---addEnumGroup :: (Enum k, Bounded k) => (EffS.State StanCode )Text -> GroupTypeTag k
---addEnumGroup name size = GroupTypeTag name (TE.namedE ""size $ intE size)
 
 dataByGroupIndexName :: RowTypeTag i r -> GroupTypeTag g -> Text
 dataByGroupIndexName rtt gtt = dataSetName rtt <> "_" <> taggedGroupName gtt
