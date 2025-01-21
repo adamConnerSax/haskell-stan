@@ -30,11 +30,11 @@ import Stan.Language.Types ( EType(EInt, EArray)
 import Stan.Language.Expression ( IndexKey, VarName, LExpr, LExprF (..), UExpr, UExprF(..), lNamedE )
 import Stan.Language.Functions (Function(..), Density(..), TypedArgNames, funcArgName) --, withFunction, withDensity)
 import Stan.Language.Statement
-    ( LStmt,
+    ( LStmt, LStmt',
       Stmt(..),
       StmtF(..),
       ForEachSlice,
-      UStmt,
+      UStmt, UStmt',
       DeclSpec)
 import Stan.Language.Statements (declType)
 import Stan.Language.Recursion
@@ -46,12 +46,13 @@ import Stan.Language.Recursion
       IFix(..),
       iCata,
       iCataM,
-      IAlgM, Fix)
+      IAlgM, Fix(..), anaM, CoAlgM)
 import Stan.Language.Format
     ( CodePP,
       iExprToCode,
       IExprCode(Bare),
       stmtToCodeE,
+      stmtToCodeE',
       exprToDocAlg,
       stmtToCodeAlg )
 
@@ -171,8 +172,8 @@ ucAddReturnToFunctionBodyScope ue = case unIFix ue of
 contextualLookup :: UStmt -> LookupM (RS.Base LStmt UStmt)
 contextualLookup x = do
   updateContextA x
-  lsf <- htraverse doLookups (RS.project x)
-  pure lsf
+  htraverse doLookups (RS.project x)
+--  pure lsf
 
 doLookupsInCStatement :: UStmt -> LookupM LStmt
 doLookupsInCStatement = RS.anaM contextualLookup --(\x -> htraverse doLookups (RS.project x) >>= postContext)
@@ -191,10 +192,6 @@ updateContextA = \case
       ucAddArgsToFunctionBodyScope typedArgs
       newFunction f
     IdentityFunction -> newFunction f
---    ucAddReturnToFunctionBodyScope re
---  SBlockF stBlock body -> case stBlock of
---    ModelStmts -> modify (modifyVarCtxt enterNewScope)
---    _ -> pure ()
   SContext f -> modify f
   _ -> pure ()
 
@@ -208,18 +205,40 @@ ucAddArgsToFunctionBodyScopeF fArgs =
   SLA.modifyVarCtxt $ SLA.addTypedVarsToInnerScope (hfmap (K . funcArgName) fArgs) . SLA.enterNewScope
 
 
-type UStmt' = Fix (StmtF UExpr)
-type LStmt' = Fix (StmtF LExpr)
-{-
+
+updateContextA' :: UStmt' -> LookupM ()
+updateContextA' x = case unFix x of
+  SDeclareF varName declSpec -> ucDeclare varName declSpec
+  SDeclAssignF varName declSpec _ -> ucDeclare varName declSpec
+  SForF loopCounter _ _ _ -> ucAddIntCounterToLoopBodyScope loopCounter
+  SForEachF loopCounter ce _ -> ucAddTypedCounterToLoopBodyScope loopCounter ce
+  SFunctionF f  typedArgs _ -> case f of
+    Function _ -> do
+      ucAddArgsToFunctionBodyScope typedArgs
+      newFunction f
+    IdentityFunction -> newFunction f
+  SContextF f -> modify f
+  _ -> pure ()
+
+contextualLookup' :: CoAlgM LookupM (StmtF LExpr) UStmt'
+contextualLookup' x = do
+  updateContextA' x
+  htraverse doLookups $ unFix x
+
 doLookupsInCStatement' :: UStmt' -> LookupM LStmt'
-doLookupsInCStatement' = anaM (\x -> htraverse doLookups (unFix x) >>= updateContext)
--}
+doLookupsInCStatement' = anaM contextualLookup' --contextualLookup'  --(\x -> htraverse doLookups (unFix x) >>= updateContext)
 
 doLookupsInStatementE :: SLA.ASTCtxt -> UStmt -> Either Text LStmt
 doLookupsInStatementE ctxt0 = flip evalStateT ctxt0 . doLookupsInCStatement
 
+doLookupsInStatementE' :: SLA.ASTCtxt -> UStmt' -> Either Text LStmt'
+doLookupsInStatementE' ctxt0 = flip evalStateT ctxt0 . doLookupsInCStatement'
+
 statementToCodeE :: SLA.ASTCtxt -> UStmt -> Either Text CodePP
 statementToCodeE ctxt0 x = doLookupsInStatementE ctxt0 x >>= stmtToCodeE
+
+statementToCodeE' :: SLA.ASTCtxt -> UStmt' -> Either Text CodePP
+statementToCodeE' ctxt0 x = doLookupsInStatementE' ctxt0 x >>= stmtToCodeE'
 
 data EExprF :: (EType -> Type) -> EType -> Type where
   EL :: LExprF r t -> EExprF r t
@@ -266,6 +285,7 @@ lookupVarE vn st = do
     SLA.WrongType _dt -> pure $ IFix $ EE $ "#badType \"" <> vn <> "#"
 
 type EStmt = Stmt EExpr
+type EStmt' = Fix (StmtF EExpr)
 
 contextualLookupAE :: UStmt -> LookupM (RS.Base EStmt UStmt)
 contextualLookupAE x = do
@@ -273,12 +293,24 @@ contextualLookupAE x = do
   updateContextA x
   pure lsf
 
+contextualLookupAE' :: CoAlgM LookupM (StmtF EExpr) UStmt'
+contextualLookupAE' x = do
+  lsf <- htraverse doLookupsE $ unFix x
+  updateContextA' x
+  pure lsf
 
 doLookupsEInStatement :: UStmt -> LookupM EStmt
 doLookupsEInStatement = RS.anaM contextualLookupAE --(\x -> htraverse doLookupsE (RS.project x) >>= updateContext)
 
+doLookupsEInStatement' :: UStmt' -> LookupM EStmt'
+doLookupsEInStatement' = anaM contextualLookupAE' --(\x -> htraverse doLookupsE (RS.project x) >>= updateContext)
+
+
 doLookupsEInStatementE :: SLA.ASTCtxt -> UStmt -> Either Text EStmt
 doLookupsEInStatementE ctxt0 = flip evalStateT ctxt0 . doLookupsEInStatement
+
+doLookupsEInStatementE' :: SLA.ASTCtxt -> UStmt' -> Either Text EStmt'
+doLookupsEInStatementE' ctxt0 = flip evalStateT ctxt0 . doLookupsEInStatement'
 
 doLookupsE :: NatM LookupM UExpr EExpr
 doLookupsE = iCataM $ \case

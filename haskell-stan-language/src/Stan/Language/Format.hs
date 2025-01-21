@@ -58,6 +58,10 @@ type CodePP = PP.Doc ()
 stmtToCodeE :: SLS.LStmt -> Either Text CodePP
 stmtToCodeE = RS.hylo stmtToCodeAlg (hfmap exprToCode . RS.project)
 
+stmtToCodeE' :: SLS.LStmt' -> Either Text CodePP
+stmtToCodeE' = RS.hylo stmtToCodeAlg (hfmap exprToCode . unFix)
+
+
 lineLayout :: PP.Doc a -> PP.Doc a
 lineLayout = PP.group . PP.nest 2
 

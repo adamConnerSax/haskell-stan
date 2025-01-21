@@ -200,6 +200,9 @@ type instance RS.Base (Stmt f) = StmtF f
 type LStmt = Stmt SLE.LExpr
 type UStmt = Stmt SLE.UExpr
 
+type UStmt' = SLR.Fix (StmtF SLE.UExpr)
+type LStmt' = SLR.Fix (StmtF SLE.LExpr)
+
 instance Semigroup (Stmt a) where
   s1 <> s2 = SGroup UnBracketed [s1, s2]
 
