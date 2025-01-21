@@ -6,7 +6,7 @@
 {-# LANGUAGE RankNTypes #-}
 module Main where
 
-import Prelude hiding (print)
+import Prelude hiding (print, break)
 
 import Stan.Language.Types
 import Stan.Language.Indexing
@@ -76,7 +76,7 @@ main = do
     x = namedE "x" SReal
     y = namedE "y" SReal
     v = namedE "v" SCVec
-    kl = namedIndexE "KIndex"
+    kl = namedE "KIndex" (SArray s1 SInt)
     lk = lNamedE "K" (SArray s1 SInt)
     ue1 = x `plus` y
     ctxt0 = emptyLookupCtxt --IndexLookupCtxt mempty mempty
@@ -136,17 +136,19 @@ main = do
   cmnt "Assignments"
   cmnt "simple"
   writeStmtCode ctxtWithVars $ assign ue1 ue1
-  cmnt "missing lookup"
-  writeStmtCode ctxtWithVars $ assign x (x `plus` (y `plus` vByKatn))
-  cmnt "with context"
-  writeStmtCode ctxt1 $ assign x (x `plus` (y `plus` vByKatn))
+--  cmnt "missing lookup"
+--  writeStmtCode ctxtWithVars $ assign x (x `plus` (y `plus` vByKatn))
+--  cmnt "with context"
+--  writeStmtCode ctxt1 $ assign x (x `plus` (y `plus` vByKatn))
   let declare_n = declare "n" intSpec
       declare_l = declare "l" intSpec
       declare_x = declare "x" realSpec
       declare_q = declare "q" (matrixSpec n l)
       stDeclare1 = declare "M" (matrixSpec n l)
-      nStates = namedSizeE "States"
-      nPredictors = namedSizeE "Predictors"
+      declare_N_States = declare "N_States" intSpec
+      declare_K_Predictors = declare "K_Predictors" intSpec
+      nStates = namedSizeE "N_States"
+      nPredictors = namedSizeE "K_Predictors"
 
       stDeclare2 = declare "A" $ arraySpec s2 (n ::: l ::: VNil) (addVMs (Modifiers [lowerM $ realE 2]) $ matrixSpec nStates nPredictors )
   cmnt "Declarations"
@@ -154,7 +156,7 @@ main = do
   cmnt "Next should fail missing an index"
   writeStmtCode ctxt0 $ grouped  [declare_n, declare_l, stDeclare2]
   cmnt "Next should succeed"
-  writeStmtCode ctxt0 $ grouped  [SContext (insertSizeBinding "States" statesLE . insertSizeBinding "Predictors" predictorsLE) , declare_n, declare_l, stDeclare2]
+  writeStmtCode ctxt0 $ grouped  [context (insertSizeBinding "States" statesLE . insertSizeBinding "Predictors" predictorsLE) , declare_N_States, declare_K_Predictors, declare_n, declare_l, stDeclare2]
 
   let stDeclAssign1 = declareAndAssign "M" (addVMs (Modifiers [upperM $ realE 8]) $ matrixSpec l n) (namedE "q" SMat)
   writeStmtCode ctxt0 $ grouped   [declare_n, declare_l, declare_q, stDeclAssign1]
@@ -177,7 +179,7 @@ main = do
   writeStmtCode ctxt0 $ grouped [declare "t" (arraySpec s2 (intE 2 ::: intE 2 ::: VNil) (tuple2Spec intSpec realSpec))]
 
   cmnt "Add to target, two ways."
-  let normalDistVec = Density "normal" SCVec (SCVec :> (SCVec :> TNil))
+  let normalDistVec = Density "normal" --SCVec (SCVec :> (SCVec :> TNil))
       declare_m = declare "m" $ vectorSpec $ namedE "n" SInt
       declare_sd = declare "sd" $ vectorSpec $ namedE "n" SInt
       stmtTarget1 = addToTarget $ densityE normalDistVec v (namedE "m" SCVec :> (namedE "sd" SCVec :> TNil))
@@ -192,8 +194,8 @@ main = do
   writeStmtCode ctxt1 $ grouped  [declare_x, declare_y, declare_n, stmtFor1]
   let
     bodyF2 se = assign (sliceE s0 se $ namedE "w" SCVec) (realE 2)
-    stmtFor2 = for "q" (IndexedLoop "States") bodyF2
-  writeStmtCode ctxt2 $ grouped  [declare "w" $ vectorSpec nStates, stmtFor2]
+--    stmtFor2 = for "q" (IndexedLoop "States") bodyF2
+--  writeStmtCode ctxt2 $ grouped  [declare "w" $ vectorSpec nStates, stmtFor2]
   let stmtFor3 = for "yl" (SpecificIn $ namedE "ys" SCVec) (\ye -> assign x (x `plus` ye))
   writeStmtCode ctxt0 $ grouped  [declare_x, declare_y, declare_n, declare "ys" $ vectorSpec n, stmtFor3]
   cmnt "Check loop scoping"
@@ -209,13 +211,13 @@ main = do
   writeStmtCode ctxt1 $ grouped [declare_l, stmtIf1]
 
   cmnt "While loops"
-  let stmtWhile = while (l `eq` n) (grouped $ assign ue1 ue1 :| [assign x (x `plus` y), SBreak])
+  let stmtWhile = while (l `eq` n) (grouped $ assign ue1 ue1 :| [assign x (x `plus` y), break])
   writeStmtCode ctxt1 $ grouped [declare_l, stmtWhile]
 
   cmnt "Functions"
   let
     euclideanDistance :: Function EReal [ECVec, ECVec, EArray N1 EInt]
-    euclideanDistance = Function "eDist" SReal (SCVec :> SCVec :> SArray s1 SInt :> TNil)
+    euclideanDistance = Function "eDist" --SReal (SCVec :> SCVec :> SArray s1 SInt :> TNil)
     eDistArgList = Arg "fa1" :> Arg "fa2" :> DataArg "fa3" :> TNil
     eDistBody :: ExprList [ECVec, ECVec, EArray N1 EInt] -> (UStmt, UExpr EReal)
     eDistBody (x1 :> x2 :> _ :> TNil) = cwStmt $ do

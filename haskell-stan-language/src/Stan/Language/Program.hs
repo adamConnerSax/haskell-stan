@@ -25,6 +25,7 @@ import qualified Stan.Language.ASTContext as SLA
 import qualified Stan.Language.Statement as SLS
 import qualified Stan.Language.Statements as SLSS
 import qualified Stan.Language.Evaluate as SLE
+import qualified Stan.Language.Recursion as SLR
 
 import qualified Prettyprinter.Render.Text as PP
 import qualified Prettyprinter as PP
@@ -78,7 +79,7 @@ programHasPPBlock p = not $ null (unStanProgram p Array.! SBPosteriorPrediction)
 
 -- this is...precarious.  No way to check that we are using all of the array
 programToStmt :: GeneratedQuantities -> StanProgram -> SLS.UStmt
-programToStmt gq p = SLS.SGroup SLS.UnBracketed fullProgramStmt
+programToStmt gq p = SLSS.grouped fullProgramStmt
   where
     stmtsArray = unStanProgram p
     fullProgramStmt  =
@@ -89,31 +90,31 @@ programToStmt gq p = SLS.SGroup SLS.UnBracketed fullProgramStmt
           ss5 = ss4 ++ [modelStmt]
           ss6 = ss5 ++ maybe [] pure gqStmtM
       in s :| ss6
-    functionsStmtM = let x = stmtsArray ! SBFunctions in if null x then Nothing else Just (SLS.SBlock SLS.FunctionsStmts $ SLSS.grouped x)
+    functionsStmtM = let x = stmtsArray ! SBFunctions in if null x then Nothing else Just (SLSS.block SLS.FunctionsStmts $ SLSS.grouped x)
     dataStmt =
         let d = stmtsArray ! SBData
             gqd = SLSS.comment ("For Generated Quantities" :| []) : stmtsArray ! SBDataGQ
-         in SLS.SBlock SLS.DataStmts $ SLSS.grouped (d ++ if gq `elem` [NeitherLL_PP, All] then gqd else [])
+         in SLSS.block SLS.DataStmts $ SLSS.grouped (d ++ if gq `elem` [NeitherLL_PP, All] then gqd else [])
     tDataStmtM =
       let
         x = stmtsArray ! SBTransformedData
         xGQ = if  not (null $ stmtsArray ! SBTransformedDataGQ)
               then SLSS.comment ("For Generated Quantities" :| []) : stmtsArray ! SBTransformedDataGQ
               else stmtsArray ! SBTransformedDataGQ
-      in if null x && null xGQ then Nothing else Just (SLS.SBlock SLS.TDataStmts $ SLSS.grouped $ x ++ if gq `elem` [NeitherLL_PP, All] then xGQ else [])
-    paramsStmt = SLS.SBlock SLS.ParametersStmts $ SLSS.grouped $ stmtsArray ! SBParameters
-    tParamsStmtM = let x = stmtsArray ! SBTransformedParameters in if null x then Nothing else Just (SLS.SBlock SLS.TParametersStmts $ SLSS.grouped x)
-    modelStmt = SLS.SBlock SLS.ModelStmts $ SLSS.grouped $ stmtsArray ! SBModel
+      in if null x && null xGQ then Nothing else Just (SLSS.block SLS.TDataStmts $ SLSS.grouped $ x ++ if gq `elem` [NeitherLL_PP, All] then xGQ else [])
+    paramsStmt = SLSS.block SLS.ParametersStmts $ SLSS.grouped $ stmtsArray ! SBParameters
+    tParamsStmtM = let x = stmtsArray ! SBTransformedParameters in if null x then Nothing else Just (SLSS.block SLS.TParametersStmts $ SLSS.grouped x)
+    modelStmt = SLSS.block SLS.ModelStmts $ SLSS.grouped $ stmtsArray ! SBModel
     gqStmtM =
         let gqs = stmtsArray ! SBGeneratedQuantities
             lls = stmtsArray ! SBLogLikelihood
             pps = stmtsArray ! SBPosteriorPrediction
          in case gq of
                 NoGQ -> Nothing
-                NeitherLL_PP -> Just $ SLS.SBlock SLS.GeneratedQuantitiesStmts $ SLSS.grouped gqs
-                OnlyLL -> Just $ SLS.SBlock SLS.GeneratedQuantitiesStmts $ SLSS.grouped lls
-                OnlyPP -> Just $ SLS.SBlock SLS.GeneratedQuantitiesStmts $ SLSS.grouped pps
-                All -> Just $ SLS.SBlock SLS.GeneratedQuantitiesStmts $ SLSS.grouped $ gqs ++ lls ++ pps
+                NeitherLL_PP -> Just $ SLSS.block SLS.GeneratedQuantitiesStmts $ SLSS.grouped gqs
+                OnlyLL -> Just $ SLSS.block SLS.GeneratedQuantitiesStmts $ SLSS.grouped lls
+                OnlyPP -> Just $ SLSS.block SLS.GeneratedQuantitiesStmts $ SLSS.grouped pps
+                All -> Just $ SLSS.block SLS.GeneratedQuantitiesStmts $ SLSS.grouped $ gqs ++ lls ++ pps
 
 
 -- check if the type of statement is allowed in the block then, if so, provide the modification function
@@ -127,15 +128,15 @@ addStmtToBlock' addF sb s = do
   pure f
 
 checkStmtBlock :: StanBlock -> SLS.UStmt -> Either Text SLS.UStmt
-checkStmtBlock sb s = case s of
-  SLS.SFunction {} -> if sb == SBFunctions
-                      then pure s
-                      else Left "Functions and only functions can appear in the function block."
+checkStmtBlock sb s = case SLR.unFix s of
+  SLS.SFunctionF {} -> if sb == SBFunctions
+                       then pure s
+                       else Left "Functions and only functions can appear in the function block."
   _ -> if sb `elem` [SBData, SBDataGQ, SBParameters]
-       then case s of
-              SLS.SDeclare {} -> pure s
-              SLS.SComment {} -> pure s
-              SLS.SGroup SLS.UnBracketed stmts -> SLS.SGroup SLS.UnBracketed <$> traverse (checkStmtBlock sb) stmts
+       then case SLR.unFix s of
+              SLS.SDeclareF {} -> pure s
+              SLS.SCommentF {} -> pure s
+              SLS.SGroupF SLS.UnBracketed stmts -> SLSS.grouped <$> traverse (checkStmtBlock sb) stmts
               _ ->  Left $ "Statement other than declaration or comment in " <> show sb <> " block: \n"
                     <> (case stmtAsText s of
                           Left err -> "Error trying to render statement (" <> err <> ")"

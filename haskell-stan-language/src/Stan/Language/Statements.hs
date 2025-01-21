@@ -198,28 +198,28 @@ tuple3Spec ds1 ds2 ds3 = TupleSpec (ds1 :> ds2 :> ds3 :> TNil)
 
 -- functions for ease of use and exporting.  Monomorphised to UStmt, etc.
 declare :: Text -> DeclSpec SLE.UExpr t -> SLS.UStmt
-declare  = SLS.SDeclare
+declare varName declSpec = SLR.Fix $ SLS.SDeclareF varName declSpec
 
 declareN :: NamedDeclSpec t -> SLS.UStmt
 declareN (NamedDeclSpec n ds) = declare n ds
 
 declareAndAssign :: Text -> DeclSpec SLE.UExpr t -> SLE.UExpr t -> SLS.UStmt
-declareAndAssign = SLS.SDeclAssign
+declareAndAssign varName declSpec = SLR.Fix . SLS.SDeclAssignF varName declSpec
 
 declareAndAssignN :: NamedDeclSpec t -> SLE.UExpr t -> SLS.UStmt
 declareAndAssignN (NamedDeclSpec vn ds) = declareAndAssign vn ds
 
 addToTarget :: SLE.UExpr EReal -> SLS.UStmt
-addToTarget = SLS.STarget
+addToTarget = SLR.Fix . SLS.STargetF
 
 assign, (|=|) :: SLE.UExpr t -> SLE.UExpr t -> SLS.UStmt
-assign = SLS.SAssign
-(|=|) = SLS.SAssign
+assign lhs rhs = SLR.Fix $ SLS.SAssignF lhs rhs
+(|=|) = assign
 
 -- doing it this way avoids using Stans += syntax.  I just expand.
 -- to do otherwise I would have to add a constructor to Stmt
 opAssign :: (ta ~ BinaryResultT bop ta tb) => SBinaryOp bop -> SLE.UExpr ta -> SLE.UExpr tb -> SLS.UStmt
-opAssign = SLS.SOpAssign
+opAssign op lhs = SLR.Fix . SLS.SOpAssignF op lhs
 
 plusEq, (+=) :: (ta ~ BinaryResultT BAdd ta tb) => SLE.UExpr ta -> SLE.UExpr tb -> SLS.UStmt
 plusEq = opAssign SAdd
@@ -244,21 +244,21 @@ withDWA :: (forall args.Density g args -> TypedList SLE.UExpr args -> r) -> Dens
 withDWA f (DensityWithArgs d args) = f d args
 
 target :: SLE.UExpr EReal -> SLS.UStmt
-target = SLS.STarget
+target = SLR.Fix . SLS.STargetF
 
 sample :: SLE.UExpr t -> Density t args -> TypedList SLE.UExpr args -> SLS.UStmt
-sample = SLS.SSample
+sample lhs density = SLR.Fix . SLS.SSampleF lhs density
 
 sampleW, (|~|) :: SLE.UExpr t -> DensityWithArgs t  -> SLS.UStmt
-sampleW ue (DensityWithArgs d al)= SLS.SSample ue d al
+sampleW ue (DensityWithArgs d al)= SLR.Fix $ SLS.SSampleF ue d al
 ue |~| dwa = sampleW ue dwa
 
 for :: forall t . GenSType (SLS.ForEachSlice t)
     => Text -> SLS.ForType t -> (SLE.UExpr (SLS.ForEachSlice t) -> SLS.UStmt) -> SLS.UStmt
 for loopCounter ft bodyF = case ft of
-  SLS.SpecificNumbered se' ee' -> scoped $ SLS.SFor loopCounter se' ee' $ bodyF (namedE loopCounter SInt)
+  SLS.SpecificNumbered se' ee' -> scoped $ SLR.Fix $ SLS.SForF loopCounter se' ee' $ bodyF (namedE loopCounter SInt)
 --  SLS.IndexedLoop ik -> scoped $ SLS.SFor loopCounter (intE 1) (namedSizeE ik) $ bodyF (namedE loopCounter SInt)
-  SLS.SpecificIn e -> scoped $ SLS.SForEach loopCounter e $ bodyF loopCounterE
+  SLS.SpecificIn e -> scoped $ SLR.Fix $ SLS.SForEachF loopCounter e $ bodyF loopCounterE
 --  IndexedIn _ e -> SForEach loopCounter e $ bodyF loopCounterE
   where
     loopCounterE = namedE loopCounter $ genSType @(SLS.ForEachSlice t)
@@ -318,26 +318,26 @@ intVecLoops :: forall m . (VecToSameTypedListF SLS.VarAndForType EInt m)
 intVecLoops counterPrefix v stmtF = nestedLoops (vecVFT counterPrefix v) stmtF
 
 nullS :: SLS.UStmt
-nullS = SLS.SContext id
+nullS = SLR.Fix $ SLS.SContextF id
 
 ifThen :: SLE.UExpr EBool -> SLS.UStmt -> SLS.UStmt
-ifThen ce sTrue = SLS.SIfElse ((ce, sTrue) :| []) nullS
+ifThen ce sTrue = SLR.Fix $ SLS.SIfElseF ((ce, sTrue) :| []) nullS
 
 ifThenElse :: NonEmpty (SLE.UExpr EBool, SLS.UStmt) -> SLS.UStmt -> SLS.UStmt
-ifThenElse = SLS.SIfElse
+ifThenElse ifTrues lastElse = SLR.Fix $ SLS.SIfElseF ifTrues lastElse
 
 while :: SLE.UExpr EBool -> SLS.UStmt -> SLS.UStmt
-while = SLS.SWhile
+while condition loop = SLR.Fix $ SLS.SWhileF condition loop
 
 break :: SLS.UStmt
-break = SLS.SBreak
+break = SLR.Fix $ SLS.SBreakF
 
 continue :: SLS.UStmt
-continue = SLS.SContinue
+continue = SLR.Fix $ SLS.SContinueF
 
 function :: forall args rt . GenSTypeList args
          => Function rt args -> TypedList (FuncArg Text) args -> (TypedList SLE.UExpr args -> (SLS.UStmt, SLE.UExpr rt)) -> SLS.UStmt
-function fd argNames bodyF = scoped $ SLS.SFunction fd argNames $ grouped [bodyS, SLS.SReturn ret]
+function fd argNames bodyF = scoped $ SLR.Fix $ SLS.SFunctionF fd argNames $ grouped [bodyS, SLR.Fix $ SLS.SReturnF ret]
   where
     argTypes = genSTypeList @args --functionArgTypes fd
     argExprs = zipTypedListsWith (namedE . funcArgName) argNames argTypes
@@ -354,32 +354,35 @@ simpleFunctionBody _ n retDSF bF args = let rE = namedE n st in  (grouped (decla
     st = sTypeFromStanType $ declType $ retDSF args
 
 comment :: NonEmpty Text -> SLS.UStmt
-comment = SLS.SComment
+comment = SLR.Fix . SLS.SCommentF
 
 profile :: Text -> SLS.UStmt -> SLS.UStmt
-profile = SLS.SProfile
+profile pText = SLR.Fix . SLS.SProfileF pText
 
 print :: TypedList SLE.UExpr args -> SLS.UStmt
-print = SLS.SPrint
+print = SLR.Fix . SLS.SPrintF
 
 reject :: TypedList SLE.UExpr args -> SLS.UStmt
-reject = SLS.SReject
+reject = SLR.Fix . SLS.SRejectF
+
+block :: SLS.StmtBlock -> SLS.UStmt -> SLS.UStmt
+block b = SLR.Fix . SLS.SBlockF b
 
 scoped :: SLS.UStmt -> SLS.UStmt
-scoped s = SLS.SGroup SLS.Scoping
-           [SLS.SContext (SLA.modifyVarCtxt SLA.enterNewScope)
+scoped s = SLR.Fix $ SLS.SGroupF SLS.Scoping
+           [SLR.Fix $ SLS.SContextF (SLA.modifyVarCtxt SLA.enterNewScope)
            , s
-           , SLS.SContext (SLA.modifyVarCtxt SLA.leaveScope)
+           , SLR.Fix $ SLS.SContextF (SLA.modifyVarCtxt SLA.leaveScope)
            ]
 
 context :: (SLA.ASTCtxt -> SLA.ASTCtxt) -> SLS.UStmt
-context = SLS.SContext
+context = SLR.Fix . SLS.SContextF
 
 grouped :: Traversable f => f SLS.UStmt -> SLS.UStmt
-grouped = SLS.SGroup SLS.UnBracketed
+grouped = SLR.Fix . SLS.SGroupF SLS.UnBracketed
 
 groupedWithBrackets :: Traversable f => f SLS.UStmt -> SLS.UStmt
-groupedWithBrackets = SLS.SGroup SLS.Bracketed
+groupedWithBrackets = SLR.Fix . SLS.SGroupF SLS.Bracketed
 
 insertIndexBinding :: SLE.IndexKey -> SLE.LExpr EIndexArray -> SLA.ASTCtxt -> SLA.ASTCtxt
 insertIndexBinding ik ie = SLA.modifyIndexCtxt $ \(SLA.IndexLookupCtxt a b) -> SLA.IndexLookupCtxt a (Map.insert ik ie b)

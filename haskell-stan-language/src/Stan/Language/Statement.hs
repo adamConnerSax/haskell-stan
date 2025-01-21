@@ -47,7 +47,6 @@ import Stan.Language.Functions
 
 import Prelude hiding (Nat)
 import Relude.Extra
-import qualified Data.Functor.Foldable as RS
 import qualified Data.Vec.Lazy as Vec
 import qualified Data.Type.Nat as DT
 
@@ -148,29 +147,6 @@ data StmtBlock = FunctionsStmts
 
 data GroupType = Bracketed | UnBracketed | Scoping deriving stock (Show, Eq)
 
--- Statements
-data Stmt :: (EType -> Type) -> Type where
-  SDeclare ::  Text -> DeclSpec r et -> Stmt r
-  SDeclAssign :: Text -> DeclSpec r et -> r et -> Stmt r
-  SAssign :: r t -> r t -> Stmt r
-  SOpAssign :: (ta ~ BinaryResultT op ta tb) => SBinaryOp op -> r ta -> r tb -> Stmt r
-  STarget :: r EReal -> Stmt r
-  SSample :: r st -> Density st args -> TypedList r args -> Stmt r
-  SFor :: Text -> r EInt -> r EInt -> Stmt r -> Stmt r
-  SForEach :: GenSType (ForEachSlice t) => Text -> r t -> Stmt r -> Stmt r
-  SIfElse :: NonEmpty (r EBool, Stmt r) -> Stmt r -> Stmt r -- [(condition, ifTrue)] -> ifAllFalse
-  SWhile :: r EBool -> Stmt r -> Stmt r
-  SBreak :: Stmt r
-  SContinue :: Stmt r
-  SFunction :: Function rt args -> TypedList (FuncArg Text) args -> Stmt r -> Stmt r
-  SReturn :: r rt -> Stmt r
-  SComment :: Traversable f => f Text -> Stmt r
-  SProfile :: Text -> Stmt r -> Stmt r
-  SPrint :: TypedList r args -> Stmt r
-  SReject :: TypedList r args -> Stmt r
-  SBlock :: StmtBlock -> Stmt r -> Stmt r
-  SGroup :: Traversable f => GroupType -> f (Stmt r) -> Stmt r
-  SContext :: (SLA.ASTCtxt -> SLA.ASTCtxt) -> Stmt r
 
 data StmtF :: (EType -> Type) -> Type -> Type where
   SDeclareF ::  Text -> DeclSpec r et -> StmtF r a
@@ -195,16 +171,11 @@ data StmtF :: (EType -> Type) -> Type -> Type where
   SGroupF :: Traversable f => GroupType -> f a -> StmtF r a
   SContextF :: (SLA.ASTCtxt -> SLA.ASTCtxt) -> StmtF r a
 
-type instance RS.Base (Stmt f) = StmtF f
+type UStmt = SLR.Fix (StmtF SLE.UExpr)
+type LStmt = SLR.Fix (StmtF SLE.LExpr)
 
-type LStmt = Stmt SLE.LExpr
-type UStmt = Stmt SLE.UExpr
-
-type UStmt' = SLR.Fix (StmtF SLE.UExpr)
-type LStmt' = SLR.Fix (StmtF SLE.LExpr)
-
-instance Semigroup (Stmt a) where
-  s1 <> s2 = SGroup UnBracketed [s1, s2]
+instance Semigroup UStmt where
+  s1 <> s2 = SLR.Fix $ SGroupF UnBracketed [s1, s2]
 
 instance Functor (StmtF f) where
   fmap f x = case x of
@@ -277,54 +248,6 @@ instance Traversable (StmtF f) where
     SGroupF s stmts -> SGroupF s <$> traverse g stmts
     SBlockF bl stmt -> SBlockF bl <$> g stmt
     SContextF f  -> pure $ SContextF f
-
-instance Functor (RS.Base (Stmt f)) => RS.Recursive (Stmt f) where
-  project = \case
-    SDeclare txt ds -> SDeclareF txt ds
-    SDeclAssign txt ds fet -> SDeclAssignF txt ds fet
-    SAssign ft ft' -> SAssignF ft ft'
-    SOpAssign op ft ft' -> SOpAssignF op ft ft'
-    STarget f -> STargetF f
-    SSample f_st dis al -> SSampleF f_st dis al
-    SFor txt f f' sts -> SForF txt f f' sts
-    SForEach txt ft sts -> SForEachF txt ft sts
-    SIfElse x0 st -> SIfElseF x0 st
-    SWhile f sts -> SWhileF f sts
-    SBreak -> SBreakF
-    SContinue -> SContinueF
-    SFunction func al sts -> SFunctionF func al sts
-    SReturn re -> SReturnF re
-    SComment t -> SCommentF t
-    SProfile t body -> SProfileF t body
-    SPrint args -> SPrintF args
-    SReject args -> SRejectF args
-    SGroup s sts -> SGroupF s sts
-    SBlock bl sts -> SBlockF bl sts
-    SContext mf -> SContextF mf
-
-instance Functor (RS.Base (Stmt f)) => RS.Corecursive (Stmt f) where
-  embed = \case
-    SDeclareF txt ds -> SDeclare txt ds
-    SDeclAssignF txt ds fet -> SDeclAssign txt ds fet
-    SAssignF ft ft' -> SAssign ft ft'
-    SOpAssignF op ft ft' -> SOpAssign op ft ft'
-    STargetF f -> STarget f
-    SSampleF f_st dis al -> SSample f_st dis al
-    SForF txt f f' sts -> SFor txt f f' sts
-    SForEachF txt ft sts -> SForEach txt ft sts
-    SIfElseF x0 st -> SIfElse x0 st
-    SWhileF f sts -> SWhile f sts
-    SBreakF -> SBreak
-    SContinueF -> SContinue
-    SFunctionF func al sts -> SFunction func al sts
-    SReturnF re -> SReturn re
-    SCommentF t -> SComment t
-    SProfileF t body -> SProfile t body
-    SPrintF args -> SPrint args
-    SRejectF args -> SReject args
-    SGroupF s sts -> SGroup s sts
-    SBlockF bl sts -> SBlock bl sts
-    SContextF mf -> SContext mf
 
 instance SLR.HFunctor StmtF where
   hfmap nat = \case
