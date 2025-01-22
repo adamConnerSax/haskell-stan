@@ -19,7 +19,15 @@
 
 module Stan.Language.Types.SType
   (
-    module Stan.Language.Types.SType
+    SType(..)
+  , AllGenSTypes
+  , GenSType(..)
+  , GenSTypeList(..)
+  , STypeList
+  , sTypeName
+  , sTypedFoldTypedList
+  , sTypeToEType
+  , sIndexArray
   )
   where
 
@@ -61,8 +69,8 @@ class GenSType (e :: SLTE.EType) where
 
 type STypeList = SLTT.TypedList SType
 
-oneSType :: SType et -> STypeList '[et]
-oneSType st = st SLTT.:> SLTT.TNil
+_oneSType :: SType et -> STypeList '[et]
+_oneSType st = st SLTT.:> SLTT.TNil
 
 class GenSTypeList (ts :: [SLTE.EType]) where
   genSTypeList :: STypeList ts
@@ -97,11 +105,11 @@ sIntArray = SArray SS SInt
 sIndexArray :: SType SLTE.EIndexArray
 sIndexArray = sIntArray
 
-s2Tuple :: SType t1 -> SType t2 -> SType (SLTE.ETuple [t1,t2])
-s2Tuple s1 s2 = STuple (s1 SLTT.:> s2 SLTT.:> SLTT.TNil)
+_s2Tuple :: SType t1 -> SType t2 -> SType (SLTE.ETuple [t1,t2])
+_s2Tuple s1 s2 = STuple (s1 SLTT.:> s2 SLTT.:> SLTT.TNil)
 
-s3Tuple :: SType t1 -> SType t2 -> SType t3 -> SType (SLTE.ETuple [t1, t2, t3])
-s3Tuple s1 s2 s3 = STuple (s1 SLTT.:> s2 SLTT.:> s3 SLTT.:> SLTT.TNil)
+_s3Tuple :: SType t1 -> SType t2 -> SType t3 -> SType (SLTE.ETuple [t1, t2, t3])
+_s3Tuple s1 s2 s3 = STuple (s1 SLTT.:> s2 SLTT.:> s3 SLTT.:> SLTT.TNil)
 
 instance Show (SType t) where
   show x = "SType: " <> show (sTypeToEType x)
@@ -172,6 +180,7 @@ sTypeToEType = \case
     S n -> SLTE.EArray (S n) $ sTypeToEType st
   STuple ts -> SLTE.ETuple $ sTypeListToETypeList ts
 
+{-
 withSType :: forall r . SLTE.EType -> (forall t. SType t -> r) -> r
 withSType SLTE.EVoid k = k SVoid
 withSType SLTE.EString k = k SString
@@ -194,6 +203,7 @@ withSType (SLTE.ETuple (et : ets)) k =
             $ \case
                 (STuple sts) -> k (STuple $ ste SLTT.:> sts)
                 _ -> error "withSType (ETuple es): Impossible case!"
+-}
 
 sTypeName :: SType t -> Text
 sTypeName = \case

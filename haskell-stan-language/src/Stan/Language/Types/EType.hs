@@ -15,7 +15,25 @@
 
 module Stan.Language.Types.EType
   (
-    module Stan.Language.Types.EType
+    EType(..)
+  , EArray1
+  , EArray2
+  , EIntArray
+  , EIndexArray
+  , ERealArray
+  , EComplexArray
+  , E2Tuple
+  , E3Tuple
+  , ZeroDArray
+  , TypeOneOf
+  , TypeMember
+  , TypeSubset
+  , IfNumber
+  , IfRealNumber
+  , IfNumbers
+  , Promoted
+  , ScalarType
+  , IsContainer
   )
   where
 

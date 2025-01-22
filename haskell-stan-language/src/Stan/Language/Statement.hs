@@ -16,7 +16,19 @@
 
 module Stan.Language.Statement
   (
-    module Stan.Language.Statement
+    StmtF(..)
+  , LStmt
+  , UStmt
+  , GroupType(..)
+  , VarModifier(..)
+  , VarModifiers(..)
+  , DeclSpec(..)
+  , StmtBlock(..)
+  , VecToTListC
+  , TListToVecC
+  , ForEachSlice
+  , ForType(..)
+  , VarAndForType(..)
   )
   where
 

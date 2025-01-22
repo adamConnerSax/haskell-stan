@@ -2,7 +2,6 @@
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE LambdaCase #-}
-{-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE PolyKinds #-}
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE ScopedTypeVariables #-}
@@ -16,7 +15,17 @@
 
 module Stan.Language.Types.TypedList
   (
-    module Stan.Language.Types.TypedList
+    TypedList(..)
+  , eqTypedList
+  , foldTypedList
+  , oneTyped
+  , SameTypeList
+  , VecToSameTypedListF(..)
+  , SameTypedListToVecF
+  , zipTypedListsWith
+  , typedKToList
+  , sameTypedListToVec
+  , vecToSameTypedList
   )
   where
 
@@ -65,9 +74,9 @@ eqTypedList = go
       Nothing -> False
     go _ _ = False
 
-withTypedList ::  (forall t . f t -> a) -> TypedList f args -> [a]
-withTypedList _ TNil = []
-withTypedList f (st :> ats) = f st : withTypedList f ats
+_withTypedList ::  (forall t . f t -> a) -> TypedList f args -> [a]
+_withTypedList _ TNil = []
+_withTypedList f (st :> ats) = f st : _withTypedList f ats
 
 foldTypedList :: forall a b ts . (forall x. a x -> b -> b) -> b -> TypedList a ts -> b
 foldTypedList f = go
@@ -80,18 +89,19 @@ type family TypedListLength (tl :: TypedList f qs) :: DTN.Nat where
   TypedListLength TNil  = DTN.Z
   TypedListLength (_ :> es) = DTN.S (TypedListLength es)
 
-typedListLength :: TypedList f es -> DTN.Nat
-typedListLength TNil = DTN.Z
-typedListLength (_ :> as) = DTN.S (typedListLength as)
+
+_typedListLength :: TypedList f es -> DTN.Nat
+_typedListLength TNil = DTN.Z
+_typedListLength (_ :> as) = DTN.S (_typedListLength as)
 
 
 type family (as :: [k]) ++ (bs :: [k]) :: [k] where
   '[] ++ bs = bs
   (a ': as) ++ bs = a ': (as ++ bs)
 
-appendTypedLists :: TypedList u as -> TypedList u bs -> TypedList u (as ++ bs)
-appendTypedLists TNil b = b
-appendTypedLists (a :> as) b = a :> appendTypedLists as b
+_appendTypedLists :: TypedList u as -> TypedList u bs -> TypedList u (as ++ bs)
+_appendTypedLists TNil b = b
+_appendTypedLists (a :> as) b = a :> _appendTypedLists as b
 
 --reverseTypedList :: TypedList u as -> TypedList u (Reverse as)
 --reverseTypedList TNil = TNil
@@ -101,8 +111,8 @@ zipTypedListsWith :: (forall x. a x -> b x -> c x) -> TypedList a args -> TypedL
 zipTypedListsWith _ TNil TNil = TNil
 zipTypedListsWith f (a :> as) (b :> bs) = f a b :> zipTypedListsWith f as bs
 
-eqTypedLists :: forall (t ::SLTE.EType -> Type) es. (forall a.t a -> t a -> Bool) -> TypedList t es -> TypedList t es -> Bool
-eqTypedLists f a b = getAll $ mconcat $ All <$> typedKToList (zipTypedListsWith (\x y -> SLR.K $ f x y) a b)
+_eqTypedLists :: forall (t ::SLTE.EType -> Type) es. (forall a.t a -> t a -> Bool) -> TypedList t es -> TypedList t es -> Bool
+_eqTypedLists f a b = getAll $ mconcat $ All <$> typedKToList (zipTypedListsWith (\x y -> SLR.K $ f x y) a b)
 
 typedKToList :: TypedList (SLR.K a) ts -> [a]
 typedKToList TNil = []

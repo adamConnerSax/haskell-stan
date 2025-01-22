@@ -15,7 +15,10 @@
 
 module Stan.Language.Types.StanType
   (
-    module Stan.Language.Types.StanType
+    StanType(..)
+  , sTypeFromStanType
+  , stanTypeName
+--    module Stan.Language.Types.StanType
   )
   where
 
@@ -26,7 +29,7 @@ import qualified Stan.Language.Types.SType as SLTS
 import qualified Stan.Language.Types.TypedList as SLTT
 
 import Data.Type.Nat (SNat(..))
-import qualified Data.Type.Nat as DT
+--import qualified Data.Type.Nat as DT
 import Stan.Language.Recursion (hfmap)
 
 data StanType :: SLTE.EType -> Type where
@@ -48,17 +51,17 @@ data StanType :: SLTE.EType -> Type where
   StanCholeskyFactorCov :: StanType SLTE.ESqMat
   StanTuple :: SLTT.TypedList StanType ts -> StanType (SLTE.ETuple ts)
 
-stanIntArray :: StanType (SLTE.EArray1 SLTE.EInt)
-stanIntArray = StanArray SS StanInt
+_stanIntArray :: StanType (SLTE.EArray1 SLTE.EInt)
+_stanIntArray = StanArray SS StanInt
 
-stanIndexArray :: StanType SLTE.EIndexArray
-stanIndexArray = stanIntArray
+_stanIndexArray :: StanType SLTE.EIndexArray
+_stanIndexArray = _stanIntArray
 
-stan2Tuple :: StanType e1 -> StanType e2 -> StanType (SLTE.ETuple [e1, e2])
-stan2Tuple st1 st2 = StanTuple (st1 SLTT.:> st2 SLTT.:> SLTT.TNil)
+_stan2Tuple :: StanType e1 -> StanType e2 -> StanType (SLTE.ETuple [e1, e2])
+_stan2Tuple st1 st2 = StanTuple (st1 SLTT.:> st2 SLTT.:> SLTT.TNil)
 
-stan3Tuple :: StanType e1 -> StanType e2 -> StanType e3 -> StanType (SLTE.ETuple [e1, e2, e3])
-stan3Tuple st1 st2 st3 = StanTuple (st1 SLTT.:> st2 SLTT.:> st3 SLTT.:> SLTT.TNil)
+_stan3Tuple :: StanType e1 -> StanType e2 -> StanType e3 -> StanType (SLTE.ETuple [e1, e2, e3])
+_stan3Tuple st1 st2 st3 = StanTuple (st1 SLTT.:> st2 SLTT.:> st3 SLTT.:> SLTT.TNil)
 
 stanTypeName :: StanType t -> Text
 stanTypeName = \case
@@ -80,6 +83,7 @@ stanTypeName = \case
   StanCholeskyFactorCov -> "cholesky_factor_cov"
   StanTuple _ts -> "tuple"
 
+{-
 eTypeFromStanType :: StanType t -> SLTE.EType
 eTypeFromStanType = \case
   StanInt -> SLTE.EInt
@@ -99,6 +103,7 @@ eTypeFromStanType = \case
   StanCovMatrix -> SLTE.ESqMat
   StanCholeskyFactorCov -> SLTE.ESqMat
   StanTuple sts -> SLTE.ETuple $ reverse $ SLTT.foldTypedList (\st ets -> eTypeFromStanType st : ets) [] sts
+-}
 
 sTypeFromStanType :: StanType t -> SLTS.SType t
 sTypeFromStanType = \case

@@ -16,9 +16,88 @@
 
 module Stan.Language.Statements
   (
-    module Stan.Language.Statements
+    NamedDeclSpec(..)
+  , declName
+  , decl
+  , declType
+  , declSType
+  , replaceDeclVMs
+  , addVMs
+  , removeVMs
+  , intSpec
+  , realSpec
+  , complexSpec
+  , vectorSpec
+  , rowVectorSpec
+  , orderedSpec
+  , positiveOrderedSpec
+  , simplexSpec
+  , unitVectorSpec
+  , matrixSpec
+  , sqMatrixSpec
+  , corrMatrixSpec
+  , covMatrixSpec
+  , choleskyFactorCorrSpec
+  , choleskyFactorCovSpec
+  , arraySpec
+  , array1Spec
+  , array2Spec
+  , intArraySpec
+  , indexArraySpec
+  , countArraySpec
+  , tupleSpec
+  , tuple2Spec
+  , tuple3Spec
+  , declare
+  , declareN
+  , declareAndAssign
+  , declareAndAssignN
+  , addToTarget
+  , assign, (|=|)
+  , opAssign
+  , plusEq, (+=)
+  , minusEq, (-=)
+  , timesEq, (*=)
+  , divEq, (/=)
+  , DensityWithArgs(..)
+  , withDWA
+  , target
+  , sample
+  , sampleW, (|~|)
+  , for
+  , loopOver
+  , ftSized
+  , vftSized
+  , loopSized
+  , nestedLoops
+  , intVecLoops
+  , nullS
+  , ifThen
+  , ifThenElse
+  , while
+  , break
+  , continue
+  , function
+  , simpleFunctionBody
+  , comment
+  , profile
+  , print
+  , reject
+  , block
+  , scoped
+  , context
+  , grouped
+  , groupedWithBrackets
+  , lowerM
+  , upperM
+  , offsetM
+  , multiplierM
+  , FESAProof(..)
+  , fesaProofI
   )
   where
+
+import Prelude hiding (Nat, break, print, (/=))
 
 import qualified Stan.Language.Recursion as SLR
 import qualified Stan.Language.Statement as SLS
@@ -51,8 +130,7 @@ import Stan.Language.Types
       FunctionName
     )
 import Stan.Language.Indexing
-    ( Vec(..),
-      N1,
+    ( N1,
       s1,
       N2,
       s2 )
@@ -72,9 +150,8 @@ import qualified Data.Type.Nat as DT
 import Data.Type.Nat (Nat, SNat)
 import Data.Type.Equality (type (:~:)(..), gcastWith)
 
-import Prelude hiding (Nat)
 --import Relude.Extra
-import qualified Data.Map.Strict as Map
+--import qualified Data.Map.Strict as Map
 
 data NamedDeclSpec t = NamedDeclSpec VarName (DeclSpec SLE.UExpr t)
 
@@ -165,25 +242,25 @@ choleskyFactorCovSpec :: SLE.UExpr EInt -> DeclSpec SLE.UExpr ESqMat
 choleskyFactorCovSpec rce = MatrixSpec StanCholeskyFactorCov rce rce SLS.NoModifiers
 
 arraySpec :: (forall f.SLS.VecToTListC f n, forall f . SLS.TListToVecC f n, GenSTypeList (SameTypeList EInt n), AllGenSTypes (SameTypeList EInt n))
-          => SNat (DT.S n) -> Vec (DT.S n) (SLE.UExpr EInt) -> DeclSpec SLE.UExpr t -> DeclSpec SLE.UExpr (EArray (DT.S n) t)
+          => SNat (DT.S n) -> Vec.Vec (DT.S n) (SLE.UExpr EInt) -> DeclSpec SLE.UExpr t -> DeclSpec SLE.UExpr (EArray (DT.S n) t)
 arraySpec = ArraySpec --(DeclSpec t tIndices vms) = DeclSpec (StanArray n t) (arrIndices Vec.++ tIndices) vms
 
 array1Spec :: SLE.UExpr EInt -> DeclSpec SLE.UExpr t -> DeclSpec SLE.UExpr (EArray N1 t)
-array1Spec se = arraySpec s1 (se ::: VNil)
+array1Spec se = arraySpec s1 (se Vec.::: Vec.VNil)
 
 array2Spec ::  SLE.UExpr EInt -> SLE.UExpr EInt -> DeclSpec SLE.UExpr t -> DeclSpec SLE.UExpr (EArray N2 t)
-array2Spec i1 i2 = arraySpec s2 (i1 ::: i2 ::: VNil)
+array2Spec i1 i2 = arraySpec s2 (i1 Vec.::: i2 Vec.::: Vec.VNil)
 
 intArraySpec :: SLE.UExpr EInt -> DeclSpec SLE.UExpr EIndexArray
-intArraySpec se = arraySpec s1 (se ::: VNil) intSpec
+intArraySpec se = arraySpec s1 (se Vec.::: Vec.VNil) intSpec
 
 -- 1d int array with a lower bount of 1
 indexArraySpec :: SLE.UExpr EInt -> DeclSpec SLE.UExpr EIndexArray
-indexArraySpec se = arraySpec s1 (se ::: VNil) (addVMs (SLS.Modifiers [lowerM $ intE 1]) intSpec)
+indexArraySpec se = arraySpec s1 (se Vec.::: Vec.VNil) (addVMs (SLS.Modifiers [lowerM $ intE 1]) intSpec)
 
 -- 1d int array with a lower bound of 0
 countArraySpec :: SLE.UExpr EInt -> DeclSpec SLE.UExpr EIndexArray
-countArraySpec se = arraySpec s1 (se ::: VNil) (addVMs (SLS.Modifiers [lowerM $ intE 0]) intSpec)
+countArraySpec se = arraySpec s1 (se Vec.::: Vec.VNil) (addVMs (SLS.Modifiers [lowerM $ intE 0]) intSpec)
 
 -- arbitrary sized tuple
 tupleSpec :: TypedList (DeclSpec SLE.UExpr) ts -> DeclSpec SLE.UExpr (ETuple ts)
@@ -279,8 +356,8 @@ type family ForEachSliceArgs (tl :: [EType]) :: [EType] where
   ForEachSliceArgs '[] = '[]
   ForEachSliceArgs (et ': ets) = SLS.ForEachSlice et ': ForEachSliceArgs ets
 
-fesaProof0 :: ForEachSliceArgs (SameTypeList t DT.Z) :~: SameTypeList (SLS.ForEachSlice t) DT.Z
-fesaProof0 = Refl
+_fesaProof0 :: ForEachSliceArgs (SameTypeList t DT.Z) :~: SameTypeList (SLS.ForEachSlice t) DT.Z
+_fesaProof0 = Refl
 
 newtype FESAProof t n
   = FESAProof
@@ -291,6 +368,7 @@ fesaProofI n = DT.withSNat n
                $ DT.induction (FESAProof Refl)
                (\fpn -> FESAProof $ gcastWith (getFESAProof fpn) Refl)
 --fesaProofI DT.SS = gcastWith (fesaProofI $ DT.snatToNat ) Refl
+
 
 vftSized :: Text -> SLE.UExpr EInt -> SLS.VarAndForType EInt
 vftSized lvn = SLS.VarAndForType lvn . ftSized
@@ -384,6 +462,7 @@ grouped = SLR.Fix . SLS.SGroupF SLS.UnBracketed
 groupedWithBrackets :: Traversable f => f SLS.UStmt -> SLS.UStmt
 groupedWithBrackets = SLR.Fix . SLS.SGroupF SLS.Bracketed
 
+{-
 insertIndexBinding :: SLE.IndexKey -> SLE.LExpr EIndexArray -> SLA.ASTCtxt -> SLA.ASTCtxt
 insertIndexBinding ik ie = SLA.modifyIndexCtxt $ \(SLA.IndexLookupCtxt a b) -> SLA.IndexLookupCtxt a (Map.insert ik ie b)
 
@@ -392,7 +471,7 @@ insertSizeBinding ik ia = SLA.modifyIndexCtxt $ \(SLA.IndexLookupCtxt a b) -> SL
 
 insertIndexAndSize :: SLE.IndexKey ->  SLE.LExpr EIndexArray -> SLE.LExpr EInt ->  SLA.ASTCtxt -> SLA.ASTCtxt
 insertIndexAndSize ik ie ia = insertIndexBinding ik ie . insertSizeBinding ik ia
-
+-}
 lowerM :: SLE.UExpr t -> SLS.VarModifier SLE.UExpr t
 lowerM = SLS.VarLower
 

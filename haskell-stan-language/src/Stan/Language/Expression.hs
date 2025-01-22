@@ -17,7 +17,16 @@
 
 module Stan.Language.Expression
   (
-    module Stan.Language.Expression
+    IndexKey
+  , VarName
+  , LExprF(..)
+  , LExpr
+  , UExprF(..)
+  , UExpr
+  , lNamedE
+  , namedLSize
+  , namedLIndex
+  , lIntE
   )
   where
 
@@ -27,22 +36,23 @@ import Stan.Language.Types
       EType(EInt, EBool, EArray, EMat, ECVec, EString,
             EComplex, EReal, ETuple),
       SType(SInt, SArray),
-      TypedList,
-      eqTypedLists
+      TypedList
     , GenSType(..)
-    , GenSTypeList(..)
+--      , eqTypedLists
+--    , GenSTypeList(..)
     )
 import Stan.Language.Indexing
-    ( Vec(..),
-      Sliced,
+    ( Sliced,
       s1,
       NestedVec,
       Indexed,
-      eqNestedVec,
+
       eqSizeNestedVec,
-      eqVec,
       nestedVecHead,
-      IndexedTuple )
+      IndexedTuple,
+--      eqNestedVec,
+--      eqVec,
+    )
 import Stan.Language.Operations
     ( BinaryResultT,
       SBinaryOp,
@@ -51,6 +61,7 @@ import Stan.Language.Operations
 import Stan.Language.Functions ( Density(..), Function(..) )
 import Prelude hiding (Nat)
 import qualified Data.Type.Nat as DT
+import Data.Vec.Lazy (Vec (..))
 import Data.Type.Nat (Nat(Z, S), SNat)
 
 import Data.Type.Equality ((:~:)(Refl), TestEquality(testEquality))
@@ -171,7 +182,7 @@ instance SLR.HTraversable UExprF where
     UDensity d e -> UDensity d <$> SLR.htraverse nat e
   hmapM = SLR.htraverse
 
-
+{-
 lExprTypeIs :: LExpr t -> SType t' -> Bool
 lExprTypeIs le st = case eqLExprType le (lNamedE "" st) of
   Just Refl -> True
@@ -181,9 +192,10 @@ eqLExpr :: LExpr ta -> LExpr tb -> Bool
 eqLExpr la lb = case eqLExprType la lb of
   Just Refl -> eqLExprOf la lb
   Nothing -> False
-
+-}
 eqSNatWith :: DT.SNatI n => DT.SNat m -> Maybe (n :~: m)
 eqSNatWith sm = DT.withSNat sm DT.eqNat
+
 eqSNat :: DT.SNat n -> DT.SNat m -> Maybe (n :~: m)
 eqSNat sn sm = DT.withSNat sn $ eqSNatWith sm
 
@@ -243,6 +255,7 @@ eqLExprType = go
       pure Refl
     go _ _ = Nothing
 
+{-
 eqLExprOf :: LExpr ta -> LExpr ta -> Bool
 eqLExprOf = go
   where
@@ -310,6 +323,7 @@ eqLExprOf = go
           Just Refl -> go ea eb
     go _ _ = False
 
+
 -- This is either very cool or very dangerous
 -- replace each lookup with a blank thing of same type just for typechecking purposes
 uExprToSameTypeLExpr :: UExpr t -> LExpr t
@@ -323,5 +337,7 @@ uExprToSameTypeLExpr = SLR.iCata f where
     UFunction _ le -> SLR.IFix le
     UDensity _ le -> SLR.IFix le
 
+
 exprTypeIs :: UExpr t -> SType t' -> Bool
 exprTypeIs ue = lExprTypeIs (uExprToSameTypeLExpr ue)
+-}

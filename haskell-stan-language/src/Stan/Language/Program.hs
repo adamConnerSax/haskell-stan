@@ -12,9 +12,22 @@
 {-# LANGUAGE UndecidableInstances #-}
 {-# OPTIONS_GHC -fwarn-incomplete-patterns #-}
 
-module Stan.Language.Program (
-    module Stan.Language.Program
-) where
+module Stan.Language.Program
+  (
+    StanProgram(..)
+  , programToStmt
+  , GeneratedQuantities(..)
+  , StanBlock(..)
+  , emptyStanProgram
+  , programHasLLBlock
+  , programHasPPBlock
+  , stmtAsText
+  , addStmtToBlock
+  , addStmtToBlockTop
+  , addStmtsToBlock
+  , addStmtsToBlockTop
+  , programAsText
+  ) where
 
 import Prelude hiding (All)
 import qualified Control.Foldl as FL

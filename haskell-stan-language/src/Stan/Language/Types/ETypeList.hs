@@ -17,7 +17,11 @@
 
 module Stan.Language.Types.ETypeList
   (
-    module Stan.Language.Types.ETypeList
+    MapTypeList
+  , LastType
+  , AllButLast
+  , Reverse
+  , TListLength
   )
   where
 

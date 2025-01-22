@@ -16,7 +16,8 @@
 
 module Stan.Language.Evaluate
   (
-    module Stan.Language.Evaluate
+    statementToCodeE
+  , eStatementToCodeE
   )
 where
 --import qualified Stan.ModelBuilder.Expressions as SME
@@ -82,10 +83,7 @@ import qualified Prettyprinter as PP
 3c. Stmt (FormattedText) -> Text (Produce code for statement tree)
 -}
 
---type IndexKey = Text
-
 type LookupM = StateT SLA.ASTCtxt (Either Text)
-type ReaderM = ReaderT SLA.ASTCtxt (Either Text)
 
 lookupIndex :: IndexKey -> LookupM (LExpr (EArray (S Z) EInt))
 lookupIndex k = do
@@ -159,20 +157,6 @@ ucAddArgsToFunctionBodyScope fArgs = do
   case newVCM of
     Nothing -> lift $ Left "Error adding function arguments to function body scope"
     Just newVC -> modify (SLA.modifyVarCtxt $ const newVC)
-
-ucAddReturnToFunctionBodyScope :: UExpr t -> LookupM ()
-ucAddReturnToFunctionBodyScope ue = case unIFix ue of
-  UL (LNamed vn st) -> modify $ SLA.modifyVarCtxt $ SLA.addTypedVarToInnerScope vn st
-  _ -> pure ()
-
-ucAddTypedCounterToLoopBodyScopeF :: forall t r . GenSType (ForEachSlice t)
-  => VarName -> r t -> SLA.ASTCtxt -> SLA.ASTCtxt
-ucAddTypedCounterToLoopBodyScopeF vn _ce =
-  SLA.modifyVarCtxt $ SLA.addTypedVarToInnerScope vn (genSType @(ForEachSlice t))
-
-ucAddArgsToFunctionBodyScopeF :: AllGenSTypes args => TypedArgNames args -> SLA.ASTCtxt -> SLA.ASTCtxt
-ucAddArgsToFunctionBodyScopeF fArgs =
-  SLA.modifyVarCtxt $ SLA.addTypedVarsToInnerScope (hfmap (K . funcArgName) fArgs) . SLA.enterNewScope
 
 updateContextA :: UStmt -> LookupM ()
 updateContextA x = case unFix x of
@@ -285,8 +269,8 @@ eStatementToCodeE :: SLA.ASTCtxt -> UStmt -> Either Text CodePP
 eStatementToCodeE ctxt0 x = doLookupsEInStatementE ctxt0 x >>= eStmtToCode
 
 -- currently unused because we'd need to preload all supported built-in functions
-calledFunction :: forall t ts . (GenSType t, GenSTypeList ts) => Function t ts -> LookupM ()
-calledFunction f = case f of
+_calledFunction :: forall t ts . (GenSType t, GenSTypeList ts) => Function t ts -> LookupM ()
+_calledFunction f = case f of
   IdentityFunction ->  pure ()
   Function fn -> do
     (SLA.FunctionCtxt fcm) <- gets SLA.functionCtxt
@@ -294,8 +278,8 @@ calledFunction f = case f of
       Nothing -> lift $ Left $ "Function \"" <> fn <> "\" called but no function by that name exists."
       Just (rtS, atsS) -> testFunctionTypes fn (genSType @t) (genSTypeList @ts) rtS atsS
 
-calledDensity :: forall t ts . (GenSType t, GenSTypeList ts) => Density t ts -> LookupM ()
-calledDensity (Density fn) = do
+_calledDensity :: forall t ts . (GenSType t, GenSTypeList ts) => Density t ts -> LookupM ()
+_calledDensity (Density fn) = do
     (SLA.FunctionCtxt fcm) <- gets SLA.functionCtxt
     case Map.lookup fn fcm of
       Nothing -> lift $ Left $ "Density \"" <> fn <> "\" called but no function by that name exists."

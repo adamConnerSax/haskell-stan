@@ -19,11 +19,17 @@
 
 module Stan.Language.Format
   (
-    module Stan.Language.Format
+    CodePP
+  , iExprToCode
+  , IExprCodeF(..)
+  , IExprCode
+  , stmtToCodeE
+  , exprToDocAlg
+  , stmtToCodeAlg
   )
   where
 
-import qualified Stan.Language.ASTContext as SLA
+--import qualified Stan.Language.ASTContext as SLA
 import Stan.Language.Recursion
 import Stan.Language.Types
 import Stan.Language.Indexing
@@ -43,11 +49,11 @@ import qualified Data.Type.Nat as DTN
 import qualified Data.Text as T
 
 import Prelude hiding (Nat)
-import qualified Data.Map.Strict as Map
+--import qualified Data.Map.Strict as Map
 
 import qualified Prettyprinter as PP
 import Prettyprinter ((<+>))
-import qualified Prettyprinter.Render.Text as PP
+--import qualified Prettyprinter.Render.Text as PP
 
 
 type CodePP = PP.Doc ()
@@ -130,10 +136,11 @@ varModifierToCode = \case
     SLS.VarOffset x -> "offset" <> PP.equals <> unK x
     SLS.VarMultiplier x -> "multiplier" <> PP.equals <> unK x
 
+{-
 declIndexList :: DeclIndexVecF (K CodePP) t -> [CodePP]
 declIndexList (DeclIndexVecF v) = arrayIndexList v
-
-arrayIndexList :: Vec n (K CodePP t) -> [CodePP]
+-}
+arrayIndexList :: Vec.Vec n (K CodePP t) -> [CodePP]
 arrayIndexList v = unK <$> Vec.toList v
 
 
@@ -144,7 +151,7 @@ stanDeclHead = \case
   SLS.MatrixSpec st r c vms -> PP.pretty (stanTypeName st) <> varModifiersToCode vms <> indexCodeL [unK r, unK c]
   SLS.ArraySpec _sn iv ds -> arrayDeclHead iv ds
     where
-      arrayDeclHead :: forall t' n' . (ScalarType t ~ ScalarType t') => Vec (DTN.S n') (K CodePP EInt) -> SLS.DeclSpec (K CodePP) t' -> CodePP
+      arrayDeclHead :: forall t' n' . (ScalarType t ~ ScalarType t') => Vec.Vec (DTN.S n') (K CodePP EInt) -> SLS.DeclSpec (K CodePP) t' -> CodePP
       arrayDeclHead iv' arrayDS = case arrayDS of -- handle nested arrays by making one larger array
         SLS.ArraySpec _innerDim innerIV innerArrayDS -> arrayDeclHead (iv' Vec.++ innerIV) innerArrayDS
         _ -> "array" <> indexCodeL (arrayIndexList iv') <+> stanDeclHead arrayDS
@@ -166,9 +173,10 @@ bracketCode c = PP.flatAlt
 bracketLoopCode :: CodePP -> CodePP
 bracketLoopCode = bracketCode . PP.group
 
+{-
 addSemi :: CodePP -> CodePP
 addSemi c = c <> PP.semi
-
+-}
 -- put each item of code on a separate line
 blockCode :: Traversable f => f CodePP -> CodePP
 blockCode ne = PP.vsep $ toList ne
@@ -179,9 +187,10 @@ blockCode' cs = case toList cs of
   [] -> mempty
   (c : csTail) -> c <> PP.vsep csTail
 
+{-
 appendAsList :: Traversable f => f a -> [a] -> [a]
 appendAsList fa as = toList fa ++ as
-
+-}
 functionArg :: SType t -> CodePP
 functionArg st =  handleType st where
   arrayIndices :: DTN.SNat n -> CodePP
@@ -283,10 +292,10 @@ encloseSep' l r s1' s ds = case ds of
 
 csArgList :: TypedList (K CodePP) args -> CodePP
 csArgList = formatFunctionArgs . typedKToList
-
+{-
 prefixSurroundPrefer :: CodePP -> CodePP -> CodePP -> CodePP -> CodePP -> CodePP
 prefixSurroundPrefer ifUnsplit ifSplit ls rs c = PP.group $ PP.flatAlt ifSplit ifUnsplit <> ls <> PP.align c <> rs
-
+-}
 -- I am not sure about/do not understand the quantified constraint here.
 exprToDocAlg :: IAlg SLE.LExprF (K IExprCode) -- SLE.LExprF ~> K IExprCode
 exprToDocAlg = K . Fix . \case
@@ -422,7 +431,7 @@ stmtBlockHeader = \case
   SLS.TParametersStmts -> "transformed parameters"
   SLS.ModelStmts -> "model"
   SLS.GeneratedQuantitiesStmts -> "generated quantities"
-
+{-
 exprToText' :: PP.LayoutOptions -> SLE.LExpr t -> Text
 exprToText' lo = PP.renderStrict . PP.layoutSmart lo . unK . exprToCode
 
@@ -435,3 +444,4 @@ printLookupCtxt (SLA.IndexLookupCtxt s i) = "sizes: " <> T.intercalate ", " (pri
   where
     printF :: forall t.(Text, SLE.LExpr t) -> Text
     printF (ik, le) = "(" <> ik <> ", " <> exprToText le  <> ")"
+-}

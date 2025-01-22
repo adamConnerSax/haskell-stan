@@ -16,7 +16,17 @@
 
 module Stan.Language.Operations
   (
-    module Stan.Language.Operations
+    BinaryResultT
+  , BinaryOp(..)
+  , SBinaryOp(..)
+  , UnaryResultT
+  , UnaryOp(..)
+  , SUnaryOp(..)
+  , BoolOp(..)
+  , SBoolOp(..)
+  , BoolResultT
+  , needParens
+  , binaryOpFromSBinaryOp
   )
   where
 

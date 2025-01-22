@@ -15,13 +15,23 @@
 {-# OPTIONS_GHC -Wno-missing-signatures #-}
 
 module Stan.Language.Indexing
-  ( module Stan.Language.Indexing,
-    Fin (..),
-    Vec (..)
+  (
+    Sliced
+  , Dimension
+  , SliceInnerN
+  , n0, n1, n2, n3
+  , N0, N1, N2, N3
+  , s0, s1, s2, s3
+  , NestedVec
+  , Indexed
+  , eqSizeNestedVec
+  , nestedVecHead
+  , IndexedTuple
+  , unNest
   )
 where
 
-import Data.Fin (Fin (..))
+--import Data.Fin (Fin (..))
 import Data.Type.Nat (Nat(..), SNat(..))
 import qualified Data.Type.Nat as DTN
 import Data.Vec.Lazy (Vec (..))
@@ -63,8 +73,6 @@ s1 :: SNat (S Z) = SS
 s2 :: SNat (S (S Z)) = SS
 
 s3 :: SNat (S (S (S Z))) = SS
-
-s4 :: SNat (S (S (S (S Z)))) = SS
 
 -- popRandom :: forall n m a. (DT.SNatI n, DT.SNatI m) => Vec (DT.Plus n (S m)) a -> (a, Vec (DT.Plus n m) a)
 -- popRandom v = (a, vL DT.++ vR)
@@ -237,15 +245,15 @@ eqSizeNestedVec (NestedVec2 _) (NestedVec2 _) = Just Refl
 eqSizeNestedVec (NestedVec3 _) (NestedVec3 _) = Just Refl
 eqSizeNestedVec _ _ = Nothing
 
-eqNestedVec :: (a -> a -> Bool) -> NestedVec n a -> NestedVec n a -> Bool
-eqNestedVec f nva nvb =
+_eqNestedVec :: (a -> a -> Bool) -> NestedVec n a -> NestedVec n a -> Bool
+_eqNestedVec f nva nvb =
   let (sa, eltsA) = unNest nva
       (sb, eltsB) = unNest nvb
       eltsSame = getAll $ mconcat $ All <$> zipWith f eltsA eltsB
   in sa == sb && eltsSame
 
-eqVecLength :: Vec n a -> Vec m b -> Maybe (n :~: m)
-eqVecLength = go
+_eqVecLength :: Vec n a -> Vec m b -> Maybe (n :~: m)
+_eqVecLength = go
   where
     go :: forall n m a b.Vec n a -> Vec m b -> Maybe (n :~: m)
     go VNil VNil = Just Refl
@@ -254,12 +262,12 @@ eqVecLength = go
       Nothing -> Nothing
     go _ _ = Nothing
 
-eqVecEltType :: forall a b m n.(Typeable a, Typeable b) => Vec n a -> Vec m b -> Maybe (a :~: b)
-eqVecEltType _ _ = testEquality (typeRep @a) (typeRep @b)
+_eqVecEltType :: forall a b m n.(Typeable a, Typeable b) => Vec n a -> Vec m b -> Maybe (a :~: b)
+_eqVecEltType _ _ = testEquality (typeRep @a) (typeRep @b)
 
-eqVec :: (Typeable a, Typeable b, Eq a) => Vec n a -> Vec m b -> Bool
-eqVec v1 v2 = case eqVecLength v1 v2 of
-  Just Refl -> case eqVecEltType v1 v2 of
+_eqVec :: (Typeable a, Typeable b, Eq a) => Vec n a -> Vec m b -> Bool
+_eqVec v1 v2 = case _eqVecLength v1 v2 of
+  Just Refl -> case _eqVecEltType v1 v2 of
     Just Refl -> DVL.toList v1 == DVL.toList v2
     Nothing -> False
   Nothing -> False

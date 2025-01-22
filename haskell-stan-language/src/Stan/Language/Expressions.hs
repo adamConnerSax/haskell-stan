@@ -15,7 +15,56 @@
 
 module Stan.Language.Expressions
   (
-    module Stan.Language.Expressions
+    namedE
+  , intE
+  , realE
+  , complexE
+  , stringE
+  , vectorE
+  , matrixE
+  , arrayE
+  , ExprList
+  , tupleE
+  , functionE
+  , densityE
+  , unaryOpE
+  , negateE
+  , transposeE
+  , binaryOpE
+  , plusE
+  , minusE
+  , timesE
+  , divideE
+  , boolOpE
+  , multiOpE
+  , condE
+  , sliceE
+  , at
+  , slice0
+  , indexE
+  , indexTuple
+  , fstRef
+  , sndRef
+  , rangeIndexE
+  , namedSizeE
+  , sliceInner
+  , sliceInnerN
+  , sliceArrayAll
+  , BoolE
+  , IntE
+  , RealE
+  , ArrayE
+  , IntArrayE
+  , RealArrayE
+  , VectorE
+  , RVectorE
+  , MatrixE
+  , SqMatrixE
+  , mRow
+  , atRow
+  , mCol
+  , atCol
+  , mAt
   )
   where
 
@@ -30,8 +79,7 @@ import Stan.Language.Types
       TypedList,
     )
 import Stan.Language.Indexing
-    ( Vec(..),
-      Sliced,
+    ( Sliced,
       N0,
       s1,
       NestedVec,
@@ -71,7 +119,7 @@ stringE = SLR.IFix . SLE.UL . SLE.LString
 vectorE :: [Double] -> SLE.UExpr ECVec
 vectorE = SLR.IFix . SLE.UL . SLE.LVector
 
-matrixE :: [Vec n Double] -> SLE.UExpr EMat
+matrixE :: [Vec.Vec n Double] -> SLE.UExpr EMat
 matrixE = SLR.IFix . SLE.UL . SLE.LMatrix
 
 arrayE :: NestedVec n (SLE.UExpr t) -> SLE.UExpr (EArray n t)
@@ -162,17 +210,17 @@ sliceInner e i = sliceE SZ i e
 -- NB: We need the "go" here to add the SNat to the steps so GHC can convince itself that the lengths match up
 -- This will yield a compile-time error if we try to index past the end or, same same, index something scalar.
 -- That is, if n > Dimension a, this cannot be compiled.
-sliceInnerN :: SLE.UExpr t -> Vec n (SLE.UExpr EInt) -> SLE.UExpr (SliceInnerN n t)
+sliceInnerN :: SLE.UExpr t -> Vec.Vec n (SLE.UExpr EInt) -> SLE.UExpr (SliceInnerN n t)
 sliceInnerN e v = Vec.withDict v $ go e v where
-  go :: DT.SNatI m => SLE.UExpr u -> Vec m (SLE.UExpr EInt) -> SLE.UExpr (SliceInnerN m u)
+  go :: DT.SNatI m => SLE.UExpr u -> Vec.Vec m (SLE.UExpr EInt) -> SLE.UExpr (SliceInnerN m u)
   go = go' DT.snat
-  go' :: DT.SNat k -> SLE.UExpr a -> Vec k (SLE.UExpr EInt) -> SLE.UExpr (SliceInnerN k a)
+  go' :: DT.SNat k -> SLE.UExpr a -> Vec.Vec k (SLE.UExpr EInt) -> SLE.UExpr (SliceInnerN k a)
   go' SZ e' _ = e'
-  go' SS e' (i ::: v') = go' DT.snat (sliceInner e' i) v'
+  go' SS e' (i Vec.::: v') = go' DT.snat (sliceInner e' i) v'
 
 -- we need this special case but that seems bad
-sliceArrayAll :: forall n t . SLE.UExpr (EArray (S n) t) -> Vec (S n) (SLE.UExpr EInt) -> SLE.UExpr t
-sliceArrayAll e (v Vec.::: VNil) = sliceE SZ v e
+sliceArrayAll :: forall n t . SLE.UExpr (EArray (S n) t) -> Vec.Vec (S n) (SLE.UExpr EInt) -> SLE.UExpr t
+sliceArrayAll e (v Vec.::: Vec.VNil) = sliceE SZ v e
 sliceArrayAll e (v Vec.::: v' Vec.::: vs) = sliceArrayAll (sliceE SZ v e) (v' Vec.::: vs)
 
 {-

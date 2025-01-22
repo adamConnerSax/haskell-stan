@@ -15,7 +15,20 @@
 
 module Stan.Language.ASTContext
   (
-    module Stan.Language.ASTContext
+    ASTCtxt(..)
+  , modifyVarCtxt
+  , enterNewScope
+  , leaveScope
+  , indexes
+  , sizes
+  , varLookupMap
+  , checkTypedVar
+  , VarNameCheck(..)
+  , FunctionCtxt(..)
+  , modifyFunctionCtxt
+  , addTypedVarToInnerScope
+  , addTypedVarsInScope
+  , emptyLookupCtxt
   )
   where
 
@@ -93,24 +106,24 @@ addTypedVarsInScope typedVarNames vlc = sTypedFoldTypedList f (Just vlc) typedVa
   where
     f (K vn) st mVlc = mVlc >>= addTypedVarInScope vn st
 
-addTypedVarsToInnerScope :: AllGenSTypes ts => TypedList (K SLE.VarName) ts -> VarLookupCtxt -> VarLookupCtxt
-addTypedVarsToInnerScope typedVarNames vlc = sTypedFoldTypedList f vlc typedVarNames
+_addTypedVarsToInnerScope :: AllGenSTypes ts => TypedList (K SLE.VarName) ts -> VarLookupCtxt -> VarLookupCtxt
+_addTypedVarsToInnerScope typedVarNames vlc = sTypedFoldTypedList f vlc typedVarNames
   where
     f (K vn) = addTypedVarToInnerScope vn
 
 
-array_num_elements :: (SNatI n, GenSType t) => Function EInt '[EArray n t]
-array_num_elements = simpleFunction "size" {- any chance this should be num_elements? --als was "inv"?? -}
+_array_num_elements :: (SNatI n, GenSType t) => Function EInt '[EArray n t]
+_array_num_elements = simpleFunction "size" {- any chance this should be num_elements? --als was "inv"?? -}
 
-indexSize :: IndexArrayU -> SLE.UExpr EInt
-indexSize = functionE array_num_elements . oneTyped
+_indexSize :: IndexArrayU -> SLE.UExpr EInt
+_indexSize = functionE _array_num_elements . oneTyped
 
 data IndexLookupCtxt = IndexLookupCtxt { sizes :: IndexSizeMap, indexes :: IndexArrayMap }
 
 emptyIndexLookupCtxt :: IndexLookupCtxt
 emptyIndexLookupCtxt = IndexLookupCtxt mempty mempty
 
-data FunctionNameStatus = FunctionName | FunctionNameAvailable
+--data FunctionNameStatus = FunctionName | FunctionNameAvailable
 type FunctionTypeMap = Map FunctionName (Some.Some SType, Some.Some STypeList)
 
 newtype FunctionCtxt = FunctionCtxt { functionNames :: FunctionTypeMap }
@@ -128,8 +141,8 @@ emptyLookupCtxt = ASTCtxt emptyVarLookupCtxt emptyIndexLookupCtxt (FunctionCtxt 
 modifyVarCtxt :: (VarLookupCtxt -> VarLookupCtxt) -> ASTCtxt -> ASTCtxt
 modifyVarCtxt f (ASTCtxt vlc ilc fc) = ASTCtxt (f vlc) ilc fc
 
-modifyIndexCtxt :: (IndexLookupCtxt -> IndexLookupCtxt) -> ASTCtxt -> ASTCtxt
-modifyIndexCtxt f (ASTCtxt vlc ilc fc) = ASTCtxt vlc (f ilc ) fc
+_modifyIndexCtxt :: (IndexLookupCtxt -> IndexLookupCtxt) -> ASTCtxt -> ASTCtxt
+_modifyIndexCtxt f (ASTCtxt vlc ilc fc) = ASTCtxt vlc (f ilc ) fc
 
 modifyFunctionCtxt :: (FunctionCtxt -> FunctionCtxt) -> ASTCtxt -> ASTCtxt
 modifyFunctionCtxt f (ASTCtxt vlc ilc fc) = ASTCtxt vlc ilc (f fc)

@@ -1,7 +1,6 @@
 {-# LANGUAGE AllowAmbiguousTypes #-}
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE GADTs #-}
-{-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE PolyKinds #-}
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE ScopedTypeVariables #-}
@@ -13,7 +12,29 @@
 
 module Stan.Language.Recursion
   (
-    module Stan.Language.Recursion
+    cata
+  , ana
+  , hylo
+  , Fix(..)
+  , HFunctor(..)
+  , HTraversable(..)
+  , K(..)
+  , AlgM
+  , CoAlgM
+  , cataM
+  , anaM
+  , hyloM
+  , IFix(..)
+  , IAlg
+  , iCata
+  , iAna
+  , iHylo
+  , type (~>)
+  , NatM
+  , IAlgM
+  , iCataM
+  , iAnaM
+  , iHyloM
   )
 where
 
