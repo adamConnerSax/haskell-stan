@@ -152,7 +152,7 @@ class HFunctor h => HFoldable h where
     hfoldMap :: Monoid m => (a :=> m) -> h a :=> m
     hfoldMap f = hfoldr (mappend . f) mempty
 
-    hfoldr :: (a :=> (b->b) ) -> b -> h a :=> b
+    hfoldr :: (a :=> (b -> b) ) -> b -> h a :=> b
     hfoldr f z t = appEndo (hfoldMap (Endo . f) t) z
 
     hfoldl :: (b -> a :=> b) -> b -> h a :=> b

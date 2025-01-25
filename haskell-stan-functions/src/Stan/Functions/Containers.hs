@@ -211,11 +211,3 @@ diag_pre_multiply v m = SLE.functionE (SLF.simpleFunction "diag_pre_multiply") (
 
 diag_post_multiply :: (SFC.Vector vt, SFC.Matrix mt) => SLE.UExpr mt -> SLE.UExpr vt -> SLE.UExpr mt --Function t' [t, t']
 diag_post_multiply m v = SLE.functionE (SLF.simpleFunction "diag_post_multiply") (m :> v :> TNil)
-
-{-
-diag_pre_multiply :: SFC.Matrix t => SLE.UExpr SLT.ERVec -> SLE.UExpr t -> SLE.UExpr t --Function t '[ERVec, t]
-diag_pre_multiply rv m = SLE.functionE (SLF.simpleFunction "diag_pre_multiply") (rv :> m :> TNil)
-
-diag_post_multiply :: SFC.Matrix t => SLE.UExpr t -> SLE.UExpr SLT.ECVec -> SLE.UExpr t --Function t '[t, ECVec]
-diag_post_multiply m cv = SLE.functionE (SLF.simpleFunction "diag_post_multiply") (m :> cv :> TNil)
--}

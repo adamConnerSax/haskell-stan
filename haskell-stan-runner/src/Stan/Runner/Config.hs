@@ -27,10 +27,10 @@ import qualified Data.Text as T
 data GQNames = GQNames { gqModelName :: Text, gqDataName :: Text} deriving stock (Show, Eq, Ord)
 
 data RunnerInputNames = RunnerInputNames
-  { rinModelDir :: Text
-  , rinModel :: Text
-  , rinGQ :: Maybe GQNames
-  , rinData :: Text
+  { rinModelDir :: Text -- ^ top-level Directory for stan model code & parent of data/script/ouput directories
+  , rinModel :: Text -- ^ prefix for model code.
+  , rinGQ :: Maybe GQNames  -- ^ If there will be generated quantities, prefix for that model code and data
+  , rinData :: Text -- ^ prefix for data files
   }  deriving stock (Show, Ord, Eq)
 
 data ModelRun = MRNoGQ | MROnlyLL | MROnlyPP | MRFull deriving stock (Show, Eq)
@@ -68,17 +68,17 @@ modelPath :: ModelRun -> RunnerInputNames -> FilePath
 modelPath mr rin = modelDirPath rin $ modelName mr rin
 {-# INLINEABLE modelPath #-}
 
-dirPath :: RunnerInputNames -> Text -> Text -> FilePath
-dirPath rin subDirName fName = toString $ rinModelDir rin <> "/" <> subDirName <> "/" <> fName
+subdirPath :: RunnerInputNames -> Text -> Text -> FilePath
+subdirPath rin subDirName fName = toString $ rinModelDir rin <> "/" <> subDirName <> "/" <> fName
 
 outputDirPath :: RunnerInputNames -> Text -> FilePath
-outputDirPath rin = dirPath rin "output"
+outputDirPath rin = subdirPath rin "output"
 
 dataDirPath :: RunnerInputNames -> Text -> FilePath
-dataDirPath rin = dirPath rin "data"
+dataDirPath rin = subdirPath rin "data"
 
 rDirPath :: RunnerInputNames -> Text -> FilePath
-rDirPath rin = dirPath rin "R"
+rDirPath rin = subdirPath rin "R"
 
 data StanMCParameters = StanMCParameters
   { smcNumChains :: Int
@@ -135,6 +135,13 @@ gqDataDependency rin = case gqDataFileName rin of
 combinedDataFileName :: RunnerInputNames -> Text
 combinedDataFileName rin = rinData rin <> maybe "" ("_" <>) (gqDataName <$> rinGQ rin) <> ".json"
 
+
+{-
+We save separate JSON for model and generated-quantities runs. To run a model with GQ section
+we need these combined. Here we check if the combo file is older than either the model data
+or the GQ data and, if so, recombine them. Returning a unit action to hold most recent update time
+of combined data.
+-}
 combineData :: K.KnitEffects r => RunnerInputNames -> K.Sem r (K.ActionWithCacheTime r ())
 combineData rin = do
   modelDataDep <- modelDataDependency rin
@@ -155,7 +162,9 @@ combineData rin = do
           let combined :: A.Object = modelData <> gqData
           K.liftKnit $ A.encodeFile comboFP combined
           return ()
-
+{-
+Action holding most recent update time of model and GQ data (if setup has any)
+-}
 dataDependency :: K.KnitEffects r => RunnerInputNames -> K.Sem r (K.ActionWithCacheTime r ())
 dataDependency rin = do
   modelDataDep <- modelDataDependency rin
@@ -194,32 +203,45 @@ setSigFigs :: Int -> ModelRunnerConfig -> ModelRunnerConfig
 setSigFigs sf mrc = let sc = mrcStanSummaryConfig mrc in mrc { mrcStanSummaryConfig = sc { CS.sigFigs = Just sf } }
 
 noLogOfSummary :: ModelRunnerConfig -> ModelRunnerConfig
-noLogOfSummary sc = sc { mrcLogSummary = False }
+cnoLogOfSummary sc = sc { mrcLogSummary = False }
 
 noDiagnose :: ModelRunnerConfig -> ModelRunnerConfig
 noDiagnose sc = sc { mrcRunDiagnose = False }
 
-{- Moved to Stan.Builder.CoreTypes
-data InputDataType = ModelData | GQData deriving stock (Show, Eq, Ord, Enum, Bounded, Generic)
-instance Hashable InputDataType
--}
-
 data ConstT (a :: SB.InputDataT) = ConstT
 
--- produce indexes and json producer from the data as well as a data-set to predict.
+{-
+So. DataIndexerType is parameterized by something which takes an SB.InputDataT and returns a Type.
+In particular, the type of the DataIndex for this particular setup?
+the caching of the index can be different for the model and gq data.
+Why can't I just use the unparameterized InputDataT for this?
+-}
+{- DataIndexerType carries info about whether a particular Data Index exists and, if so, should be cached. -}
 data DataIndexerType (b :: SB.InputDataT -> Type) where
   NoIndex :: DataIndexerType ConstT
   TransientIndex :: DataIndexerType b
   CacheableIndex :: (ModelRunnerConfig -> SB.InputDataT -> Text) -> DataIndexerType b
 
--- pattern matching on the first brings the constraint into scope
--- This allows us to choose to not have the constraint unless we need it.
+{-
+Pattern matching on the first brings the constraint into scope
+This allows us to choose not to have the constraint unless we need it.
+-}
 data Cacheable st b where
   Cacheable :: st (Either Text b) => Cacheable st b
   UnCacheable :: Cacheable st b
 
 data JSONSeries = JSONSeries { modelSeries :: A.Series, gqSeries :: A.Series}
 
+{-
+Wrangler represents a function from the Data (model or GQ indexed by 'i') to
+an index of type (b i) and a function from the data to the JSON.
+Why not just
+SB.DataSource i b -> (Either T.Text (b i), Either T.Text A.Series)
+or
+SB.DataSource i b -> Either T.Text ((b i), A.Series)
+
+??
+-}
 type Wrangler i b = SB.DataSource i -> (Either T.Text (b i), SB.DataSource i -> Either T.Text A.Series)
 
 {-

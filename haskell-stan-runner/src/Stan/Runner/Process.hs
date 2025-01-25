@@ -129,25 +129,6 @@ dataWranglerAndCode modelData_C gqData_C modelDB gqDBF sbF = do
       wrangler ::  SRC.DataWrangler SB.DataSetGroupIntMaps ()
       wrangler = SRC.Wrangle SRC.TransientIndex modelWrangle (Just gqWrangle)
   pure (wrangler, SB.program (SB.code bs))
-{-
-  let builderWithWrangler = do
-        SB.buildGroupIndexes
-        sb
-        modelJsonF <- SB.buildModelJSONFromDataM
-        gqJsonF <- SB.buildGQJSONFromDataM
-        modelIntMapsBuilder <- SB.modelIntMapsBuilder
-        gqIntMapsBuilder <- SB.gqIntMapsBuilder
-        let modelWrangle md = (modelIntMapsBuilder md, modelJsonF)
-            gqWrangle gq = (gqIntMapsBuilder gq, gqJsonF)
-            wrangler :: SC.DataWrangler md gq SB.DataSetGroupIntMaps () =
-              SC.Wrangle
-              SC.TransientIndex
-              modelWrangle
-              (Just gqWrangle)
-        return wrangler
-      resE = SBPC.runStanBuilderDAG modelDat gqDat gb builderWithWrangler
-  K.knitEither $ fmap (\(bs, dw) -> (dw, SB.program (SB.code bs))) resE
--}
 
 
 makeDefaultModelRunnerConfig :: forall st cd r. SRC.KnitStan st cd r
@@ -297,6 +278,12 @@ wrangleDataWithoutPredictions :: forall st cd b r.
 wrangleDataWithoutPredictions config dw cbm cbgq md_C gq_C = wrangleData @st @cd config dw cbm cbgq md_C gq_C ()
 {-# INLINE wrangleDataWithoutPredictions #-}
 
+{-
+This, I think, generates the indexes *and* the JSON, and saves the JSON to the appropriate file.
+But the JSON is just for Stan so we don't return it from the function. But the cache time here
+holds the newer of the index and the JSON since we do want to know if anything downstream needs
+to be re-run given either the JSON or index cache time.
+-}
 wrangleData :: forall st cd b p r.SRC.KnitStan st cd r
   => SRC.ModelRunnerConfig
   -> SRC.DataWrangler b p
@@ -322,12 +309,12 @@ wrangleData config w cbm cbgq md_C gq_C p = K.wrapPrefix "wrangleData" $ do
     K.liftKnit . BL.writeFile (SRC.dataDirPath (SRC.mrcInputNames config) modelDataFileName)
       $ A.encodingToLazyByteString $ A.pairs jsonEncoding
   let model_C = const <$> modelIndexes_C <*> modelJSON_C
-  gq_C' <- case mGQIndexAndEncoder of
-    Nothing -> return $ pure $ Left "wrangleData: Attempt to use GQ indexes but No GQ wrangler given."
+  genQ_C <- case mGQIndexAndEncoder of
+    Nothing -> pure $ pure $ Left "wrangleData: Attempt to use GQ indexes but No GQ wrangler given."
     Just gqIndexAndEncoder -> do
       mGQData_C <- SRC.gqDataDependency $ SRC.mrcInputNames config
       case mGQData_C of
-        Nothing -> return $ pure $ Left "wrangleData: Attempt to wrangle GQ data but config.mrcInputNames.rinQG is Nothing."
+        Nothing -> pure $ pure $ Left "wrangleData: Attempt to wrangle GQ data but config.mrcInputNames.rinQG is Nothing."
         Just gqData_C -> do
           K.logLE K.Diagnostic "Wrangling GQ Data"
           (newGQData_C, gqIndexes_C) <- wranglerPrep @st @cd config SB.GQData indexerType gqIndexAndEncoder cbgq gq_C
@@ -342,7 +329,7 @@ wrangleData config w cbm cbgq md_C gq_C p = K.wrapPrefix "wrangleData" $ do
             writeFileLBS (SRC.dataDirPath (SRC.mrcInputNames config) gqDataFileName)
               $ A.encodingToLazyByteString $ A.pairs (jsonEncoding <> indexEncoding)
           return $ const <$> gqIndexes_C <*> gqJSON_C
-  return (model_C, gq_C')
+  return (model_C, genQ_C)
 {-# INLINEABLE wrangleData #-}
 
 -- create function to rebuild json along with time stamp from data used
@@ -391,7 +378,7 @@ manageIndex config inputDataType dataIndexer cb ebFromA_C = do
                   SB.GQData -> fromMaybe "Error:No GQ Setup" $ SRC.gqDataFileName $ SRC.mrcInputNames config
             K.logLE (K.Debug 1)  $ "JSON data (\"" <> jsonFP <> "\") is missing.  Deleting cached indices to force rebuild."
             K.clearIfPresent @Text @cd (indexCacheKey config $ SB.inputDataT inputDataType)
-          K.retrieveOrMake @st @cd (indexCacheKey config $ SB.inputDataT inputDataType) ebFromA_C return
+          K.retrieveOrMake @st @cd (indexCacheKey config $ SB.inputDataT inputDataType) ebFromA_C pure
         _ -> K.knitError "Cacheable index type provided but b is Uncacheable."
     _ -> pure ebFromA_C
 {-# INLINEABLE manageIndex #-}
@@ -418,9 +405,10 @@ runModel config rScriptsToWrite dataWrangler cbm cbgq makeResult toPredict md_C 
   createDirIfNecessary (SRC.mrcModelDir config <> "/data") -- json inputs
   createDirIfNecessary (SRC.mrcModelDir config <> "/output") -- csv model run output
   createDirIfNecessary (SRC.mrcModelDir config <> "/R") -- scripts to load fit into R for shinyStan or loo.
+  -- create/update JSON (if nec) and retrieve/update/create indices (b i)
   (modelIndices_C, gqIndices_C) <- wrangleData @st @cd config dataWrangler cbm cbgq md_C gq_C toPredict
-  curModelNoGQ_C <- SRC.modelDependency SRC.MRNoGQ runnerInputNames
-  curModel_C <- SRC.modelDependency SRC.MRFull runnerInputNames
+  curModelNoGQ_C <- SRC.modelDependency SRC.MRNoGQ runnerInputNames --empty action to represent latest update of all deps for no GQ run
+  curModel_C <- SRC.modelDependency SRC.MRFull runnerInputNames --empty action to represent latest update of all deps for GQ run
   -- run model and/or build gq samples as necessary
   (modelResDep, mGQResDep) <- do
     let runModelF = do
