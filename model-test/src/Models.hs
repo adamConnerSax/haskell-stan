@@ -11,13 +11,17 @@ module Models where
 
 import qualified KnitEnvironment as KE
 
-import qualified Stan.Language as SL
-import Stan.Language (TypedList(..))
+import qualified Stan as S
+import Stan (TypedList(..))
+import Stan.Operators
+
+{-import Stan.Language (TypedList(..))
 import qualified Stan.Functions as SF
 import Stan.Functions.Operators
 import qualified Stan.Builder as SB
 import qualified Stan.BuildingBlocks as SBB
 import qualified Stan.Runner as SR
+-}
 import qualified CmdStan as CS
 
 import qualified Frames as F hiding (tableTypes)
@@ -39,8 +43,8 @@ F.tableTypes "FB_Result" (dataDir <> "model-test/data/football.csv")
 F.tableTypes "FB_Matchup" (dataDir <> "model-test/data/matchups1.csv")
 
 -- these type family instances are required for the stan builders
-type instance SB.DataSource SB.ModelDataT = F.Frame FB_Result
-type instance SB.DataSource SB.GQDataT = F.Frame FB_Matchup
+type instance S.DataSource S.ModelDataT = F.Frame FB_Result
+type instance S.DataSource S.GQDataT = F.Frame FB_Matchup
 
 fbResults :: forall r.(K.KnitEffects r, KE.CacheEffects r) => K.Sem r (K.ActionWithCacheTime r (F.Frame FB_Result))
 fbResults = do
@@ -72,14 +76,14 @@ fbMatchups n = do
 data HomeField = FavoriteField | UnderdogField deriving (Show, Eq, Ord, Enum, Bounded)
 
 data ModelDataPkg =
-  ModelDataPkg { resultsT :: SB.RowTypeTag SB.ModelDataT FB_Result
-               , homeFieldG :: SB.GroupTypeTag HomeField
-               , favoriteG :: SB.GroupTypeTag Text
-               , favoriteSize :: SL.IntE
-               , underDogG :: SB.GroupTypeTag Text
+  ModelDataPkg { resultsT :: S.RowTypeTag S.ModelDataT FB_Result
+               , homeFieldG :: S.GroupTypeTag HomeField
+               , favoriteG :: S.GroupTypeTag Text
+               , favoriteSize :: S.IntE
+               , underDogG :: S.GroupTypeTag Text
                }
 
-data GQDataPkg = GQDataPkg { matchupsT :: SB.RowTypeTag SB.GQDataT FB_Matchup }
+data GQDataPkg = GQDataPkg { matchupsT :: S.RowTypeTag S.GQDataT FB_Matchup }
 
 homeField :: FB_Result -> HomeField
 homeField r = if r ^. home then FavoriteField else UnderdogField
@@ -90,86 +94,86 @@ scoreDiff r = realToFrac (r ^. favorite) - realToFrac (r ^. underdog)
 spreadDiff :: FB_Result -> Double
 spreadDiff r = r ^. spread - scoreDiff r
 
-modelDataBuilder :: Foldable f => f Text -> SB.StanDataBuilderEff SB.ModelDataT ModelDataPkg
+modelDataBuilder :: Foldable f => f Text -> S.StanDataBuilderEff S.ModelDataT ModelDataPkg
 modelDataBuilder teams = do
-  resultsT <- SB.addData "Results" SB.ModelData (SB.ToFoldable id)
-  (homeFieldG, _) <- SB.addGroup "HomeField" 2
-  (favoriteG, favoriteSize) <- SB.addGroup "Favorite" $ FL.fold FL.length teams
-  (underdogG, _) <- SB.addGroup @Text "Underdog" $ FL.fold FL.length teams
-  SB.addGroupIndexForData homeFieldG resultsT $ SB.makeIndexFromEnum homeField
-  SB.addGroupIndexForData favoriteG resultsT $ SB.makeIndexFromFoldable show (F.rgetField @FavoriteName) teams
-  SB.addGroupIntMapForData favoriteG resultsT $ SB.dataToIntMapFromFoldable (F.rgetField @FavoriteName) teams
+  resultsT <- S.addData "Results" S.ModelData (S.ToFoldable id)
+  (homeFieldG, _) <- S.addGroup "HomeField" 2
+  (favoriteG, favoriteSize) <- S.addGroup "Favorite" $ FL.fold FL.length teams
+  (underdogG, _) <- S.addGroup @Text "Underdog" $ FL.fold FL.length teams
+  S.addGroupIndexForData homeFieldG resultsT $ S.makeIndexFromEnum homeField
+  S.addGroupIndexForData favoriteG resultsT $ S.makeIndexFromFoldable show (F.rgetField @FavoriteName) teams
+  S.addGroupIntMapForData favoriteG resultsT $ S.dataToIntMapFromFoldable (F.rgetField @FavoriteName) teams
   pure $ ModelDataPkg resultsT homeFieldG favoriteG favoriteSize underdogG
 
-gqDataBuilder :: Foldable f => f Text -> ModelDataPkg -> SB.StanDataBuilderEff SB.GQDataT GQDataPkg
+gqDataBuilder :: Foldable f => f Text -> ModelDataPkg -> S.StanDataBuilderEff S.GQDataT GQDataPkg
 gqDataBuilder teams mdp = do
-   matchupDataT <- SB.addData "Matchups" SB.GQData (SB.ToFoldable id)
-   SB.addGroupIndexForData (favoriteG mdp) matchupDataT $ SB.makeIndexFromFoldable show (F.rgetField @FavoriteName) teams
-   SB.addGroupIntMapForData (favoriteG mdp) matchupDataT $ SB.dataToIntMapFromFoldable (F.rgetField @FavoriteName) teams
+   matchupDataT <- S.addData "Matchups" S.GQData (S.ToFoldable id)
+   S.addGroupIndexForData (favoriteG mdp) matchupDataT $ S.makeIndexFromFoldable show (F.rgetField @FavoriteName) teams
+   S.addGroupIntMapForData (favoriteG mdp) matchupDataT $ S.dataToIntMapFromFoldable (F.rgetField @FavoriteName) teams
    pure $ GQDataPkg matchupDataT
 
-spreadDiffNormal :: ModelDataPkg -> GQDataPkg -> SB.StanModelBuilderEff ()
+spreadDiffNormal :: ModelDataPkg -> GQDataPkg -> S.StanModelBuilderEff ()
 spreadDiffNormal (ModelDataPkg resultsT homeFieldG favoriteG favoriteSize underDogG) (GQDataPkg matchupT) = do
-  spreadDiffE <- SBB.addRealData resultsT "diff" Nothing Nothing spreadDiff
+  spreadDiffE <- S.addRealData resultsT "diff" Nothing Nothing spreadDiff
 
   -- parameters
-  sigmaMuP <- SB.simpleParameter
-              (SL.NamedDeclSpec "sigma_mu_fav" $ SL.addVMs (SL.Modifiers [SL.lowerM $ SL.realE 0]) SL.realSpec)
-              (SB.given (SL.realE 0) :> SB.given (SL.realE 3) :> TNil)
-              SF.normal
-  sigmaP <- SB.simpleParameter
-         (SL.NamedDeclSpec "sigma" $ SL.addVMs (SL.Modifiers [SL.lowerM $ SL.realE 0]) SL.realSpec)
-         (SB.given (SL.realE 13) :> SB.given (SL.realE 15) :> TNil)
-         $ SF.normal
-  muVP <- SB.simpleParameter
-          (SL.NamedDeclSpec "mu_fav" $ SL.vectorSpec favoriteSize)
-          (SB.given (SL.realE 0) :> sigmaMuP :> TNil)
-          $ SF.normalS
+  sigmaMuP <- S.simpleParameter
+              (S.NamedDeclSpec "sigma_mu_fav" $ S.addVMs (S.Modifiers [S.lowerM $ S.realE 0]) S.realSpec)
+              (S.given (S.realE 0) :> S.given (S.realE 3) :> TNil)
+              S.normal
+  sigmaP <- S.simpleParameter
+         (S.NamedDeclSpec "sigma" $ S.addVMs (S.Modifiers [S.lowerM $ S.realE 0]) S.realSpec)
+         (S.given (S.realE 13) :> S.given (S.realE 15) :> TNil)
+         $ S.normal
+  muVP <- S.simpleParameter
+          (S.NamedDeclSpec "mu_fav" $ S.vectorSpec favoriteSize)
+          (S.given (S.realE 0) :> sigmaMuP :> TNil)
+          $ S.normalS
 
   -- get expressions for the parameters we need to model the data
-  let (sigmaE :> muVecE :> TNil) = SB.parametersAsExprs (sigmaP :> muVP :> TNil)
+  let (sigmaE :> muVecE :> TNil) = S.parametersAsExprs (sigmaP :> muVP :> TNil)
 
   -- helper functions
-  let toVec rtt x = SF.rep_vector x (SB.dataSetSizeE rtt)
-      indexed rtt gtt = SL.indexE SL.s0 (SB.dataByGroupIndexE rtt gtt)
+  let toVec rtt x = S.rep_vector x (S.dataSetSizeE rtt)
+      indexed rtt gtt = S.indexE S.s0 (S.dataByGroupIndexE rtt gtt)
 
   -- model (non-parameter part)
-  SB.inBlock SL.SBModel
-    $ SB.addStmtToCode
-    $ SBB.familySample SBB.normalDist spreadDiffE (indexed resultsT favoriteG muVecE :> toVec resultsT sigmaE :> TNil)
+  S.inBlock S.SBModel
+    $ S.addStmtToCode
+    $ S.familySample S.normalDist spreadDiffE (indexed resultsT favoriteG muVecE :> toVec resultsT sigmaE :> TNil)
 
   -- generated quantities, in this case a prediction
-  SB.inBlock SL.SBGeneratedQuantities $ do
+  S.inBlock S.SBGeneratedQuantities $ do
     let ps = indexed matchupT favoriteG muVecE :> toVec matchupT sigmaE :> TNil
-    _ <- SB.addFromCodeWriter $ SL.declareRHSNW (SL.NamedDeclSpec "eScoreDiff" $ SL.vectorSpec (SB.dataSetSizeE matchupT))
-         $ SBB.familyRNG SBB.normalDist ps
+    _ <- S.addFromCodeWriter $ S.declareRHSNW (S.NamedDeclSpec "eScoreDiff" $ S.vectorSpec (S.dataSetSizeE matchupT))
+         $ S.familyRNG S.normalDist ps
     pure ()
 
   -- log-likelihood
-  SBB.generateLogLikelihood resultsT SBB.normalDist
+  S.generateLogLikelihood resultsT S.normalDist
     (pure (\k -> (indexed resultsT favoriteG muVecE) !! k :> (toVec resultsT sigmaE) !! k :> TNil))
     (pure $ \k -> spreadDiffE !! k)
 
 
 -- the getParameter function feels like an incantation.  Need to simplify.
 type ModelReturn = ([(Text, [Double])], [Double], [Double],[(Text, [Double])])
-normalParamCIs :: K.KnitEffects r => SR.ResultAction r SB.DataSetGroupIntMaps () ModelReturn
-normalParamCIs = SR.UseSummary f where
+normalParamCIs :: K.KnitEffects r => S.ResultAction r S.DataSetGroupIntMaps () ModelReturn
+normalParamCIs = S.UseSummary f where
   f summary _ modelDataAndIndexes_C mGQDataAndIndexes_C = do
-    let favoriteG = SB.GroupTypeTag @Text "Favorite"
+    let favoriteG = S.GroupTypeTag @Text "Favorite"
     resultIndexesE <- K.ignoreCacheTime $ fmap snd modelDataAndIndexes_C
     teamResultIM <- K.knitEither
-      $  resultIndexesE >>= SB.getGroupIndex (SB.RowTypeTag @_ @FB_Result SB.ModelData "Results") favoriteG
+      $  resultIndexesE >>= S.getGroupIndex (S.RowTypeTag @_ @FB_Result S.ModelData "Results") favoriteG
 
     gqDataAndIndexes_C <- K.knitMaybe "normalParamCIs: No GQ data/indices provided!" mGQDataAndIndexes_C
     matchupIndexesE <- K.ignoreCacheTime $ fmap snd gqDataAndIndexes_C
     teamMatchupIM <- K.knitEither
-                     $ matchupIndexesE >>= SB.getGroupIndex (SB.RowTypeTag @_ @FB_Matchup SB.GQData "Matchups") favoriteG
+                     $ matchupIndexesE >>= S.getGroupIndex (S.RowTypeTag @_ @FB_Matchup S.GQData "Matchups") favoriteG
     K.logLE K.Diagnostic $ "MatchupIM: " <> show teamMatchupIM
     let resultsTeamList = fmap snd $ IM.toAscList teamResultIM
         matchupsTeamList = fmap snd $ IM.toAscList teamMatchupIM
-    let getScalar n = K.knitEither $ SR.getScalar . fmap CS.percents <$> SR.parseScalar n (CS.paramStats summary)
-        getVector n = K.knitEither $ SR.getVector . fmap CS.percents <$> SR.parse1D n (CS.paramStats summary)
+    let getScalar n = K.knitEither $ S.getScalar . fmap CS.percents <$> S.parseScalar n (CS.paramStats summary)
+        getVector n = K.knitEither $ S.getVector . fmap CS.percents <$> S.parse1D n (CS.paramStats summary)
         addTeams t = fmap (zip t . Vec.toList)
     (,,,) <$> addTeams resultsTeamList (getVector "mu_fav")
       <*> getScalar "sigma_mu_fav"

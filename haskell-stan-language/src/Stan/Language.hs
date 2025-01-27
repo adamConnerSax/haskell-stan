@@ -21,5 +21,5 @@ import Stan.Language.Statement
 import Stan.Language.Statements
 import Stan.Language.Operations
 import Stan.Language.Functions
-import Stan.Language.Program
+import Stan.Language.Program hiding (addStmtToBlock, addStmtsToBlock, addStmtToBlockTop, addStmtsToBlockTop)
 import Stan.Language.CodeWriter

@@ -1,4 +1,4 @@
-packages: haskell-stan-language haskell-stan-builder haskell-stan-functions haskell-stan-runner haskell-stan-building-blocks model-test
+packages: . haskell-stan-language haskell-stan-builder haskell-stan-functions haskell-stan-runner haskell-stan-building-blocks
 jobs: 4
 with-compiler: ghc
 allow-newer: base, bytestring, ghc-prim, template-haskell, polysemy-zoo:constraints

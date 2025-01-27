@@ -14,7 +14,10 @@
 
 module Stan.BuildingBlocks.ArrayHelpers
   (
-    module Stan.BuildingBlocks.ArrayHelpers
+    applyToArrayOf
+  , applyToArrayOf'
+  , ArrayList
+  , ArrayWrapper(..)
   )
 where
 
@@ -27,10 +30,10 @@ import qualified Data.Type.Nat as DT
 import Data.Type.Equality (type (:~:)(..))
 
 -- wrapper for arrays of dimesnion n where the final type parameter is the type in the array
-newtype ArrayOf n t = ArrayOf { getArray :: SL.UExpr (SL.EArray (DT.S n) t)}
+newtype ArrayWrapper n t = ArrayWrapper { getArray :: SL.UExpr (SL.EArray (DT.S n) t)}
 
 -- type synonym for typed lists of arrays of different underlying types
-type ArrayList n qs = SL.TypedList (ArrayOf n) qs
+type ArrayList n qs = SL.TypedList (ArrayWrapper n) qs
 
 -- given a typed-list of same-dimension n arrays and a vector of length n+1 of indexes,
 -- produce a typed-list of the elements of the arrays at that index.
@@ -72,7 +75,7 @@ applyToArrayOf  :: forall n t' t.
                -> SL.UExpr (SL.EArray (DT.S n) t')
                -> SL.UExpr (SL.EArray (DT.S n) t)
                -> SL.CodeWriter ()
-applyToArrayOf cp eltF arrDims e1 = applyToArrayOf' cp (\(x :> TNil) -> eltF x) arrDims (ArrayOf e1 :> TNil)
+applyToArrayOf cp eltF arrDims e1 = applyToArrayOf' cp (\(x :> TNil) -> eltF x) arrDims (ArrayWrapper e1 :> TNil)
 
 
 {-

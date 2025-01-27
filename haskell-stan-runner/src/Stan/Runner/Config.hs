@@ -203,7 +203,7 @@ setSigFigs :: Int -> ModelRunnerConfig -> ModelRunnerConfig
 setSigFigs sf mrc = let sc = mrcStanSummaryConfig mrc in mrc { mrcStanSummaryConfig = sc { CS.sigFigs = Just sf } }
 
 noLogOfSummary :: ModelRunnerConfig -> ModelRunnerConfig
-cnoLogOfSummary sc = sc { mrcLogSummary = False }
+noLogOfSummary sc = sc { mrcLogSummary = False }
 
 noDiagnose :: ModelRunnerConfig -> ModelRunnerConfig
 noDiagnose sc = sc { mrcRunDiagnose = False }

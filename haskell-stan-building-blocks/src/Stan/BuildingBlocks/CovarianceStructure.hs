@@ -169,7 +169,7 @@ nonCenteredFlat' givenName ds flatMu sigmaE rawFlatE e = do
     SL.ArraySpec DT.SS arrDims mds -> case mds of
       SL.DeclSpec SL.StanMatrix _ _ -> do
         ncfE <- SL.declareNW $ SL.NamedDeclSpec (givenName <> "_ncf") $ flatDS ds
-        SBBA.applyToArrayOf' "k" ncfF arrDims (SBBA.ArrayOf flatMu :> SBBA.ArrayOf rawFlatE :> TNil) ncfE
+        SBBA.applyToArrayOf' "k" ncfF arrDims (SBBA.ArrayWrapper flatMu :> SBBA.ArrayWrapper rawFlatE :> TNil) ncfE
         pure ncfE
       _ -> error "nonCenteredFlat: Given array type of something other than matrices!"
     _ -> error "nonCenteredFlat: Given type of something other than matrix or array of matrices!"
@@ -195,7 +195,7 @@ nonCenteredUnFlat ds pE flatMu sigmaE rawFlatE = do
     SL.ArraySpec DT.SS arrDims mds -> case mds of
       SL.MatrixSpec SL.StanMatrix rowsE colsE _ -> do
 --        ncfE <- SL.declareNW $ SL.NamedDeclSpec (givenName <> "_ncf") $ flatDS ds
-        SBBA.applyToArrayOf' "k" (ncufF rowsE colsE) arrDims (SBBA.ArrayOf flatMu :> SBBA.ArrayOf rawFlatE :> TNil) pE
+        SBBA.applyToArrayOf' "k" (ncufF rowsE colsE) arrDims (SBBA.ArrayWrapper flatMu :> SBBA.ArrayWrapper rawFlatE :> TNil) pE
       _ -> error "nonCenteredFlat: Given array type of something other than matrices!"
     _ -> error "nonCenteredFlat: Given type of something other than matrix or array of matrices!"
 
@@ -321,7 +321,7 @@ nonCentered ds ncE muE sigmaE rawE = do
     SL.VectorSpec SL.StanVector _ _ -> SL.addStmt $ ncE SL.|=| ncF (muE :> rawE :> TNil)
     SL.ArraySpec DT.SS arrDims mds -> case mds of
       SL.VectorSpec SL.StanVector _ _ -> do
-        SBBA.applyToArrayOf' "k" ncF arrDims (SBBA.ArrayOf muE :> SBBA.ArrayOf rawE :> TNil) ncE
+        SBBA.applyToArrayOf' "k" ncF arrDims (SBBA.ArrayWrapper muE :> SBBA.ArrayWrapper rawE :> TNil) ncE
       _ -> error "nonCentered: Given array type of something other than vectors!"
     _ -> error "nonCentered: Given type of something other than vector or array of vectors!"
 
