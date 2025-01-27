@@ -152,7 +152,7 @@ spreadDiffNormal (ModelDataPkg resultsT homeFieldG favoriteG favoriteSize underD
 
 
 -- the getParameter function feels like an incantation.  Need to simplify.
-type ModelReturn = ([(Text, [Double])],[Double], [Double],[(Text, [Double])])
+type ModelReturn = ([(Text, [Double])], [Double], [Double],[(Text, [Double])])
 normalParamCIs :: K.KnitEffects r => SR.ResultAction r SB.DataSetGroupIntMaps () ModelReturn
 normalParamCIs = SR.UseSummary f where
   f summary _ modelDataAndIndexes_C mGQDataAndIndexes_C = do

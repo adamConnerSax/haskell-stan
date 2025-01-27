@@ -9,13 +9,7 @@ maintainer:          adam_conner_sax@yahoo.com
 -- copyright:
 category:            Data
 build-type:          Simple
-extra-source-files: Readme.md Changelog.md
-
-flag streamly9
-    Description: require streamly >= 0.9
-    Manual: True
-    Default: False
-
+extra-source-files:
 
 common common-options
   ghc-options:         -Wall
@@ -59,7 +53,6 @@ library
   build-depends: base >= 4.12 && < 5
                , array >= 0.5.4 && < 0.6
                , containers
---               , dependent-map >= 0.4 && < 0.5
                , fin >= 0.2 && < 0.4
                , foldl >= 1.4 && < 1.5
                , monadic-recursion-schemes >= 0.1.11 && < 0.2
@@ -70,11 +63,7 @@ library
                , some >= 1.0.4 && < 1.1
                , text >= 1.2 && < 2.1
                , vec >= 0.4 && < 0.6
---  if flag(streamly9)
---    build-depends:
---      streamly >=0.9 && <0.11, streamly-core >=0.1.0 && <0.3, streamly-bytestring >=0.2.0 && < 0.3
---  else
---    build-depends: streamly >=0.8 && <0.9, streamly-bytestring >=0.1.0 && <0.2
+
   mixins:  base hiding (Prelude)
          , relude (Relude as Prelude
          , Relude.Extra)

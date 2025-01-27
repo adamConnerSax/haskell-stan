@@ -6,10 +6,10 @@ description:
 license:             BSD-3-Clause
 author:              Adam Conner-Sax
 maintainer:          adam_conner_sax@yahoo.com
--- copyright:
+copyright:           2025, Adam Conner-Sax
 category:            Data
 build-type:          Simple
-extra-source-files: Readme.md Changelog.md
+extra-source-files:
 
 
 common common-options
