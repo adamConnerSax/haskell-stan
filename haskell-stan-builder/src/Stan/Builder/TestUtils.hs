@@ -11,11 +11,11 @@ import qualified Stan.Builder as SB
 import qualified Data.Aeson as A
 import qualified Data.Text as T
 
-testBuild :: SB.ModelSource
-          -> SB.GQSource
-          -> SB.StanDataBuilderEff SB.ModelDataT a
-          -> (a -> SB.StanDataBuilderEff SB.GQDataT b)
-          -> (a -> b  -> SB.StanModelBuilderEff ())
+testBuild :: md
+          -> gq
+          -> SB.StanDataBuilderEff SB.ModelDataT md a
+          -> (a -> SB.StanDataBuilderEff SB.GQDataT gq b)
+          -> (a -> b  -> SB.StanModelBuilderEff md gq ())
           -> IO ()
 testBuild md gq modelDG gqDGF stanBuilderF = do
   case SB.runStanBuilderDAG md gq modelDG gqDGF stanBuilderF of

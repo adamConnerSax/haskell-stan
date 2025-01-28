@@ -48,9 +48,9 @@ data MatrixRowFromData r = MatrixRowFromData { rowName :: SLT.VarName, colIndexM
 
 data JSONAddStyle = ErrIfDuplicate | IgnoreIfDuplicate deriving stock (Show, Eq)
 
-add2dMatrixJson :: SBC.StanJsonC i es
+add2dMatrixJson :: forall i d r es . SBC.StanJsonC i d es
                 => JSONAddStyle
-                -> SBC.RowTypeTag i r
+                -> SBC.RowTypeTag d r
                 -> MatrixRowFromData r
                 -> SLS.VarModifiers SLE.UExpr SLT.EReal
                 -> SLE.IntE
@@ -61,58 +61,63 @@ add2dMatrixJson jas rtt (MatrixRowFromData vName _ _ vecF) cs rowsE colsE = do
       wdName = vName <> underscoredIf dsName
       ndsF rowsE' = SLS.NamedDeclSpec wdName $ SLS.addVMs cs $ SLS.matrixSpec rowsE' colsE
 --      idt = SBC.dataSetInputDataT rtt
-  addColumnJson jas rtt ndsF rowsE vecF
+  addColumnJson @i jas rtt ndsF rowsE vecF
 
 mrfdColumnsName :: MatrixRowFromData r -> SLT.VarName
 mrfdColumnsName mrfd = "K_" <> fromMaybe mrfd.rowName mrfd.colIndexM
 
-addColumnMJson :: (Aeson.ToJSON x, SBC.StanJsonC i es)
+addColumnMJson :: forall i d r x t es . (Aeson.ToJSON x, SBC.StanJsonC i d es)
                => JSONAddStyle
-               -> SBC.RowTypeTag i r
+               -> SBC.RowTypeTag d r
                -> (SLE.IntE -> SLS.NamedDeclSpec t)
                -> SLE.IntE
                -> (r -> Either Text x)
                -> Eff es (SLE.UExpr t)
 addColumnMJson jas rtt ndsF lengthE toMX = do
   let nds = ndsF lengthE
-  addJson jas rtt nds (SBJU.valueToPairF (SLS.declName nds) $ SBJU.jsonArrayEF toMX)
+  addJson @_ @i jas rtt nds (SBJU.valueToPairF (SLS.declName nds) $ SBJU.jsonArrayEF toMX)
 
-addColumnJson :: (Aeson.ToJSON x, SBC.StanJsonC i es)
+addColumnJson :: forall i d es r t x . (Aeson.ToJSON x, SBC.StanJsonC i d es)
               => JSONAddStyle
-              -> SBC.RowTypeTag i r
+              -> SBC.RowTypeTag d r
               -> (SLE.IntE -> SLS.NamedDeclSpec t)
               -> SLE.IntE
               -> (r -> x)
               -> Eff es (SLE.UExpr t)
 addColumnJson jas rtt ndsF lengthE toX = do
   let nds = ndsF lengthE
-  addJson jas rtt nds (SBJU.valueToPairF (SLS.declName nds) $ SBJU.jsonArrayF toX)
+  addJson @_ @i jas rtt nds (SBJU.valueToPairF (SLS.declName nds) $ SBJU.jsonArrayF toX)
 
 
-addLengthJson :: SBC.StanJsonC i es
+addLengthJson :: forall i d r es . SBC.StanJsonC i d es
               => JSONAddStyle
-              -> SBC.RowTypeTag i r
+              -> SBC.RowTypeTag d r
               -> SLT.VarName
               -> Eff es SLE.IntE
-addLengthJson jas rtt tName = addJson jas rtt (SLS.NamedDeclSpec tName ds) (SBJU.namedF tName Foldl.length)
+addLengthJson jas rtt tName = addJson @_ @i jas rtt (SLS.NamedDeclSpec tName ds) (SBJU.namedF tName Foldl.length)
   where
     ds = SLS.addVMs (SLS.Modifiers [SLS.lowerM $ SLE.intE 1]) SLS.intSpec
 
 
-addFixedIntJson :: SBC.StanConstJsonC i es --(EffF.Fail :> es, EffS.State (SBC.JSONConstFold (SBC.SourceType i)) :> es, EffS.State SBC.StanCode :> es)
-                => JSONAddStyle -> SBC.InputDataType i -> Text -> Maybe Int -> Int -> Eff es SLE.IntE
+addFixedIntJson :: forall i d es . SBC.StanConstJsonC i d es --(EffF.Fail :> es, EffS.State (SBC.JSONConstFold (SBC.SourceType i)) :> es, EffS.State SBC.StanCode :> es)
+                => JSONAddStyle
+                -> SBC.InputDataT
+                -> Text
+                -> Maybe Int
+                -> Int
+                -> Eff es SLE.IntE
 addFixedIntJson jas idt vName mLower n = do
   let ds = flip SLS.addVMs SLS.intSpec $ maybe SLS.NoModifiers (SLS.Modifiers . pure . SLS.lowerM . SLE.intE) mLower
 --      codeBlock = if SBC.inputDataT idt == SBC.ModelDataT then SLP.SBData else SLP.SBDataGQ
 --  ie <- SBB.inBlock codeBlock $ SBB.addFromCodeWriter $ SLC.declareW tName ds
-  addConstJson jas (SLS.NamedDeclSpec vName ds) idt (SBC.JSONConstFold $ SBJU.constDataF vName n)
+  addConstJson @i @d jas (SLS.NamedDeclSpec vName ds) idt (SBC.JSONConstFold $ SBJU.constDataF vName n)
 
 
-addConstJson :: forall i t es . SBC.StanConstJsonC i es
+addConstJson :: forall i d t es . SBC.StanConstJsonC i d es
              => JSONAddStyle
              -> SLS.NamedDeclSpec t
-             -> SBC.InputDataType i
-             -> SBC.JSONConstFold i
+             -> SBC.InputDataT
+             -> SBC.JSONConstFold i d
              -> Eff es (SLE.UExpr t)
 addConstJson jas nds idt (SBC.JSONConstFold jf) = do
   let jsonName = SLS.declName nds
@@ -122,19 +127,19 @@ addConstJson jas nds idt (SBC.JSONConstFold jf) = do
             then pure $ SLE.namedE jsonName $ SLS.declSType $ SLS.decl nds
             else SBC.buildError $ "addConstJSON: " <> jsonName <> " already added and JSONAddStyle is ErrIfDuplicate"
     False -> do
-      (SBC.JSONConstFold f) <- EffS.get @(SBC.JSONConstFold i)
-      EffS.put @(SBC.JSONConstFold i) $ SBC.JSONConstFold (f <> jf)
+      (SBC.JSONConstFold f) <- EffS.get @(SBC.JSONConstFold i d)
+      EffS.put @(SBC.JSONConstFold i d) $ SBC.JSONConstFold (f <> jf)
       EffS.modify (SBC.JSONNames . Set.insert jsonName . SBC.unJSONNames)
       SBB.inBlock (codeBlock idt) $ SBB.addFromCodeWriter $ SLC.declareNW nds
 
-codeBlock :: SBC.InputDataType i -> SLP.StanBlock
+codeBlock :: SBC.InputDataT -> SLP.StanBlock
 codeBlock = \case
-  SBC.ModelData -> SLP.SBData
-  SBC.GQData -> SLP.SBDataGQ
+  SBC.ModelDataT -> SLP.SBData
+  SBC.GQDataT -> SLP.SBDataGQ
 
-addJson :: forall t i r es . SBC.StanJsonC i es
+addJson :: forall t i d r es . SBC.StanJsonC i d es
         => JSONAddStyle
-        -> SBC.RowTypeTag i r
+        -> SBC.RowTypeTag d r
         -> SLS.NamedDeclSpec t
         -> SBJU.StanJSONF r Aeson.Series
         -> Eff es (SLE.UExpr t)
@@ -148,65 +153,65 @@ addJson jas rtt nds fld = do
     False -> do
 --      let codeBlock = if SBC.dataSetInputDataT rtt == SBC.ModelData then SLP.SBData else SLP.SBDataGQ
       ve <- SBB.inBlock (codeBlock $ SBC.dataSetInputData rtt) $ SBB.addFromCodeWriter $ SLC.declareNW nds
-      let addFold :: SBC.RowInfos i -> Eff es (SBC.RowInfos i)
+      let addFold :: SBC.RowInfos i d -> Eff es (SBC.RowInfos i d)
           addFold rowInfos = case addFoldToDBuilder rtt fld rowInfos of
             Nothing -> SBC.buildError $ "Attempt to add Json to an uninitialized dataset (" <> SBC.dataSetName rtt <> ")"
             Just x -> pure x
-      oldRowInfos <- EffS.get @(SBC.RowInfos i)
+      oldRowInfos <- EffS.get @(SBC.RowInfos i d)
       newRowInfos <- addFold oldRowInfos
       EffS.put newRowInfos
       pure ve
 
-addFoldToDBuilder :: forall i r.
-                     SBC.RowTypeTag i r
+addFoldToDBuilder :: forall i d r.
+                     SBC.RowTypeTag d r
                   -> SBJU.StanJSONF r Aeson.Series
-                  -> SBC.RowInfos i
-                  -> Maybe (SBC.RowInfos i)
+                  -> SBC.RowInfos i d
+                  -> Maybe (SBC.RowInfos i d)
 addFoldToDBuilder rtt fld ris =
-  case DHash.lookup rtt ris of
+  case DHash.lookup rtt (SBC.unRowInfos ris) of
     Nothing -> Nothing --DHash.insert rtt (RowInfo (JSONSeriesFold fld) (const Nothing)) rbm
     Just (SBC.RowInfo x y z (SBC.JSONSeriesFold fld'))
-      -> Just $ DHash.insert rtt (SBC.RowInfo x y z (SBC.JSONSeriesFold $ fld' <> fld)) ris
+      -> Just $ SBC.RowInfos $ DHash.insert rtt (SBC.RowInfo x y z (SBC.JSONSeriesFold $ fld' <> fld)) $ SBC.unRowInfos ris
 
 underscoredIf :: Text -> Text
 underscoredIf t = if T.null t then "" else "_" <> t
 
-buildJSONF :: forall i es . SBC.StanRowInfoC i es => Eff es (DHash.DHashMap (SBC.RowTypeTag i) (JSONRowFold (SBC.DataSource i)))
+buildJSONF :: forall i d es . SBC.StanRowInfoC i d es => Eff es (DHash.DHashMap (SBC.RowTypeTag d) (JSONRowFold d))
 buildJSONF = do
-  rowInfos <- EffS.get --modelRowBuilders <$> get
+  rowInfos <- EffS.gets @(SBC.RowInfos i d) SBC.unRowInfos --modelRowBuilders <$> get
   let bldRowJSONFolds :: SBC.RowInfo x r -> Eff es (JSONRowFold x r)
       bldRowJSONFolds (SBC.RowInfo tf _ _ (SBC.JSONSeriesFold jsonF)) = pure $ JSONRowFold tf jsonF
   DHash.traverse bldRowJSONFolds rowInfos
 
 
-buildJSONFromDataM :: forall i es . (SBC.StanRowInfoC i es, EffS.State (SBC.JSONConstFold i) :> es)
-                   => Eff es (SBC.DataSource i -> Either Text Aeson.Series)
+buildJSONFromDataM :: forall i d es . (SBC.StanRowInfoC i d es, EffS.State (SBC.JSONConstFold i d) :> es)
+                   => Eff es (d -> Either Text Aeson.Series)
 buildJSONFromDataM = do
-  (SBC.JSONConstFold constJSONFld) <- EffS.get @(SBC.JSONConstFold i)
+  (SBC.JSONConstFold constJSONFld) <- EffS.get @(SBC.JSONConstFold i d)
   dataSetJSON <- buildJSONF @i
   pure $ \d ->
     let c = Foldl.foldM constJSONFld (Just ())
         ds =  buildJSONFromRows dataSetJSON d
     in (<>) <$> c <*> ds
 
-buildJSONSeries :: forall i . SBC.RowInfos i -> SBC.DataSource i -> Either Text Aeson.Series
+buildJSONSeries :: forall i d . SBC.RowInfos i d -> d -> Either Text Aeson.Series
 buildJSONSeries rbm d =
-  let foldOne :: SBC.RowBuilder i -> Either Text Aeson.Series
+  let foldOne :: SBC.RowBuilder d -> Either Text Aeson.Series
       foldOne ((SBC.RowTypeTag _ _) DSum.:=> (SBC.RowInfo (SBC.ToFoldable f)  _ _ (SBC.JSONSeriesFold fld))) = Foldl.foldM fld (f d)
-  in mconcat <$> (traverse foldOne $ DHash.toList rbm)
+  in mconcat <$> (traverse foldOne $ DHash.toList $ SBC.unRowInfos rbm)
 
 data JSONRowFold d r = JSONRowFold (SBC.ToFoldable d r) (SBJU.StanJSONF r Aeson.Series)
 
-buildJSONFromRows :: DHash.DHashMap (SBC.RowTypeTag i) (JSONRowFold (SBC.DataSource i)) -> SBC.DataSource i -> Either Text Aeson.Series
+buildJSONFromRows :: DHash.DHashMap (SBC.RowTypeTag d) (JSONRowFold d) -> d -> Either Text Aeson.Series
 buildJSONFromRows rowFoldMap d = do
   let toSeriesOne (_ DSum.:=> JSONRowFold (SBC.ToFoldable tf) fld) = Foldl.foldM fld (tf d)
       res = fmap mconcat $ traverse toSeriesOne $ DHash.toList rowFoldMap
   res
 
-modelJsonE :: SBC.BuilderState -> SBC.ModelSource -> Either Text Aeson.Series
+modelJsonE :: SBC.BuilderState md gq -> md -> Either Text Aeson.Series
 modelJsonE (SBC.BuilderState mRBs _ (SBC.JSONConstFold mCJF) _ _ _ _) md = (<>) <$> Foldl.foldM mCJF (Just ()) <*> buildJSONSeries mRBs md
 
-gqJsonE :: SBC.BuilderState -> SBC.GQSource -> Either Text Aeson.Series
+gqJsonE :: SBC.BuilderState md gq -> gq -> Either Text Aeson.Series
 gqJsonE (SBC.BuilderState _ gqRBs _ (SBC.JSONConstFold gqCJF) _ _ _) gq = (<>) <$> Foldl.foldM gqCJF (Just ()) <*> buildJSONSeries gqRBs gq
 
 

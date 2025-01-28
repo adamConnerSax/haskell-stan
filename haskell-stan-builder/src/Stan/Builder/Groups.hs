@@ -32,24 +32,24 @@ import Effectful ((:>), Eff)
 import qualified Effectful.State.Static.Local as EffS
 import qualified Effectful.Fail as EffF
 
-type AddGroup k es = (Typeable k, SBC.StanConstJsonC SBC.ModelDataT es)
+type AddGroup k i d es = (Typeable k, SBC.StanConstJsonC i d es)
 
-addGroup :: forall k es . AddGroup k es
+addGroup :: forall k i d es . AddGroup k i d es
          => Text -> Int -> Eff es (SBC.GroupTypeTag k, SL.IntE)
 addGroup groupName size = do
-  lE <- SBJ.addFixedIntJson SBJ.ErrIfDuplicate SBC.ModelData ("J_" <> groupName) (Just 1) size
+  lE <- SBJ.addFixedIntJson @i @d SBJ.ErrIfDuplicate SBC.ModelDataT ("J_" <> groupName) (Just 1) size
   pure $ (SBC.GroupTypeTag groupName, lE)
 
-addEnumGroup :: forall k es . (Enum k, Bounded k, AddGroup k es)
+addEnumGroup :: forall k i d es . (Enum k, Bounded k, AddGroup k i d es)
              => Text
              -> Eff es (SBC.GroupTypeTag k, SL.IntE)
-addEnumGroup groupName = addGroup groupName size
+addEnumGroup groupName = addGroup @k @i @d groupName size
   where
     size = Foldl.fold Foldl.length $ ([minBound..maxBound] :: [k])
 
-addGroupFromCollection :: forall k f es . (Ord k, Foldable f, AddGroup k es)
+addGroupFromCollection :: forall k i d f es . (Ord k, Foldable f, AddGroup k i d es)
                        => Text -> f k -> Eff es (SBC.GroupTypeTag k, SL.IntE)
-addGroupFromCollection groupName c = addGroup groupName size
+addGroupFromCollection groupName c = addGroup @_ @i @d groupName size
   where
     size = Set.size $ Foldl.fold Foldl.set c
 
@@ -151,9 +151,9 @@ withRowInfoMakers f = do
     Just newRims -> EffS.put @(SBC.RowInfoMakers i) newRims
   pure y
 
-indexMap :: forall i r k es . (EffF.Fail :> es, EffS.State (SBC.RowInfos i) :> es)
-         => SBC.RowTypeTag i r -> SBC.GroupTypeTag k -> Eff es (SBC.IndexMap r k)
-indexMap rtt gtt = SBB.withRowInfo err f rtt where
+indexMap :: forall i d r k es . (EffF.Fail :> es, EffS.State (SBC.RowInfos i d) :> es)
+         => SBC.RowTypeTag d r -> SBC.GroupTypeTag k -> Eff es (SBC.IndexMap r k)
+indexMap rtt gtt = SBB.withRowInfo @i err f rtt where
   err = SBC.buildError $ "ModelBuilder.indexMap: \"" <> SBC.dataSetName rtt <> "\" not present in row builders."
   f :: forall x. SBC.RowInfo x r -> Eff es (SBC.IndexMap r k)
   f rowInfo = do
@@ -188,15 +188,15 @@ groupIndexVarName :: SBC.RowTypeTag i r -> SBC.GroupTypeTag k -> SL.VarName
 groupIndexVarName rtt gtt = SBC.dataSetName rtt <> "_" <> SBC.taggedGroupName gtt
 {-# INLINEABLE groupIndexVarName #-}
 
-getGroupIndexVar :: forall i r k es. SBC.StanRowInfoC i es
-                 => SBC.RowTypeTag i r
+getGroupIndexVar :: forall i d r k es. SBC.StanRowInfoC i d es
+                 => SBC.RowTypeTag d r
                  -> SBC.GroupTypeTag k
                  -> Eff es (SL.UExpr SL.EIndexArray)
 getGroupIndexVar rtt gtt = do
   let vName = groupIndexVarName rtt gtt
       dsNotFoundErr = SBC.buildError
                       $ "getGroupIndexVar: data-set=" <> SBC.dataSetName rtt <> " (input type=" <> show (SBC.dataSetInputData rtt) <> ") not found."
-      varIfGroup :: forall x d . SBC.RowInfo d x -> Eff es (SL.UExpr SL.EIndexArray)
+      varIfGroup :: forall x d1 . SBC.RowInfo d1 x -> Eff es (SL.UExpr SL.EIndexArray)
       varIfGroup ri =
         let (SBC.GroupIndexes gis) = SBC.groupIndexes ri
         in case DHash.lookup gtt gis of
@@ -204,4 +204,4 @@ getGroupIndexVar rtt gtt = do
           Nothing -> SBC.buildError
             $ "getGroupIndexVar: group=" <> SBC.taggedGroupName gtt
             <> " not found in data-set=" <> SBC.dataSetName rtt <> " (input type=" <> show (SBC.dataSetInputData rtt) <> ") not found."
-  SBB.withRowInfo dsNotFoundErr varIfGroup rtt
+  SBB.withRowInfo @i dsNotFoundErr varIfGroup rtt

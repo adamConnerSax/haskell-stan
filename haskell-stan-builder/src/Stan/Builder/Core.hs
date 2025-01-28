@@ -1,6 +1,5 @@
 {-# LANGUAGE AllowAmbiguousTypes #-}
 {-# LANGUAGE DataKinds #-}
-{-# LANGUAGE DeriveAnyClass #-}
 {-# LANGUAGE DerivingVia #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE FlexibleInstances #-}
@@ -57,9 +56,9 @@ type TransformedParametersBlock = T.Text
 type ModelBlock = T.Text
 type GeneratedQuantitiesBlock = T.Text
 
-type family DataSource (i :: InputDataT) :: Type
-type ModelSource = DataSource ModelDataT
-type GQSource = DataSource GQDataT
+--type family DataSource (i :: InputDataT) :: Type
+--type ModelSource = DataSource ModelDataT
+--type GQSource = DataSource GQDataT
 
 --type family SourceType (i :: InputDataT) :: Type
 
@@ -83,24 +82,24 @@ caseInputDataType aModel aGQ = \case
   ModelData -> aModel
   GQData -> aGQ
 
-type RowInfoMakers i = DHash.DHashMap (RowTypeTag i) (GroupIndexAndIntMapMakers (DataSource i))
+type RowInfoMakers d = DHash.DHashMap (RowTypeTag d) (GroupIndexAndIntMapMakers d)
 
 
 newtype FunctionNames = FunctionNames { unFunctionNames :: Set.Set SLT.FunctionName } deriving newtype (Show)
 newtype JSONNames = JSONNames { unJSONNames :: Set.Set Text } deriving newtype (Show)
 type BuildLog = Seq.Seq Text
 
-type GroupBuilderS (i :: InputDataT) = EffS.State (RowInfoMakers i)
+type GroupBuilderS d = EffS.State (RowInfoMakers d)
 
-type StanBuilderEffs =
+type StanBuilderEffs md gq =
   [
-    EffS.State (RowInfos ModelDataT)
-  , EffS.State (RowInfos GQDataT)
+    EffS.State (RowInfos ModelDataT md)
+  , EffS.State (RowInfos GQDataT gq)
   , EffS.State SBPT.BParameterCollection
   , EffS.State StanCode
   , EffS.State FunctionNames
-  , EffS.State (JSONConstFold ModelDataT)
-  , EffS.State (JSONConstFold GQDataT)
+  , EffS.State (JSONConstFold ModelDataT md)
+  , EffS.State (JSONConstFold GQDataT gq)
   , EffS.State JSONNames
   , EffW.Writer BuildLog
   , EffF.Fail
@@ -111,18 +110,21 @@ type StanBuildLogC es = (StanFail es, EffW.Writer BuildLog :> es)
 type StanCodeC es = (StanBuildLogC es, EffS.State StanCode :> es)
 type StanFunctionsC es = (StanCodeC es, EffS.State FunctionNames :> es)
 type StanParametersC es = (StanBuildLogC es, EffS.State SBPT.BParameterCollection :> es)
-type StanGroupC i es = (StanBuildLogC es, EffS.State (RowInfoMakers i) :> es)
-type StanRowInfoC i es = (StanBuildLogC es, EffS.State (RowInfos i) :> es)
-type StanJsonC i es = (StanRowInfoC i es, StanCodeC es, EffS.State JSONNames :> es)
-type StanConstJsonC i es = (StanCodeC es, EffS.State JSONNames :> es, EffS.State (JSONConstFold i) :> es)
+type StanGroupC d es = (StanBuildLogC es, EffS.State (RowInfoMakers d) :> es)
+type StanRowInfoC i d es = (StanBuildLogC es, EffS.State (RowInfos i d) :> es)
+type StanJsonC i d es = (StanRowInfoC i d es, StanCodeC es, EffS.State JSONNames :> es)
+type StanConstJsonC i d es = (StanCodeC es, EffS.State JSONNames :> es, EffS.State (JSONConstFold i d) :> es)
 
-type StanDataBuilderEff i = Eff '[GroupBuilderS i
-                                 , EffS.State StanCode
-                                 , EffS.State (JSONConstFold i)
-                                 , EffS.State JSONNames
-                                 , EffW.Writer BuildLog
-                                 , EffF.Fail]
-type StanModelBuilderEff = Eff StanBuilderEffs
+type StanDataBuilderEff (i :: InputDataT) d =
+  Eff '[GroupBuilderS d
+       , EffS.State StanCode
+       , EffS.State (JSONConstFold i d)
+       , EffS.State JSONNames
+       , EffW.Writer BuildLog
+       , EffF.Fail
+       ]
+
+type StanModelBuilderEff md gq = Eff (StanBuilderEffs md gq)
 
 type StateAndFailEff s es = (EffS.State s :> es, EffF.Fail :> es)
 
@@ -138,18 +140,18 @@ buildMaybe msg = maybe (buildError msg) pure
 buildEither :: EffF.Fail :> es => Either Text a -> Eff es a
 buildEither = either buildError pure
 
-data BuilderState = BuilderState { --declaredVars :: !ScopedDeclarations
+data BuilderState md gq = BuilderState { --declaredVars :: !ScopedDeclarations
 --                                       , indexBindings :: !SLA.IndexLookupCtxt
-  modelRowBuilders :: !(RowInfos ModelDataT)
-  , gqRowBuilders :: !(RowInfos GQDataT)
-  , constModelJSON :: JSONConstFold ModelDataT  -- json for things which are attached to no data set.
-  , constGQJSON :: JSONConstFold GQDataT
+  modelRowBuilders :: !(RowInfos ModelDataT md)
+  , gqRowBuilders :: !(RowInfos GQDataT gq)
+  , constModelJSON :: JSONConstFold ModelDataT md  -- json for things which are attached to no data set.
+  , constGQJSON :: JSONConstFold GQDataT gq
   , hasFunctions :: !(Set.Set Text)
   , parameterCollection :: SBPT.BParameterCollection
   , code :: !StanCode
   }
 
-initialBuilderState :: RowInfos ModelDataT -> RowInfos GQDataT -> BuilderState
+initialBuilderState :: RowInfos ModelDataT md -> RowInfos GQDataT gq -> BuilderState md gq
 initialBuilderState modelRowInfos gqRowInfos =
   BuilderState
 --  initialScopedDeclarations
@@ -162,12 +164,12 @@ initialBuilderState modelRowInfos gqRowInfos =
   (SBPT.BParameterCollection mempty mempty)
   (StanCode SLP.SBData SLP.emptyStanProgram)
 
-dumpBuilderState :: BuilderState -> Text
+dumpBuilderState :: BuilderState md gq -> Text
 dumpBuilderState bs = -- (BuilderState dvs ibs ris js hf c) =
 --  "Declared Vars: " <> show (declaredVars bs)
 --  <> "\n index-bindings: " <> SLF.printLookupCtxt (indexBindings bs)
-  "\n model row-info-keys: " <> show (DHash.keys $ modelRowBuilders bs)
-  <> "\n gq row-info-keys: " <> show (DHash.keys $ gqRowBuilders bs)
+  "\n model row-info-keys: " <> show (DHash.keys $ unRowInfos $ modelRowBuilders bs)
+  <> "\n gq row-info-keys: " <> show (DHash.keys $ unRowInfos $ gqRowBuilders bs)
   <> "\n functions: " <> show (hasFunctions bs)
   <> "\n parameterCollection (keys)" <> show (DM.keys $ SBPT.pdm $ parameterCollection bs)
 
@@ -205,41 +207,41 @@ instance Semigroup (JSONSeriesFold row) where
 instance Monoid (JSONSeriesFold row) where
   mempty = JSONSeriesFold $ pure mempty
 
-data JSONConstFold (i :: InputDataT) where
-  JSONConstFold :: SJ.StanJSONF () Aeson.Series -> JSONConstFold i
+-- The i here is a phantom so the effect system can distinguish the states
+data JSONConstFold (i :: InputDataT) d where
+  JSONConstFold :: SJ.StanJSONF () Aeson.Series -> JSONConstFold i d
 
-instance Semigroup (JSONConstFold i) where
+instance Semigroup (JSONConstFold i d) where
   (JSONConstFold a) <> (JSONConstFold b) = JSONConstFold (a <> b)
 
-instance Monoid (JSONConstFold i) where
+instance Monoid (JSONConstFold i d) where
   mempty = JSONConstFold $ pure mempty
-
 
 -- f is existential here.  We supply the choice when we *construct* a ToFoldable
 data ToFoldable d row where
   ToFoldable :: Foldable f => (d -> f row) -> ToFoldable d row
 
 -- key for dependepent map.
-data RowTypeTag (i :: InputDataT) r where
-  RowTypeTag :: (Typeable i, Typeable r) => InputDataType i -> Text -> RowTypeTag i r
+data RowTypeTag d r where
+  RowTypeTag :: (Typeable d, Typeable r) => InputDataT -> Text -> RowTypeTag d r
 
-dataSetName :: RowTypeTag i r -> Text
+dataSetName :: RowTypeTag d r -> Text
 dataSetName (RowTypeTag _ n) = n
 
-dataSetInputData :: RowTypeTag i r -> InputDataType i
+dataSetInputData :: RowTypeTag d r -> InputDataT
 dataSetInputData (RowTypeTag idt _) = idt
 
 -- we need the empty constructors here to bring in the Typeable constraints in the GADT
-instance GADT.GEq (RowTypeTag i) where
+instance GADT.GEq (RowTypeTag d) where
   geq rta@(RowTypeTag idt1 n1) rtb@(RowTypeTag idt2 n2) =
     case Reflection.eqTypeRep (Reflection.typeOf rta) (Reflection.typeOf rtb) of
       Just Reflection.HRefl -> if (n1 == n2) && (idt1 == idt2) then Just Reflection.Refl  else Nothing
       _ -> Nothing
 
-instance GADT.GShow (RowTypeTag i) where
+instance GADT.GShow (RowTypeTag d) where
   gshowsPrec _ (RowTypeTag idt n) s = s ++ "RTT (name=)" ++ toString n ++ "; inputType=" ++ show idt ++ ")"
 
-instance Hashable.Hashable (Some.Some (RowTypeTag i)) where
+instance Hashable.Hashable (Some.Some (RowTypeTag d)) where
   hash (Some.Some (RowTypeTag idt n)) = Hashable.hash idt `Hashable.hashWithSalt` n
   hashWithSalt s (Some.Some (RowTypeTag idt n)) = Hashable.hashWithSalt s idt `Hashable.hashWithSalt` n
 
@@ -309,7 +311,7 @@ newtype GroupIntMapBuilders r = GroupIntMapBuilders (DHash.DHashMap GroupTypeTag
 
 -- r is a Phantom type here
 newtype GroupIntMaps r = GroupIntMaps (DHash.DHashMap GroupTypeTag IntMap.IntMap)
-newtype DataSetGroupIntMaps (i :: InputDataT) = DataSetGroupIntMaps { unDataSetGroupIntMaps :: DHash.DHashMap (RowTypeTag i) GroupIntMaps }
+newtype DataSetGroupIntMaps d = DataSetGroupIntMaps { unDataSetGroupIntMaps :: DHash.DHashMap (RowTypeTag d) GroupIntMaps }
 
 displayDataSetGroupIntMaps :: DataSetGroupIntMaps i -> Text
 displayDataSetGroupIntMaps = DHash.foldrWithKey g "" . unDataSetGroupIntMaps
@@ -335,6 +337,8 @@ data IndexMap r k = IndexMap
 contraIndexMap :: (a -> b) -> IndexMap b k -> IndexMap a k
 contraIndexMap f (IndexMap rgi ggi gigk rg) = IndexMap (contramap f rgi) ggi gigk (rg . f)
 
+-- the first parameter is a phantom but we need it so Effectful can distinguish the state effects for the two
+-- collection of RowInfo
 data RowInfo d r where
   RowInfo :: ToFoldable d r
           -> GroupIndexes r
@@ -351,15 +355,16 @@ groupIndexes (RowInfo _ gi _ _) = gi
 groupIntMapBuilders :: RowInfo d r -> GroupIntMapBuilders r
 groupIntMapBuilders (RowInfo _ _ gimb _) = gimb
 
-intMapsFromRowInfos :: RowInfos i -> DataSource i -> Either Text (DataSetGroupIntMaps i)
+intMapsFromRowInfos :: RowInfos i d -> d -> Either Text (DataSetGroupIntMaps d)
 intMapsFromRowInfos rowInfos d =
   let f :: d -> RowInfo d r -> Either Text (GroupIntMaps r)
       f d' (RowInfo (ToFoldable h) _ gims _) = Foldl.foldM (intMapsForDataSetFoldM gims) (h d')
-  in DataSetGroupIntMaps <$> DHash.traverse (f d) rowInfos
+  in DataSetGroupIntMaps <$> DHash.traverse (f d) (unRowInfos rowInfos)
 
 jsonSeries :: RowInfo d r -> JSONSeriesFold r
 jsonSeries (RowInfo _ _ _ jsf) = jsf
 
 -- the key is a name for the data-set.  The tag carries the toDataSet function
-type RowBuilder i = DSum.DSum (RowTypeTag i) (RowInfo (DataSource i))
-type RowInfos i = DHash.DHashMap (RowTypeTag i) (RowInfo (DataSource i))
+type RowBuilder d = DSum.DSum (RowTypeTag d) (RowInfo d)
+
+newtype RowInfos (i :: InputDataT) d = RowInfos { unRowInfos :: DHash.DHashMap (RowTypeTag d) (RowInfo d) }
