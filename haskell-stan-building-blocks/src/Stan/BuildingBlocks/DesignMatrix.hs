@@ -1,3 +1,4 @@
+{-# LANGUAGE AllowAmbiguousTypes #-}
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE FlexibleInstances #-}
@@ -188,8 +189,9 @@ rowPartFromBoundedEnumFunctions encodeAsZerosM name f = DesignMatrixRowPart name
 -- "Int K_Design;"
 -- "matrix[N_myDat, K_Design] Design_myDat;"
 -- with accompanying json
-addDesignMatrix :: (SB.StanJsonC i es, SB.StanConstJsonC i es) => SB.RowTypeTag i r -> DesignMatrixRow r -> Maybe SL.IndexKey -> Eff es (SL.UExpr SL.EMat)
-addDesignMatrix rtt dmr colIndexM = fst <$> SBBD.add2dMatrixData rtt (matrixFromRowData dmr colIndexM) Nothing Nothing
+addDesignMatrix :: forall i d r es . (SB.StanJsonC i d es, SB.StanConstJsonC i d es)
+                => SB.RowTypeTag d r -> DesignMatrixRow r -> Maybe SL.IndexKey -> Eff es (SL.UExpr SL.EMat)
+addDesignMatrix rtt dmr colIndexM = fst <$> SBBD.add2dMatrixData @i rtt (matrixFromRowData dmr colIndexM) Nothing Nothing
 {-# INLINEABLE addDesignMatrix #-}
 
 
@@ -219,13 +221,13 @@ designMatrixPartIndexName dmr dmrp = "I_" <> dmName dmr <> "_" <> dmrpName dmrp
 
 
 -- declares S_DesignName_PartName (size of part) and I_DesignName_PartName (starting index of part) and for all parts of design matrix row
-addDesignMatrixIndexes :: SB.StanConstJsonC i es
-                       => SB.RowTypeTag i r -> DesignMatrixRow r -> Eff es [(DesignMatrixRowPart r, SL.UExpr SL.EInt, SL.UExpr SL.EInt)]
+addDesignMatrixIndexes :: forall i d r es . SB.StanConstJsonC i d es
+                       => SB.RowTypeTag d r -> DesignMatrixRow r -> Eff es [(DesignMatrixRowPart r, SL.UExpr SL.EInt, SL.UExpr SL.EInt)]
 addDesignMatrixIndexes rtt dmr = do
   let addEach (rp, gSize, gStart) = do
 --        let sizeName = dmName dmr <> "_" <> gName
-        se <- SB.addFixedIntJson SB.ErrIfDuplicate (SB.dataSetInputData rtt) (designMatrixPartSizeName dmr rp) Nothing gSize
-        ie <- SB.addFixedIntJson SB.ErrIfDuplicate (SB.dataSetInputData rtt) (designMatrixPartIndexName dmr rp) Nothing gStart
+        se <- SB.addFixedIntJson @i @d SB.ErrIfDuplicate (SB.dataSetInputData rtt) (designMatrixPartSizeName dmr rp) Nothing gSize
+        ie <- SB.addFixedIntJson @i @d SB.ErrIfDuplicate (SB.dataSetInputData rtt) (designMatrixPartIndexName dmr rp) Nothing gStart
         pure (rp, se, ie)
   traverse addEach $ designMatrixIndexes dmr
 

@@ -48,19 +48,19 @@ import qualified Control.Exception as X
 import qualified GHC.IO.Exception as X
 
 -- simplified runner for common cases
-runModel' :: forall st cd (b :: SB.InputDataT -> Type) c r.
+runModel' :: forall st cd md gq (b :: Type -> Type) c r.
              (SRC.KnitStan st cd r
              , st c
              )
           => Either Text Text
           -> Either SRC.ModelRunnerConfig SRC.RunnerInputNames
           -> Maybe SRC.StanMCParameters
-          -> SRC.DataWrangler b ()
+          -> SRC.DataWrangler md gq b ()
           -> SLP.StanProgram
-          -> SRC.ResultAction r b () c
+          -> SRC.ResultAction md gq b r () c
           -> RScripts
-          -> K.ActionWithCacheTime r (SB.DataSource SB.ModelDataT)
-          -> K.ActionWithCacheTime r (SB.DataSource SB.GQDataT)
+          -> K.ActionWithCacheTime r md
+          -> K.ActionWithCacheTime r gq
           -> K.Sem r (K.ActionWithCacheTime r c)
 runModel' cacheDirE configE mStanParams dataWrangler stanProgram resultAction rScripts modelData_C gqData_C =
   K.wrapPrefix "runModel'" $ do
@@ -113,20 +113,20 @@ runModel' cacheDirE configE mStanParams dataWrangler stanProgram resultAction rS
 
 -- given cached model data and gq data, a group builder and a model builder
 -- generate a no-predictions data-wrangler and program
-dataWranglerAndCode :: forall a b r . (K.KnitEffects r)
-                    => K.ActionWithCacheTime r (SB.DataSource SB.ModelDataT)
-                    -> K.ActionWithCacheTime r (SB.DataSource SB.GQDataT)
-                    -> SB.StanDataBuilderEff SB.ModelDataT a
-                    -> (a -> SB.StanDataBuilderEff SB.GQDataT b)
-                    -> (a -> b -> SB.StanModelBuilderEff ())
-                    -> K.Sem r (SRC.DataWrangler SB.DataSetGroupIntMaps (), SLP.StanProgram)
+dataWranglerAndCode :: forall a md gq b r . (K.KnitEffects r)
+                    => K.ActionWithCacheTime r md
+                    -> K.ActionWithCacheTime r gq
+                    -> SB.StanDataBuilderEff SB.ModelDataT md a
+                    -> (a -> SB.StanDataBuilderEff SB.GQDataT gq b)
+                    -> (a -> b -> SB.StanModelBuilderEff md gq ())
+                    -> K.Sem r (SRC.DataWrangler md gq SB.DataSetGroupIntMaps (), SLP.StanProgram)
 dataWranglerAndCode modelData_C gqData_C modelDB gqDBF sbF = do
   modelDat <- K.ignoreCacheTime modelData_C
   gqDat <- K.ignoreCacheTime gqData_C
   (bs, _builderLogs, ()) <- K.knitEither $ SBPC.runStanBuilderDAG modelDat gqDat modelDB gqDBF sbF
   let modelWrangle x = (SB.intMapsFromRowInfos (SB.modelRowBuilders bs) x,  SB.modelJsonE bs)
       gqWrangle x = (SB.intMapsFromRowInfos (SB.gqRowBuilders bs) x,  SB.gqJsonE bs)
-      wrangler ::  SRC.DataWrangler SB.DataSetGroupIntMaps ()
+      wrangler ::  SRC.DataWrangler md gq SB.DataSetGroupIntMaps ()
       wrangler = SRC.Wrangle SRC.TransientIndex modelWrangle (Just gqWrangle)
   pure (wrangler, SB.program (SB.code bs))
 
@@ -264,16 +264,16 @@ writeRScripts rScripts mr config = do
     Both ujs -> writeShiny ujs >> writeLoo
 {-# INLINEABLE writeRScripts #-}
 
-wrangleDataWithoutPredictions :: forall st cd b r.
+wrangleDataWithoutPredictions :: forall st cd md gq b r.
   (SRC.KnitStan st cd r)
   => SRC.ModelRunnerConfig
-  -> SRC.DataWrangler b ()
-  -> SRC.Cacheable st (b SB.ModelDataT)
-  -> SRC.Cacheable st (b SB.GQDataT)
-  -> K.ActionWithCacheTime r (SB.DataSource SB.ModelDataT)
-  -> K.ActionWithCacheTime r (SB.DataSource SB.GQDataT)
-  -> K.Sem r (K.ActionWithCacheTime r (Either T.Text (b SB.ModelDataT))
-             , K.ActionWithCacheTime r (Either T.Text (b SB.GQDataT))
+  -> SRC.DataWrangler md gq b ()
+  -> SRC.Cacheable st (b md)
+  -> SRC.Cacheable st (b gq)
+  -> K.ActionWithCacheTime r md
+  -> K.ActionWithCacheTime r gq
+  -> K.Sem r (K.ActionWithCacheTime r (Either T.Text (b md))
+             , K.ActionWithCacheTime r (Either T.Text (b gq))
              )
 wrangleDataWithoutPredictions config dw cbm cbgq md_C gq_C = wrangleData @st @cd config dw cbm cbgq md_C gq_C ()
 {-# INLINE wrangleDataWithoutPredictions #-}
@@ -284,16 +284,16 @@ But the JSON is just for Stan so we don't return it from the function. But the c
 holds the newer of the index and the JSON since we do want to know if anything downstream needs
 to be re-run given either the JSON or index cache time.
 -}
-wrangleData :: forall st cd b p r.SRC.KnitStan st cd r
+wrangleData :: forall st cd md gq b p r.SRC.KnitStan st cd r
   => SRC.ModelRunnerConfig
-  -> SRC.DataWrangler b p
-  -> SRC.Cacheable st (b SB.ModelDataT)
-  -> SRC.Cacheable st (b SB.GQDataT)
-  -> K.ActionWithCacheTime r (SB.DataSource SB.ModelDataT)
-  -> K.ActionWithCacheTime r (SB.DataSource SB.GQDataT)
+  -> SRC.DataWrangler md gq b p
+  -> SRC.Cacheable st (b md)
+  -> SRC.Cacheable st (b gq)
+  -> K.ActionWithCacheTime r md
+  -> K.ActionWithCacheTime r gq
   -> p
-  -> K.Sem r (K.ActionWithCacheTime r (Either T.Text (b SB.ModelDataT))
-             , K.ActionWithCacheTime r (Either T.Text (b SB.GQDataT))
+  -> K.Sem r (K.ActionWithCacheTime r (Either T.Text (b md))
+             , K.ActionWithCacheTime r (Either T.Text (b gq))
              )
 wrangleData config w cbm cbgq md_C gq_C p = K.wrapPrefix "wrangleData" $ do
   K.logLE K.Diagnostic "Wrangling Data..."
@@ -301,7 +301,7 @@ wrangleData config w cbm cbgq md_C gq_C p = K.wrapPrefix "wrangleData" $ do
         SRC.Wrangle x y z -> (x, y, z)
         SRC.WrangleWithPredictions x y z _ -> (x, y, z)
   curModelData_C <- SRC.modelDataDependency $ SRC.mrcInputNames config
-  (newModelData_C, modelIndexes_C) <- wranglerPrep @st @cd config SB.ModelData indexerType modelIndexAndEncoder cbm md_C
+  (newModelData_C, modelIndexes_C) <- wranglerPrep @st @cd config SB.ModelDataT indexerType modelIndexAndEncoder cbm md_C
   modelJSON_C <- K.updateIf curModelData_C newModelData_C $ \e -> do
     let modelDataFileName = SRC.modelDataFileName $ SRC.mrcInputNames config
     K.logLE K.Diagnostic $ "existing model json (" <> modelDataFileName  <> ") appears older than cached data."
@@ -317,7 +317,7 @@ wrangleData config w cbm cbgq md_C gq_C p = K.wrapPrefix "wrangleData" $ do
         Nothing -> pure $ pure $ Left "wrangleData: Attempt to wrangle GQ data but config.mrcInputNames.rinQG is Nothing."
         Just gqData_C -> do
           K.logLE K.Diagnostic "Wrangling GQ Data"
-          (newGQData_C, gqIndexes_C) <- wranglerPrep @st @cd config SB.GQData indexerType gqIndexAndEncoder cbgq gq_C
+          (newGQData_C, gqIndexes_C) <- wranglerPrep @st @cd config SB.GQDataT indexerType gqIndexAndEncoder cbgq gq_C
           let gqJSONDeps = (,,) <$> newGQData_C <*> modelIndexes_C <*> gqIndexes_C
           gqJSON_C <- K.updateIf gqData_C gqJSONDeps $ \(e, meb, gqeb) -> do
             gqDataFileName <- K.knitMaybe "Attempt to build gq json but rinGQ is Nothing." $ SRC.gqDataFileName $ SRC.mrcInputNames config
@@ -333,20 +333,20 @@ wrangleData config w cbm cbgq md_C gq_C p = K.wrapPrefix "wrangleData" $ do
 {-# INLINEABLE wrangleData #-}
 
 -- create function to rebuild json along with time stamp from data used
-wranglerPrep :: forall st cd i (b :: SB.InputDataT -> Type) r.
+wranglerPrep :: forall st cd d (b :: Type -> Type) r.
   SRC.KnitStan st cd r
   => SRC.ModelRunnerConfig
-  -> SB.InputDataType i
+  -> SB.InputDataT
   -> SRC.DataIndexerType b
-  -> SRC.Wrangler i b
-  -> SRC.Cacheable st (b i)
-  -> K.ActionWithCacheTime r (SB.DataSource i)
-  -> K.Sem r (K.ActionWithCacheTime r (Either Text A.Series), K.ActionWithCacheTime r (Either T.Text (b i)))
+  -> SRC.Wrangler d b
+  -> SRC.Cacheable st (b d)
+  -> K.ActionWithCacheTime r d
+  -> K.Sem r (K.ActionWithCacheTime r (Either Text A.Series), K.ActionWithCacheTime r (Either T.Text (b d)))
 wranglerPrep config inputDataType indexerType wrangler cb a_C = do
   let indexAndEncoder_C = fmap wrangler a_C
       eb_C = fmap fst indexAndEncoder_C
       encoder_C = fmap snd indexAndEncoder_C
-  index_C <- manageIndex @i @b @st @cd config inputDataType indexerType cb eb_C
+  index_C <- manageIndex @d @b @st @cd config inputDataType indexerType cb eb_C
   let newJSON_C = encoder_C <*> a_C
   return (newJSON_C, index_C)
 {-# INLINEABLE wranglerPrep #-}
@@ -354,47 +354,47 @@ wranglerPrep config inputDataType indexerType wrangler cb a_C = do
 -- if we are caching the index (not sure this is ever worth it!)
 -- here is where we check if that cache needs updating.  Otherwise we
 -- just return it
-manageIndex :: forall i b st cd r.
+manageIndex :: forall d b st cd r.
   SRC.KnitStan st cd r
   => SRC.ModelRunnerConfig
-  -> SB.InputDataType i
+  -> SB.InputDataT
   -> SRC.DataIndexerType b
-  -> SRC.Cacheable st (b i)
-  -> K.ActionWithCacheTime r (Either T.Text (b i))
-  -> K.Sem r (K.ActionWithCacheTime r (Either T.Text (b i)))
+  -> SRC.Cacheable st (b d)
+  -> K.ActionWithCacheTime r (Either T.Text (b d))
+  -> K.Sem r (K.ActionWithCacheTime r (Either T.Text (b d)))
 manageIndex config inputDataType dataIndexer cb ebFromA_C = do
   case dataIndexer of
     SRC.CacheableIndex indexCacheKey ->
       case cb of
         SRC.Cacheable -> do
-          curJSON_C <- case SB.inputDataT $ inputDataType of
+          curJSON_C <- case inputDataType of
             SB.ModelDataT -> SRC.modelDataDependency (SRC.mrcInputNames config)
             SB.GQDataT -> do
               mGQJSON_C <- SRC.gqDataDependency (SRC.mrcInputNames config)
               K.knitMaybe "ModelRunner.manageIndex called with input type GQ but no GQ setup." mGQJSON_C
           when (isNothing $ K.cacheTime curJSON_C) $ do
             let jsonFP = case inputDataType of
-                  SB.ModelData -> SRC.modelDataFileName $ SRC.mrcInputNames config
-                  SB.GQData -> fromMaybe "Error:No GQ Setup" $ SRC.gqDataFileName $ SRC.mrcInputNames config
+                  SB.ModelDataT -> SRC.modelDataFileName $ SRC.mrcInputNames config
+                  SB.GQDataT -> fromMaybe "Error:No GQ Setup" $ SRC.gqDataFileName $ SRC.mrcInputNames config
             K.logLE (K.Debug 1)  $ "JSON data (\"" <> jsonFP <> "\") is missing.  Deleting cached indices to force rebuild."
-            K.clearIfPresent @Text @cd (indexCacheKey config $ SB.inputDataT inputDataType)
-          K.retrieveOrMake @st @cd (indexCacheKey config $ SB.inputDataT inputDataType) ebFromA_C pure
+            K.clearIfPresent @Text @cd (indexCacheKey config inputDataType)
+          K.retrieveOrMake @st @cd (indexCacheKey config inputDataType) ebFromA_C pure
         _ -> K.knitError "Cacheable index type provided but b is Uncacheable."
     _ -> pure ebFromA_C
 {-# INLINEABLE manageIndex #-}
 
 -- where do we combine data??
-runModel :: forall st cd b p c r.
+runModel :: forall st cd md gq b p c r.
   (SRC.KnitStan st cd r)
   => SRC.ModelRunnerConfig
   -> RScripts
-  -> SRC.DataWrangler b p
-  -> SRC.Cacheable st (b SB.ModelDataT)
-  -> SRC.Cacheable st (b SB.GQDataT)
-  -> SRC.ResultAction r b p c
+  -> SRC.DataWrangler md gq b p
+  -> SRC.Cacheable st (b md)
+  -> SRC.Cacheable st (b gq)
+  -> SRC.ResultAction md gq b r p c
   -> p
-  -> K.ActionWithCacheTime r (SB.DataSource SB.ModelDataT)
-  -> K.ActionWithCacheTime r (SB.DataSource SB.GQDataT)
+  -> K.ActionWithCacheTime r md
+  -> K.ActionWithCacheTime r gq
   -> K.Sem r c
 runModel config rScriptsToWrite dataWrangler cbm cbgq makeResult toPredict md_C gq_C = K.wrapPrefix "Stan.ModelRunner.runModel" $ do
   K.logLE K.Info "running Model (if necessary)"
