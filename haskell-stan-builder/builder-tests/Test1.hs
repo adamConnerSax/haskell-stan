@@ -29,8 +29,6 @@ newtype ModelData = ModelData { rows :: [Row]}
 
 -- set up source type family
 -- One source each for ModelData and GQData
-type instance SB.DataSource SB.ModelDataT = ModelData
-type instance SB.DataSource SB.GQDataT = ()
 
 modelData :: ModelData
 modelData = ModelData [Row "a1" A 12 1.1 1.2
@@ -38,17 +36,17 @@ modelData = ModelData [Row "a1" A 12 1.1 1.2
                       , Row "b1" B 7 0.7 1.1
                       ]
 
-data ModelDataPkg = ModelDataPkg { modelRows :: SB.RowTypeTag SB.ModelDataT Row, letterGroup :: SB.GroupTypeTag LetterCode }
+data ModelDataPkg = ModelDataPkg { modelRows :: SB.RowTypeTag ModelData Row, letterGroup :: SB.GroupTypeTag LetterCode }
 
-modelDataBuilder :: SB.StanDataBuilderEff SB.ModelDataT ModelDataPkg
+modelDataBuilder :: SB.StanDataBuilderEff SB.ModelDataT ModelData ModelDataPkg
 modelDataBuilder = do
-  modelDataT <- SB.addData "D1" SB.ModelData (SB.ToFoldable rows)
-  letterGroupT <- fst <$> SB.addEnumGroup @LetterCode "LC"
+  modelDataT <- SB.addData "D1" SB.ModelDataT (SB.ToFoldable rows)
+  letterGroupT <- fst <$> SB.addEnumGroup @LetterCode @SB.ModelDataT @ModelData "LC"
   SB.addGroupIndexForData letterGroupT modelDataT (SB.makeIndexByCounting show letterCode)
   SB.addGroupIntMapForData letterGroupT modelDataT (SB.dataToIntMapFromEnum letterCode)
   pure $ ModelDataPkg modelDataT letterGroupT
 
-stanBuilderF :: ModelDataPkg -> () -> SB.StanModelBuilderEff ()
+stanBuilderF :: ModelDataPkg -> () -> SB.StanModelBuilderEff ModelData () ()
 stanBuilderF (ModelDataPkg modelDataT letterGroupT) _ =  do
   muP <- SB.simpleParameter (SL.NamedDeclSpec "mu" SL.realSpec)
          (SB.given (SL.realE 1) SL.:> SB.given (SL.realE 0) SL.:> SL.TNil)
