@@ -42,6 +42,7 @@ module Stan.Language.Expressions
   , at
   , slice0
   , indexE
+  , by
   , indexTuple
   , fstRef
   , sndRef
@@ -182,6 +183,10 @@ slice0 = sliceE s0
 
 indexE :: SNat n -> SLE.UExpr EIndexArray -> SLE.UExpr t -> SLE.UExpr (Indexed n t)
 indexE sn ie e = SLR.IFix $ SLE.UL $ SLE.LIndex sn ie e
+
+by :: SLE.UExpr t -> SLE.UExpr EIndexArray -> SLE.UExpr (Indexed Z t)
+by v i = indexE s0 i v
+
 
 indexTuple :: SNat n -> SLE.UExpr t -> SLE.UExpr (IndexedTuple n t)
 indexTuple sn e = SLR.IFix $ SLE.UL $ SLE.LIndexedTuple sn e

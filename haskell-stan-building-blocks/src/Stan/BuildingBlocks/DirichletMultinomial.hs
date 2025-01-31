@@ -71,8 +71,9 @@ dirichletMultinomial ::  forall t t' es . (SB.StanFunctionsC es
                      => Eff es (SL.Density SL.EIntArray '[t]
                                , SL.Density SL.EIntArray '[t]
                                , SL.Function SL.EIntArray '[t', SL.EInt]
+                               , SL.UExpr t' -> SL.IntE -> SL.IntArrayE
                                )
 dirichletMultinomial = do
   lpmf <- addDirichletMultinomialLPMF @t
   rng <- addDirichletMultinomialRNG @t'
-  pure (SL.simpleDensity "dirichlet_multinomial", lpmf, rng)
+  pure (SL.simpleDensity "dirichlet_multinomial", lpmf, rng, \t' n -> SL.functionE rng (t' :> n :> TNil))

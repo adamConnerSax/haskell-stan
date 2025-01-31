@@ -28,8 +28,11 @@ import qualified Data.Vector.Unboxed as VU
 
 import Effectful (Eff)
 
-addFixedInt :: forall d es . SB.StanConstJsonC SB.ModelDataT d es => Text -> Int -> Eff es SL.IntE
-addFixedInt t n = SB.addFixedIntJson @SB.ModelDataT @d SB.ErrIfDuplicate SB.ModelDataT t Nothing n
+addFixedIntModel :: forall d es . SB.StanConstJsonC SB.ModelDataT d es => Text -> Int -> Eff es SL.IntE
+addFixedIntModel t n = SB.addFixedIntJson @SB.ModelDataT @d SB.ErrIfDuplicate SB.ModelDataT t Nothing n
+
+addFixedIntGQ :: forall d es . SB.StanConstJsonC SB.GQDataT d es => Text -> Int -> Eff es SL.IntE
+addFixedIntGQ t n = SB.addFixedIntJson @SB.GQDataT @d SB.ErrIfDuplicate SB.GQDataT t Nothing n
 
 addIntData :: forall i d r es .
               SB.StanJsonC i d es

@@ -172,6 +172,14 @@ addCodeAbove ma = do
   addProgramBelow pBelow
   pure a
 
+getRTT :: forall d r i es . (Typeable d, Typeable r, SBC.StanRowInfoC i d es) => SBC.InputDataType i -> Text -> Eff es (SBC.RowTypeTag d r)
+getRTT idt t = do
+  rowInfos <- EffS.gets @(SBC.RowInfos i d) SBC.unRowInfos
+  let tag :: SBC.RowTypeTag d r = SBC.RowTypeTag (SBC.inputDataT idt) t
+  case DHash.lookup tag rowInfos of
+    Nothing -> SBC.buildError $ "Tag \"" <> t <> "\" not found in " <> show idt
+    Just _ -> pure tag
+
 withRowInfo :: forall i d es y r . EffS.State (SBC.RowInfos i d) :> es
             => Eff es y
             -> (forall z . SBC.RowInfo z r -> Eff es y)

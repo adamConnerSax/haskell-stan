@@ -76,7 +76,7 @@ normal = SLF.simpleDensity "normal"
 normal_lpdf = SLF.simpleDensity "normal_lpdf"
 normal_lupdf = SLF.simpleDensity "normal_lupdf"
 
-normal_rngF :: RealOrVec t => SLF.Function t '[t]
+normal_rngF :: RealOrVec t => SLF.Function t '[t, t]
 normal_rngF = SLF.simpleFunction "normal_rng"
 
 normal_rng ::  RealOrVec t => SLE.UExpr t -> SLE.UExpr t -> SLE.UExpr t
@@ -187,8 +187,16 @@ beta_proportion_rngF = SLF.simpleFunction "beta_proportion_rng"
 beta_proportion_rng ::  RealOrVec t => SLE.UExpr t -> SLE.UExpr t -> SLE.UExpr t
 beta_proportion_rng = rvRNG2p "beta_proportion_rng"
 
-lkj_corr_cholesky :: SLE.UExpr SLT.ESqMat -> SLE.RealE -> SLE.RealE
-lkj_corr_cholesky m p = SLE.densityE (SLF.simpleDensity "lkj_corr_cholesky") m (p :> TNil)
+lkj_corr_cholesky, lkj_corr_cholesky_lpdf, lkj_corr_cholesky_lupdf :: SLF.Density SLT.ESqMat '[SLT.EReal]
+lkj_corr_cholesky = SLF.simpleDensity "lkj_corr_cholesky"
+lkj_corr_cholesky_lpdf = SLF.simpleDensity "lkj_corr_cholesky_lpdf"
+lkj_corr_cholesky_lupdf = SLF.simpleDensity "lkj_corr_cholesky_lupdf"
+
+lkj_corr_cholesky_rngF :: SLF.Function SLT.ESqMat '[SLT.EInt, SLT.EReal]
+lkj_corr_cholesky_rngF = SLF.simpleFunction "lkj_corr_cholesky_rng"
+
+lkj_corr_cholesky_rng :: SLE.IntE -> SLE.RealE -> SLE.UExpr SLT.ESqMat
+lkj_corr_cholesky_rng n eta = SLE.functionE lkj_corr_cholesky_rngF (n :> eta :> TNil)
 
 type MultiNormalDensityC t = (SFC.TypeOneOf t [SLT.ECVec, SLT.ERVec, SLT.EArray1 SLT.ECVec, SLT.EArray1 SLT.ERVec], SFC.GenSType t)
 
@@ -341,8 +349,8 @@ multinomial_logit = SLF.simpleDensity "multinomial_logit"
 multinomial_logit_lpmf = SLF.simpleDensity "multinomial_logit_lpmf"
 multinomial_logit_lupmf = SLF.simpleDensity "multinomial_logit_lupmf"
 
-multinomial_logit_rngF :: SFC.Vector t => SLE.UExpr t -> SLE.IntE -> SLE.UExpr SLT.EIntArray
-multinomial_logit_rngF = multinomialRNG "multinomial_logit_rng"
+multinomial_logit_rngF :: SFC.Vector t => SLF.Function SLT.EIntArray '[t, SLT.EInt] --SLE.UExpr t -> SLE.IntE -> SLE.UExpr SLT.EIntArray
+multinomial_logit_rngF =  SLF.simpleFunction "multinomial_logit_rng"
 
 multinomial_logit_rng :: SFC.Vector t => SLE.UExpr t -> SLE.IntE -> SLE.UExpr SLT.EIntArray
 multinomial_logit_rng = multinomialRNG "multinomial_logit_rng"
