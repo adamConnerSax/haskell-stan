@@ -28,7 +28,7 @@ import qualified Stan.BuildingBlocks.Distributions as SBD
 import Effectful (Eff)
 
 generatePosteriorPrediction :: SB.StanCodeC es
-                            => SB.RowTypeTag i r
+                            => SB.RowTypeTag r
                             -> SL.NamedDeclSpec (SL.EArray1 t)
                             -> SBD.StanDist t pts rts
                             -> SL.CodeWriter (SL.IntE -> SL.ExprList rts)
@@ -37,7 +37,7 @@ generatePosteriorPrediction rtt nds sDist psFCW = generatePosteriorPrediction' r
   where rngE f n = SBD.familyRNG sDist (f n)
 
 generatePosteriorPrediction' :: SB.StanCodeC es
-                             => SB.RowTypeTag i r
+                             => SB.RowTypeTag r
                              -> SL.NamedDeclSpec (SL.EArray1 t)
                              -> ((SL.IntE -> SL.ExprList rts) -> SL.IntE -> SL.UExpr t) --SMD.StanDist t pts rts
                              -> SL.CodeWriter (SL.IntE -> SL.ExprList rts)

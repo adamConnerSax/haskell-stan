@@ -28,28 +28,28 @@ import qualified Data.IntMap.Strict as IntMap
 import qualified Data.Map.Strict as Map
 import qualified Data.Set as Set
 
-import Effectful ((:>), Eff)
+import Effectful (Eff)
 import qualified Effectful.State.Static.Local as EffS
-import qualified Effectful.Fail as EffF
+import Stan.Builder.Core (StanDataBuildersC)
 
 type AddGroup k i d es = (Typeable k, SBC.StanConstJsonC i d es)
 
 addGroup :: forall k i d es . AddGroup k i d es
-         => Text -> Int -> Eff es (SBC.GroupTypeTag k, SL.IntE)
-addGroup groupName size = do
-  lE <- SBJ.addFixedIntJson @i @d SBJ.ErrIfDuplicate SBC.ModelDataT ("J_" <> groupName) (Just 1) size
-  pure $ (SBC.GroupTypeTag groupName, lE)
+         => SBC.InputDataType i d -> Text -> Int -> Eff es (SBC.GroupTypeTag k, SL.IntE)
+addGroup idt groupName size = do
+  lE <- SBJ.addFixedIntJson SBJ.ErrIfDuplicate idt ("J_" <> groupName) (Just 1) size
+  pure (SBC.GroupTypeTag groupName, lE)
 
 addEnumGroup :: forall k i d es . (Enum k, Bounded k, AddGroup k i d es)
-             => Text
+             => SBC.InputDataType i d -> Text
              -> Eff es (SBC.GroupTypeTag k, SL.IntE)
-addEnumGroup groupName = addGroup @k @i @d groupName size
+addEnumGroup idt groupName = addGroup @k idt groupName size
   where
     size = Foldl.fold Foldl.length $ ([minBound..maxBound] :: [k])
 
 addGroupFromCollection :: forall k i d f es . (Ord k, Foldable f, AddGroup k i d es)
-                       => Text -> f k -> Eff es (SBC.GroupTypeTag k, SL.IntE)
-addGroupFromCollection groupName c = addGroup @_ @i @d groupName size
+                       => SBC.InputDataType i d -> Text -> f k -> Eff es (SBC.GroupTypeTag k, SL.IntE)
+addGroupFromCollection idt groupName c = addGroup @_ idt groupName size
   where
     size = Set.size $ Foldl.fold Foldl.set c
 
@@ -78,22 +78,24 @@ indexFold _ start =  Foldl.Fold step Set.empty done where
     mapToInt = Map.fromList keyedList
 
 
-addGroupIndexForData :: forall i r k es . (EffF.Fail :> es, EffS.State (SBC.RowInfoMakers i) :> es)
-                     => SBC.GroupTypeTag k
-                     -> SBC.RowTypeTag i r
+addGroupIndexForData :: forall i d r k es . (SBC.StanDataBuildersC i d es)
+                     => SBC.InputDataType i d
+                     -> SBC.GroupTypeTag k
+                     -> SBC.RowTypeTag r
                      -> SBC.MakeIndex r k
                      -> Eff es ()
-addGroupIndexForData gtt rtt mkIndex = withRowInfoMakers @i f where
-  idt = SBC.dataSetInputData rtt
-  f :: SBC.RowInfoMakers i -> Eff es (Maybe (SBC.RowInfoMakers i), ())
+addGroupIndexForData idt gtt rtt mkIndex = withRowInfoMakers @i f where
+  f :: SBC.RowInfoMakers i d -> Eff es (Maybe (SBC.RowInfoMakers i d), ())
   f rowInfoMakers = do
-    case DHash.lookup rtt rowInfoMakers of
+    case DHash.lookup rtt $ SBC.unRowInfoMakers rowInfoMakers of
       Nothing -> SBC.buildError $ "Data-set \"" <> SBC.dataSetName rtt <> "\" needs to be added to " <> show idt <> " before groups can be added to it."
       Just (SBC.GroupIndexAndIntMapMakers tf (SBC.GroupIndexMakers gims) gimbs) -> case DHash.lookup gtt gims of
         Just _ -> SBC.buildError
                   $ "Attempt to add a second group (\"" <> SBC.taggedGroupName gtt <> "\") at the same type for " <> show idt <> " row=" <> SBC.dataSetName rtt
         Nothing -> do
-          let newRims = DHash.insert rtt (SBC.GroupIndexAndIntMapMakers tf (SBC.GroupIndexMakers $ DHash.insert gtt mkIndex gims) gimbs) rowInfoMakers
+          let newRims = SBC.RowInfoMakers
+                        $ DHash.insert rtt (SBC.GroupIndexAndIntMapMakers tf (SBC.GroupIndexMakers $ DHash.insert gtt mkIndex gims) gimbs)
+                        $ SBC.unRowInfoMakers rowInfoMakers
           pure (Just newRims, ())
 
 {-
@@ -124,36 +126,39 @@ dataToIntMapFromKeyedRow :: (r -> k) -> SBC.DataToIntMap r k
 dataToIntMapFromKeyedRow key = SBC.DataToIntMap $ Foldl.generalize fld where
   fld = fmap (IntMap.fromList . zip [1..]) $ Foldl.premap key Foldl.list
 
-addGroupIntMapForData :: forall i r k es . (EffF.Fail :> es, EffS.State (SBC.RowInfoMakers i) :> es)
-                      => SBC.GroupTypeTag k
-                      -> SBC.RowTypeTag i r
+addGroupIntMapForData :: forall i d r k es . StanDataBuildersC i d es
+                      => SBC.InputDataType i d
+                      -> SBC.GroupTypeTag k
+                      -> SBC.RowTypeTag r
                       -> SBC.DataToIntMap r k
                       -> Eff es ()
-addGroupIntMapForData gtt rtt mkIntMap = withRowInfoMakers @i f where
-  f :: SBC.RowInfoMakers i -> Eff es (Maybe (SBC.RowInfoMakers i), ())
+addGroupIntMapForData _idt gtt rtt mkIntMap = withRowInfoMakers f where
+  f :: SBC.RowInfoMakers i d -> Eff es (Maybe (SBC.RowInfoMakers i d), ())
   f rowInfoMakers = do
-    case DHash.lookup rtt rowInfoMakers of
+    case DHash.lookup rtt $ SBC.unRowInfoMakers rowInfoMakers of
       Nothing -> SBC.buildError
         $ "Data-set \"" <> SBC.dataSetName rtt <> "\" needs to be added before groups can be added to it. Perhaps you have switched the model and GQ types?"
       Just (SBC.GroupIndexAndIntMapMakers tf gims (SBC.GroupIntMapBuilders gimbs)) -> case DHash.lookup gtt gimbs of
         Just _ -> SBC.buildError $ "Attempt to add a second group (\"" <> SBC.taggedGroupName gtt <> "\") at the same type for row=" <> SBC.dataSetName rtt
         Nothing -> do
-          let newRims = DHash.insert rtt (SBC.GroupIndexAndIntMapMakers tf gims (SBC.GroupIntMapBuilders $ DHash.insert gtt mkIntMap gimbs)) rowInfoMakers
+          let newRims = SBC.RowInfoMakers
+                        $ DHash.insert rtt (SBC.GroupIndexAndIntMapMakers tf gims (SBC.GroupIntMapBuilders $ DHash.insert gtt mkIntMap gimbs))
+                        $ SBC.unRowInfoMakers rowInfoMakers
           pure (Just newRims, ())
 
-withRowInfoMakers :: forall i es y . EffS.State (SBC.RowInfoMakers i) :> es
-                  => (SBC.RowInfoMakers i -> Eff es (Maybe (SBC.RowInfoMakers i), y)) -> Eff es y
+withRowInfoMakers :: forall i d es y . SBC.StanDataBuildersC i d es
+                  => (SBC.RowInfoMakers i d -> Eff es (Maybe (SBC.RowInfoMakers i d), y)) -> Eff es y
 withRowInfoMakers f = do
-  rims <- EffS.get @(SBC.RowInfoMakers i)
+  rims <- EffS.get @(SBC.RowInfoMakers i d)
   (mRims, y) <- f rims
   case mRims of
     Nothing -> pure ()
-    Just newRims -> EffS.put @(SBC.RowInfoMakers i) newRims
+    Just newRims -> EffS.put @(SBC.RowInfoMakers i d) newRims
   pure y
 
-indexMap :: forall i d r k es . (EffF.Fail :> es, EffS.State (SBC.RowInfos i d) :> es)
-         => SBC.RowTypeTag d r -> SBC.GroupTypeTag k -> Eff es (SBC.IndexMap r k)
-indexMap rtt gtt = SBB.withRowInfo @i err f rtt where
+indexMap :: forall i d r k es . SBC.StanRowInfoC i d es
+         => SBC.RowTypeTag r -> SBC.GroupTypeTag k -> Eff es (SBC.IndexMap r k)
+indexMap rtt gtt = SBB.withRowInfo @i @d err f rtt where
   err = SBC.buildError $ "ModelBuilder.indexMap: \"" <> SBC.dataSetName rtt <> "\" not present in row builders."
   f :: forall x. SBC.RowInfo x r -> Eff es (SBC.IndexMap r k)
   f rowInfo = do
@@ -162,19 +167,18 @@ indexMap rtt gtt = SBB.withRowInfo @i err f rtt where
                  $ "ModelBuilder.indexMap: \""
                  <> SBC.taggedGroupName gtt
                  <> "\" not present in indexes for \""
-                 <> SBC.dataSetName rtt <> "\" (" <> show (SBC.dataSetInputData rtt) <> ")"
+                 <> SBC.dataSetName rtt
       Just im -> return im
 
-getGroupIndex :: forall i r k.
-                 SBC.RowTypeTag i r
+getGroupIndex :: forall r k.
+                 SBC.RowTypeTag r
               -> SBC.GroupTypeTag k
-              -> SBC.DataSetGroupIntMaps i
+              -> SBC.DataSetGroupIntMaps
               -> Either Text (IntMap k)
 getGroupIndex rtt gtt dsgi@(SBC.DataSetGroupIntMaps grpIndexes) =
   case DHash.lookup rtt grpIndexes of
     Nothing -> Left
-               $ "getGroupIndex: " <> SBC.dataSetName rtt <> " (idt="
-               <> show (SBC.dataSetInputData rtt) <> ") not found in data-set group int maps: "
+               $ "getGroupIndex: " <> SBC.dataSetName rtt <> " not found in data-set group int maps: "
                <> SBC.displayDataSetGroupIntMaps dsgi <> "."
                <> " If this error is complaining about a data-set key that appears to be present, double check the *types* used when constructing the row-type-tags"
 
@@ -184,18 +188,19 @@ getGroupIndex rtt gtt dsgi@(SBC.DataSetGroupIntMaps grpIndexes) =
                  <> SBC.displayGroupIntMaps gims <> ") for data-set \"" <> SBC.dataSetName rtt <> "\""
       Just im -> Right im
 
-groupIndexVarName :: SBC.RowTypeTag i r -> SBC.GroupTypeTag k -> SL.VarName
+groupIndexVarName :: SBC.RowTypeTag r -> SBC.GroupTypeTag k -> SL.VarName
 groupIndexVarName rtt gtt = SBC.dataSetName rtt <> "_" <> SBC.taggedGroupName gtt
 {-# INLINEABLE groupIndexVarName #-}
 
 getGroupIndexVar :: forall i d r k es. SBC.StanRowInfoC i d es
-                 => SBC.RowTypeTag d r
+                 => SBC.InputDataType i d
+                 -> SBC.RowTypeTag r
                  -> SBC.GroupTypeTag k
                  -> Eff es (SL.UExpr SL.EIndexArray)
-getGroupIndexVar rtt gtt = do
+getGroupIndexVar idt rtt gtt = do
   let vName = groupIndexVarName rtt gtt
       dsNotFoundErr = SBC.buildError
-                      $ "getGroupIndexVar: data-set=" <> SBC.dataSetName rtt <> " (input type=" <> show (SBC.dataSetInputData rtt) <> ") not found."
+                      $ "getGroupIndexVar: data-set=" <> SBC.dataSetName rtt <> " (input type=" <> show idt <> ") not found."
       varIfGroup :: forall x d1 . SBC.RowInfo d1 x -> Eff es (SL.UExpr SL.EIndexArray)
       varIfGroup ri =
         let (SBC.GroupIndexes gis) = SBC.groupIndexes ri
@@ -203,5 +208,5 @@ getGroupIndexVar rtt gtt = do
           Just _ -> return $ SL.namedE vName SL.sIndexArray --SME.StanVar varName (SME.StanArray [SME.NamedDim $ dataSetName rtt] SME.StanInt)
           Nothing -> SBC.buildError
             $ "getGroupIndexVar: group=" <> SBC.taggedGroupName gtt
-            <> " not found in data-set=" <> SBC.dataSetName rtt <> " (input type=" <> show (SBC.dataSetInputData rtt) <> ") not found."
-  SBB.withRowInfo @i dsNotFoundErr varIfGroup rtt
+            <> " not found in data-set=" <> SBC.dataSetName rtt <> " (input type=" <> show idt <> ") not found."
+  SBB.withRowInfo @i @d dsNotFoundErr varIfGroup rtt

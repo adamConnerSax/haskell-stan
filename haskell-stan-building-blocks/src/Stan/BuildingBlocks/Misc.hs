@@ -102,7 +102,7 @@ declTranspose :: SB.StanCodeC es
 declTranspose nds m = do
   SB.addFromCodeWriter $ SL.declareRHSNW nds $ SL.unaryOpE SL.STranspose m
 
-indexedConstIntArray :: SB.StanCodeC es => SB.RowTypeTag i r -> Maybe Text -> SL.UExpr SL.EInt -> SL.UExpr SL.EInt -> Eff es SL.IntArrayE
+indexedConstIntArray :: SB.StanCodeC es => SB.RowTypeTag r -> Maybe Text -> SL.UExpr SL.EInt -> SL.UExpr SL.EInt -> Eff es SL.IntArrayE
 indexedConstIntArray rtt mSuffix lengthE nE =
   let dsName = SB.dataSetName rtt
 --      sizeName = SB.dataSetSizeName rtt

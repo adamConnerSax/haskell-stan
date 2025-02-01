@@ -172,10 +172,10 @@ addCodeAbove ma = do
   addProgramBelow pBelow
   pure a
 
-getRTT :: forall d r i es . (Typeable d, Typeable r, SBC.StanRowInfoC i d es) => SBC.InputDataType i -> Text -> Eff es (SBC.RowTypeTag d r)
+getRTT :: forall r i d es . (Typeable r, SBC.StanRowInfoC i d es) => SBC.InputDataType i d -> Text -> Eff es (SBC.RowTypeTag r)
 getRTT idt t = do
   rowInfos <- EffS.gets @(SBC.RowInfos i d) SBC.unRowInfos
-  let tag :: SBC.RowTypeTag d r = SBC.RowTypeTag (SBC.inputDataT idt) t
+  let tag :: SBC.RowTypeTag r = SBC.RowTypeTag t
   case DHash.lookup tag rowInfos of
     Nothing -> SBC.buildError $ "Tag \"" <> t <> "\" not found in " <> show idt
     Just _ -> pure tag
@@ -183,7 +183,7 @@ getRTT idt t = do
 withRowInfo :: forall i d es y r . EffS.State (SBC.RowInfos i d) :> es
             => Eff es y
             -> (forall z . SBC.RowInfo z r -> Eff es y)
-            -> SBC.RowTypeTag d r
+            -> SBC.RowTypeTag r
             -> Eff es y
 withRowInfo missing presentF rtt = EffS.get @(SBC.RowInfos i d) >>= maybe missing presentF . DHash.lookup rtt . SBC.unRowInfos
 {-

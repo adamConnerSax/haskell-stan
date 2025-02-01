@@ -77,12 +77,12 @@ postStratifiedParameterF :: SB.StanFunctionsC es
                          => Bool
                          -> SL.StanBlock
                          -> Maybe SL.VarName
-                         -> SB.RowTypeTag i r -- data set to post-stratify
+                         -> SB.RowTypeTag r -- data set to post-stratify
                          -> SB.GroupTypeTag k -- group by
                          -> SL.UExpr SL.EIndexArray -- PS Index for group
                          -> SL.MaybeCW SL.VectorE -- PS weight
                          -> SL.CodeWriter SL.VectorE --  code for expression of parameters to post-stratify. Should be indexed by PS data
-                         -> Maybe (SB.RowTypeTag i r', SL.UExpr SL.EIndexArray) -- re-index?
+                         -> Maybe (SB.RowTypeTag r', SL.UExpr SL.EIndexArray) -- re-index?
                          -> Eff es (SL.UExpr SL.ECVec)
 postStratifiedParameterF prof block varNameM rtt gtt grpIndex wgtsMCW pCW reIndexRttM = do
   _ <- psByGroupFunction

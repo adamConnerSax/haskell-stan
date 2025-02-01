@@ -69,17 +69,18 @@ setupDataAndGroups d sgb = do
 -}
 
 setupDataAndGroups :: forall i d a es . (SBC.StanConstJsonC i d es, SBC.StanRowInfoC i d es)
-                   => d
+                   => SBC.InputDataType i d
+                   -> d
                    -> SBC.StanDataBuilderEff i d a
                    -> Eff es a
-setupDataAndGroups d sgb = do
+setupDataAndGroups idt d sgb = do
   let gbRes = Eff.runPureEff
               . EffF.runFail
               . EffW.runWriter
               . EffS.runState (SBC.JSONNames Set.empty)
               . EffS.runState mempty
               . EffS.runState (SBC.StanCode SLP.SBData SLP.emptyStanProgram)
-              . EffS.runState DHash.empty
+              . EffS.runState (SBC.RowInfoMakers DHash.empty)
               $ sgb
   case gbRes of
     Left err -> SBC.buildError $ toText err -- propagate the error state
@@ -88,10 +89,10 @@ setupDataAndGroups d sgb = do
       mergeCode code
       checkAndMergeJSONNames jsonNames
       EffS.put jcf -- add the const folds from groups (group sizes)
-      let rowInfos = DHash.mapWithKey (buildRowInfo d) rowInfoMakers
+      let rowInfos = DHash.mapWithKey (buildRowInfo d) $ SBC.unRowInfoMakers rowInfoMakers
       EffS.put @(SBC.RowInfos i d) $ SBC.RowInfos rowInfos
-      addDataLengths @i @d
-      buildGroupIndexes @i @d
+      addDataLengths idt
+      buildGroupIndexes idt
       pure a
 
 checkAndMergeJSONNames :: (EffF.Fail :> es, EffS.State SBC.JSONNames :> es) => SBC.JSONNames -> Eff es ()
@@ -115,7 +116,9 @@ runStanBuilderEff :: forall md gq a b c .
                   -> (a -> b -> SBC.StanModelBuilderEff md gq c)
                   -> Either Text (SBC.BuilderState md gq, [Text], c)
 runStanBuilderEff md gq modelDG gqDG stanBuilderF = do
-  let mc = setupDataAndGroups md modelDG >>= \a -> setupDataAndGroups gq (gqDG a) >>= \b -> stanBuilderF a b
+  let modelIDT :: SBC.InputDataType SBC.ModelDataT md = SBC.ModelData
+      gqIDT :: SBC.InputDataType SBC.GQDataT gq = SBC.GQData
+  let mc = setupDataAndGroups modelIDT md modelDG >>= \a -> setupDataAndGroups gqIDT gq (gqDG a) >>= \b -> stanBuilderF a b
 {-
   let ma :: SBC.StanModelBuilderEff md gq a = setupDataAndGroups md modelDG
       mb :: SBC.StanModelBuilderEff md gq b = ma >>= setupDataAndGroups gq . gqDG
@@ -141,7 +144,7 @@ runStanBuilderEff md gq modelDG gqDG stanBuilderF = do
       pure (SBC.BuilderState mRBs gqRBs mCJFs gqCJFs (SBC.unFunctionNames hf) pc c, Foldl.fold Foldl.list logs, a)
 
 -- build a new RowInfo from the row index and IntMap builders
-buildRowInfo :: d -> SBC.RowTypeTag i r -> SBC.GroupIndexAndIntMapMakers d r -> SBC.RowInfo d r
+buildRowInfo :: d -> SBC.RowTypeTag r -> SBC.GroupIndexAndIntMapMakers d r -> SBC.RowInfo d r
 buildRowInfo d _rtt (SBC.GroupIndexAndIntMapMakers tf@(SBC.ToFoldable f) ims imbs) = Foldl.fold fld $ f d  where
   gisFld = indexBuildersForDataSetFold ims
   fld = SBC.RowInfo tf <$> gisFld <*> pure imbs <*> pure mempty
@@ -168,18 +171,18 @@ mapToIndexMap h m = indxMap where
   intIndex = SBC.IntIndex (Map.size m) (lookupK . h)
   indxMap = SBC.IndexMap intIndex lookupK (toIntMap m) h
 
-addDataLengths :: forall i d es . SBC.StanJsonC i d es => Eff es ()
-addDataLengths = do
-  let addDataLength :: SBC.RowTypeTag d r -> SBC.RowInfo d r -> Eff es (Maybe r)
+addDataLengths :: forall i d es . SBC.StanJsonC i d es => SBC.InputDataType i d -> Eff es ()
+addDataLengths idt = do
+  let addDataLength :: SBC.RowTypeTag r -> SBC.RowInfo d r -> Eff es (Maybe r)
       addDataLength rtt ri = case ri of
-        SBC.RowInfo {} -> SBJ.addLengthJson @i SBJ.ErrIfDuplicate rtt ("N_" <> SBC.dataSetName rtt) >> pure Nothing
+        SBC.RowInfo {} -> SBJ.addLengthJson SBJ.ErrIfDuplicate idt rtt ("N_" <> SBC.dataSetName rtt) >> pure Nothing
   _ <- EffS.gets (SBC.unRowInfos @i) >>= DHash.traverseWithKey addDataLength
   pure ()
 
 buildGroupIndexes :: forall i d es . SBC.StanJsonC i d es
-                  => Eff es ()
-buildGroupIndexes = do
-  let buildIndexJSONFold :: SBC.RowTypeTag d r -> SBC.GroupTypeTag k -> SBC.IndexMap r k -> Eff es (Maybe k)
+                  => SBC.InputDataType i d -> Eff es ()
+buildGroupIndexes idt = do
+  let buildIndexJSONFold :: SBC.RowTypeTag r -> SBC.GroupTypeTag k -> SBC.IndexMap r k -> Eff es (Maybe k)
       buildIndexJSONFold rtt gtt@(SBC.GroupTypeTag _gName) (SBC.IndexMap (SBC.IntIndex _gSize mIntF) _ _ _) = do
         let indexName = SBG.groupIndexVarName rtt gtt --dsName <> "_" <> gName
             ndsF x = SLS.NamedDeclSpec indexName
@@ -188,9 +191,9 @@ buildGroupIndexes = do
             mIntF' x = case mIntF x of
               Left msg -> Left $ msg <> " (from buildGroupIndexes for indexName=" <> indexName <> ")"
               Right y -> Right y
-        _ <- SBJ.addColumnMJson @i SBJ.ErrIfDuplicate rtt ndsF (SBD.dataSetSizeE rtt) mIntF'
+        _ <- SBJ.addColumnMJson SBJ.ErrIfDuplicate idt rtt ndsF (SBD.dataSetSizeE rtt) mIntF'
         pure Nothing
-      buildRowFolds :: SBC.RowTypeTag d r -> SBC.RowInfo d r -> Eff es (Maybe r)
+      buildRowFolds :: SBC.RowTypeTag r -> SBC.RowInfo d r -> Eff es (Maybe r)
       buildRowFolds rtt ri  = case ri of
         SBC.RowInfo _ (SBC.GroupIndexes gis) _ _ -> do
           _ <- DHash.traverseWithKey (buildIndexJSONFold rtt) gis

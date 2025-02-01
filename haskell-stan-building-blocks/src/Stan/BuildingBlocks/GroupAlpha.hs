@@ -51,31 +51,33 @@ type family MapExprTypeToDim (ts :: [SL.EType]) :: [SRP.Dim] where
   MapExprTypeToDim '[] = '[]
   MapExprTypeToDim (et ': ets) = AlphaExprDim et ': MapExprTypeToDim ets
 
-addModelIndexes :: forall i a b es . (SB.StanGroupC i es)
-                => SB.RowTypeTag i a
+addModelIndexes :: forall i d a b es . (SB.StanDataBuildersC i d es)
+                => SB.InputDataType i d
+                -> SB.RowTypeTag a
                 -> (a -> b)
                 -> [DSum.DSum SB.GroupTypeTag (GroupFromData b)]
                 -> Eff es ()
-addModelIndexes rtt f gfds = traverse_ g gfds where
+addModelIndexes idt rtt f gfds = traverse_ g gfds where
   g :: DSum.DSum SB.GroupTypeTag (GroupFromData b) -> Eff es ()
   g (gtt DSum.:=> gfd) = do
     let (GroupFromData _ mi _) = contraGroupFromData f gfd
-    SB.addGroupIndexForData gtt rtt mi
+    SB.addGroupIndexForData idt gtt rtt mi
 
-addGroupIntMaps :: forall i a b es . SB.StanGroupC i es
-                => SB.RowTypeTag i a
+addGroupIntMaps :: forall i d a b es . SB.StanDataBuildersC i d es
+                => SB.InputDataType i d
+                -> SB.RowTypeTag a
                 -> (a -> b)
                 -> [DSum.DSum SB.GroupTypeTag (GroupFromData b)]
                 -> Eff es ()
-addGroupIntMaps rtt f gfds = traverse_ g gfds where
+addGroupIntMaps idt rtt f gfds = traverse_ g gfds where
   g :: DSum.DSum SB.GroupTypeTag (GroupFromData b) -> Eff es ()
   g (gtt DSum.:=> gfd) = do
     let (GroupFromData _ _ gim) = contraGroupFromData f gfd
-    SB.addGroupIntMapForData gtt rtt gim
+    SB.addGroupIntMapForData idt gtt rtt gim
 
-data AlphaByDataVecCW d es where
+data AlphaByDataVecCW es where
   AlphaByDataVecCW :: (SB.StanCodeC es, SB.StanParametersC es)
-                   => (forall a . SB.RowTypeTag d a -> Eff es (SL.CodeWriter SL.VectorE)) -> AlphaByDataVecCW d es
+                   => (forall a . SB.RowTypeTag a -> Eff es (SL.CodeWriter SL.VectorE)) -> AlphaByDataVecCW es
 
 -- Do one time per model things: add parameters, etc.
 gaSetupBlock :: SB.InputDataT -> SL.StanBlock
@@ -83,8 +85,9 @@ gaSetupBlock = \case
   SB.ModelDataT -> SL.SBTransformedData
   SB.GQDataT -> SL.SBTransformedDataGQ
 
-setupAlpha :: forall i d k t es . (SB.StanParametersC es, SB.StanRowInfoC i d es, SB.StanFunctionsC es) => GroupAlpha i d k t -> Eff es (AlphaByDataVecCW d es)
-setupAlpha (GroupAlphaE bp avE _ _) = do
+setupAlpha :: forall i d k t es . (SB.StanParametersC es, SB.StanRowInfoC i d es, SB.StanFunctionsC es)
+           => SB.InputDataType i d -> GroupAlpha i d k t -> Eff es (AlphaByDataVecCW es)
+setupAlpha idt (GroupAlphaE bp avE _ _) = do
   aE <- SB.parameterExpr <$> SB.addBuildParameter bp
   let  f :: SB.RowTypeTag d a -> Eff es (SL.CodeWriter SL.VectorE)
        f rtt = pure $ pure $ avE aE rtt
@@ -98,7 +101,7 @@ setupAlpha (GroupAlphaTD bp tdCW avCW _ _) = do
   aE <- SB.parameterExpr <$> SB.addBuildParameter bp
   let f :: SB.RowTypeTag d a -> Eff es (SL.CodeWriter SL.VectorE)
       f rtt = do
-        td <- SB.inBlock (gaSetupBlock $ SB.dataSetInputData rtt) $ SB.addFromCodeWriter $ tdCW rtt
+        td <- SB.inBlock (gaSetupBlock idt) $ SB.addFromCodeWriter $ tdCW rtt
         pure $ avCW td aE rtt
   pure $ AlphaByDataVecCW f
 setupAlpha (GroupAlphaPrep bp prep avCW _ _) = do
@@ -165,29 +168,29 @@ groupFromDataEnum f = GroupFromData f (SB.makeIndexFromEnum f) (SB.dataToIntMapF
 contraGroupFromData :: (a -> b) -> GroupFromData b k -> GroupFromData a k
 contraGroupFromData f (GroupFromData g mi di) = GroupFromData (g . f) (SB.contraMakeIndex f mi) (SB.contraDataToIntMap f di)
 
-data GroupAlpha (i :: SB.InputDataT) d k t where
+data GroupAlpha (i :: SB.InputDataT) k t where
   GroupAlphaE :: SB.BuildParameter t
-              -> (forall a . SL.UExpr t -> SB.RowTypeTag d a -> SL.VectorE)
+              -> (forall a . SL.UExpr t -> SB.RowTypeTag a -> SL.VectorE)
               -> (Map String CS.StanStatistic -> Either Text (SRP.ParameterStatistics (AlphaExprDim t) CS.StanStatistic))
               -> (k -> SRP.ParameterStatistics (AlphaExprDim t) CS.StanStatistic -> Either Text Double)
-             -> GroupAlpha i d k t
+             -> GroupAlpha i k t
   GroupAlphaCW :: SB.BuildParameter t
-               -> (forall a . SL.UExpr t -> SB.RowTypeTag d a -> SL.CodeWriter SL.VectorE)
+               -> (forall a . SL.UExpr t -> SB.RowTypeTag a -> SL.CodeWriter SL.VectorE)
                -> (Map String CS.StanStatistic -> Either Text (SRP.ParameterStatistics (AlphaExprDim t) CS.StanStatistic))
                -> (k -> SRP.ParameterStatistics (AlphaExprDim t) CS.StanStatistic -> Either Text Double)
-               -> GroupAlpha i d k t
+               -> GroupAlpha i k t
   GroupAlphaTD :: SB.BuildParameter t
-               -> (forall a . SB.RowTypeTag d a -> SL.CodeWriter td)
-               -> (forall a . td -> SL.UExpr t -> SB.RowTypeTag d a -> SL.CodeWriter SL.VectorE)
+               -> (forall a . SB.RowTypeTag a -> SL.CodeWriter td)
+               -> (forall a . td -> SL.UExpr t -> SB.RowTypeTag a -> SL.CodeWriter SL.VectorE)
                -> (Map String CS.StanStatistic -> Either Text (SRP.ParameterStatistics (AlphaExprDim t) CS.StanStatistic))
                -> (k ->  SRP.ParameterStatistics (AlphaExprDim t) CS.StanStatistic -> Either Text Double)
-               -> GroupAlpha i d k t
+               -> GroupAlpha i k t
   GroupAlphaPrep :: SB.BuildParameter t
-                 -> (forall a es .  (SB.StanCodeC es, SB.StanFunctionsC es) => SB.StanRowInfoC i d es => SB.RowTypeTag d a -> Eff es p)
-                 -> (forall a . p -> SL.UExpr t -> SB.RowTypeTag d a -> SL.CodeWriter SL.VectorE)
+                 -> (forall a d es .  (SB.StanCodeC es, SB.StanFunctionsC es) => SB.StanRowInfoC i d es => SB.RowTypeTag a -> Eff es p)
+                 -> (forall a . p -> SL.UExpr t -> SB.RowTypeTag a -> SL.CodeWriter SL.VectorE)
                  -> (Map String CS.StanStatistic -> Either Text (SRP.ParameterStatistics (AlphaExprDim t) CS.StanStatistic))
                  -> (k -> SRP.ParameterStatistics (AlphaExprDim t) CS.StanStatistic -> Either Text Double)
-                 -> GroupAlpha i d k t
+                 -> GroupAlpha i k t
 
 lookupAlphaPS :: GroupAlpha i d k t ->  Map String CS.StanStatistic -> Either Text (SRP.ParameterStatistics (AlphaExprDim t) CS.StanStatistic)
 lookupAlphaPS (GroupAlphaE _ _ lf _) = lf

@@ -17,24 +17,25 @@ import qualified Stan.Language as SL
 import Prelude hiding (All)
 import qualified Data.Dependent.HashMap as DHash
 
-import Effectful ((:>), Eff)
+import Effectful (Eff)
 import qualified Effectful.State.Static.Local as EffS
-import qualified Effectful.Fail as EffF
 
-addData :: forall es r d . (Typeable r, Typeable d, EffF.Fail :> es, EffS.State (SBC.RowInfoMakers d) :> es)
-        => Text -> SBC.InputDataT  -> SBC.ToFoldable d r -> Eff es (SBC.RowTypeTag d r)
-addData name idt tf = do
-  rowInfoMakers <- EffS.get @(SBC.RowInfoMakers d)
-  let rtt = SBC.RowTypeTag idt name
-  case DHash.lookup rtt rowInfoMakers of
+addData :: forall r i d es  . (Typeable r, SBC.StanDataBuildersC i d es)
+        => Text -> SBC.InputDataType i d  -> SBC.ToFoldable d r -> Eff es (SBC.RowTypeTag r)
+addData name _idt tf = do
+  rowInfoMakers <- EffS.get @(SBC.RowInfoMakers i d)
+  let rtt = SBC.RowTypeTag name
+  case DHash.lookup rtt $ SBC.unRowInfoMakers rowInfoMakers of
     Just _ -> SBC.buildError $ "Attempt to add data of matching type and name (\"" <> name <> "\" to model-data."
     Nothing -> do
-      let newRowInfoMakers = DHash.insert rtt (SBC.GroupIndexAndIntMapMakers tf (SBC.GroupIndexMakers DHash.empty) (SBC.GroupIntMapBuilders DHash.empty)) rowInfoMakers
-      EffS.put newRowInfoMakers
+      let newRowInfoMakers = SBC.RowInfoMakers
+                             $ DHash.insert rtt (SBC.GroupIndexAndIntMapMakers tf (SBC.GroupIndexMakers DHash.empty) (SBC.GroupIntMapBuilders DHash.empty))
+                             $ SBC.unRowInfoMakers rowInfoMakers
+      EffS.put @(SBC.RowInfoMakers i d) newRowInfoMakers
       pure rtt
 
-dataSetSizeName :: SBC.RowTypeTag i r -> Text
+dataSetSizeName :: SBC.RowTypeTag r -> Text
 dataSetSizeName rtt = "N_" <> SBC.dataSetName rtt
 
-dataSetSizeE :: SBC.RowTypeTag i r -> SL.IntE
+dataSetSizeE :: SBC.RowTypeTag r -> SL.IntE
 dataSetSizeE rtt = SL.namedSizeE $ "N_" <> SBC.dataSetName rtt

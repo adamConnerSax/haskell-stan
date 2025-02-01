@@ -190,8 +190,8 @@ rowPartFromBoundedEnumFunctions encodeAsZerosM name f = DesignMatrixRowPart name
 -- "matrix[N_myDat, K_Design] Design_myDat;"
 -- with accompanying json
 addDesignMatrix :: forall i d r es . (SB.StanJsonC i d es, SB.StanConstJsonC i d es)
-                => SB.RowTypeTag d r -> DesignMatrixRow r -> Maybe SL.IndexKey -> Eff es (SL.UExpr SL.EMat)
-addDesignMatrix rtt dmr colIndexM = fst <$> SBBD.add2dMatrixData @i rtt (matrixFromRowData dmr colIndexM) Nothing Nothing
+                => SB.InputDataType i d -> SB.RowTypeTag r -> DesignMatrixRow r -> Maybe SL.IndexKey -> Eff es (SL.UExpr SL.EMat)
+addDesignMatrix idt rtt dmr colIndexM = fst <$> SBBD.add2dMatrixData idt rtt (matrixFromRowData dmr colIndexM) Nothing Nothing
 {-# INLINEABLE addDesignMatrix #-}
 
 
@@ -222,12 +222,12 @@ designMatrixPartIndexName dmr dmrp = "I_" <> dmName dmr <> "_" <> dmrpName dmrp
 
 -- declares S_DesignName_PartName (size of part) and I_DesignName_PartName (starting index of part) and for all parts of design matrix row
 addDesignMatrixIndexes :: forall i d r es . SB.StanConstJsonC i d es
-                       => SB.RowTypeTag d r -> DesignMatrixRow r -> Eff es [(DesignMatrixRowPart r, SL.UExpr SL.EInt, SL.UExpr SL.EInt)]
-addDesignMatrixIndexes rtt dmr = do
+                       => SB.InputDataType i d -> SB.RowTypeTag r -> DesignMatrixRow r -> Eff es [(DesignMatrixRowPart r, SL.UExpr SL.EInt, SL.UExpr SL.EInt)]
+addDesignMatrixIndexes idt rtt dmr = do
   let addEach (rp, gSize, gStart) = do
 --        let sizeName = dmName dmr <> "_" <> gName
-        se <- SB.addFixedIntJson @i @d SB.ErrIfDuplicate (SB.dataSetInputData rtt) (designMatrixPartSizeName dmr rp) Nothing gSize
-        ie <- SB.addFixedIntJson @i @d SB.ErrIfDuplicate (SB.dataSetInputData rtt) (designMatrixPartIndexName dmr rp) Nothing gStart
+        se <- SB.addFixedIntJson SB.ErrIfDuplicate idt (designMatrixPartSizeName dmr rp) Nothing gSize
+        ie <- SB.addFixedIntJson SB.ErrIfDuplicate idt (designMatrixPartIndexName dmr rp) Nothing gStart
         pure (rp, se, ie)
   traverse addEach $ designMatrixIndexes dmr
 
@@ -419,7 +419,7 @@ centerDataMatrix :: (SB.StanFunctionsC es, SB.StanCodeC es)
                  -> Maybe (SL.UExpr SL.ECVec)
                  -> SL.VarName -- prefix for names
                  -> Eff es (SL.UExpr SL.EMat -- standardized matrix, X - row_mean(X) or (X - row_mean(X))/row_stddev(X)
-                           , SB.InputDataType i -> SL.UExpr SL.EMat -> SL.VarName -> Eff es (SL.UExpr SL.EMat) -- \Y -> standardized Y (via mean/var of X)
+                           , SB.InputDataType i d -> SL.UExpr SL.EMat -> SL.VarName -> Eff es (SL.UExpr SL.EMat) -- \Y -> standardized Y (via mean/var of X)
                            )
 centerDataMatrix dms m mwgtsV namePrefix = do
   vecMVF <- case mwgtsV of
