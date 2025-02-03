@@ -25,7 +25,9 @@ module Stan.Language.Statements
   , addVMs
   , removeVMs
   , intSpec
+  , nonNegativeIntSpec
   , realSpec
+  , nonNegativeRealSpec
   , complexSpec
   , vectorSpec
   , rowVectorSpec
@@ -107,6 +109,7 @@ import qualified Stan.Language.Expression as SLE
 import Stan.Language.Expressions
   (intE,
    namedE,
+   realE,
 --   namedSizeE,
    ExprList,
    IntE)
@@ -195,12 +198,17 @@ removeVMs = \case
   ArraySpec n arrDims ds -> ArraySpec n arrDims (removeVMs ds)
   TupleSpec sts -> TupleSpec $ SLR.hfmap removeVMs sts
 
-
 intSpec :: DeclSpec SLE.UExpr EInt
 intSpec = ScalarSpec StanInt SLS.NoModifiers
 
+nonNegativeIntSpec ::  DeclSpec SLE.UExpr EInt
+nonNegativeIntSpec =  addVMs (SLS.Modifiers [lowerM $ intE 0]) intSpec
+
 realSpec :: DeclSpec SLE.UExpr EReal
 realSpec = ScalarSpec StanReal SLS.NoModifiers
+
+nonNegativeRealSpec :: DeclSpec SLE.UExpr EReal
+nonNegativeRealSpec = addVMs (SLS.Modifiers [lowerM $ realE 0]) realSpec
 
 complexSpec :: DeclSpec SLE.UExpr EComplex
 complexSpec = ScalarSpec StanComplex SLS.NoModifiers

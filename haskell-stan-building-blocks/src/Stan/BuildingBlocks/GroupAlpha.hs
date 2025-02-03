@@ -51,13 +51,13 @@ type family MapExprTypeToDim (ts :: [SL.EType]) :: [SRP.Dim] where
   MapExprTypeToDim '[] = '[]
   MapExprTypeToDim (et ': ets) = AlphaExprDim et ': MapExprTypeToDim ets
 
-addModelIndexes :: forall i d a b es . (SB.StanDataBuildersC i d es)
+addGroupIndexes :: forall i d a b es . (SB.StanDataBuildersC i d es)
                 => SB.InputDataType i d
                 -> SB.RowTypeTag a
                 -> (a -> b)
                 -> [DSum.DSum SB.GroupTypeTag (GroupFromData b)]
                 -> Eff es ()
-addModelIndexes idt rtt f gfds = traverse_ g gfds where
+addGroupIndexes idt rtt f gfds = traverse_ g gfds where
   g :: DSum.DSum SB.GroupTypeTag (GroupFromData b) -> Eff es ()
   g (gtt DSum.:=> gfd) = do
     let (GroupFromData _ mi _) = contraGroupFromData f gfd
@@ -78,6 +78,9 @@ addGroupIntMaps idt rtt f gfds = traverse_ g gfds where
 data AlphaByDataVecCW es where
   AlphaByDataVecCW :: (SB.StanCodeC es, SB.StanParametersC es)
                    => (forall a . SB.RowTypeTag a -> Eff es (SL.CodeWriter SL.VectorE)) -> AlphaByDataVecCW es
+
+alphaByDataVecCW :: AlphaByDataVecCW es -> SB.RowTypeTag a -> Eff es (SL.CodeWriter SL.VectorE)
+alphaByDataVecCW (AlphaByDataVecCW f) = f
 
 -- Do one time per model things: add parameters, etc.
 gaSetupBlock :: SB.InputDataType i d -> SL.StanBlock
