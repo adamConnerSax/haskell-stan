@@ -157,8 +157,8 @@ withRowInfoMakers f = do
   pure y
 
 indexMap :: forall i d r k es . SBC.StanRowInfoC i d es
-         => SBC.RowTypeTag r -> SBC.GroupTypeTag k -> Eff es (SBC.IndexMap r k)
-indexMap rtt gtt = SBB.withRowInfo @i @d err f rtt where
+         => SBC.InputDataType i d -> SBC.RowTypeTag r -> SBC.GroupTypeTag k -> Eff es (SBC.IndexMap r k)
+indexMap idt rtt gtt = SBB.withRowInfo err f idt rtt where
   err = SBC.buildError $ "ModelBuilder.indexMap: \"" <> SBC.dataSetName rtt <> "\" not present in row builders."
   f :: forall x. SBC.RowInfo x r -> Eff es (SBC.IndexMap r k)
   f rowInfo = do
@@ -209,4 +209,4 @@ getGroupIndexVar idt rtt gtt = do
           Nothing -> SBC.buildError
             $ "getGroupIndexVar: group=" <> SBC.taggedGroupName gtt
             <> " not found in data-set=" <> SBC.dataSetName rtt <> " (input type=" <> show idt <> ") not found."
-  SBB.withRowInfo @i @d dsNotFoundErr varIfGroup rtt
+  SBB.withRowInfo dsNotFoundErr varIfGroup idt rtt

@@ -80,78 +80,77 @@ data AlphaByDataVecCW es where
                    => (forall a . SB.RowTypeTag a -> Eff es (SL.CodeWriter SL.VectorE)) -> AlphaByDataVecCW es
 
 -- Do one time per model things: add parameters, etc.
-gaSetupBlock :: SB.InputDataT -> SL.StanBlock
+gaSetupBlock :: SB.InputDataType i d -> SL.StanBlock
 gaSetupBlock = \case
-  SB.ModelDataT -> SL.SBTransformedData
-  SB.GQDataT -> SL.SBTransformedDataGQ
+  SB.ModelData -> SL.SBTransformedData
+  SB.GQData -> SL.SBTransformedDataGQ
 
 setupAlpha :: forall i d k t es . (SB.StanParametersC es, SB.StanRowInfoC i d es, SB.StanFunctionsC es)
-           => SB.InputDataType i d -> GroupAlpha i d k t -> Eff es (AlphaByDataVecCW es)
-setupAlpha idt (GroupAlphaE bp avE _ _) = do
+           => SB.InputDataType i d -> GroupAlpha k t -> Eff es (AlphaByDataVecCW es)
+setupAlpha _idt (GroupAlphaE bp avE _ _) = do
   aE <- SB.parameterExpr <$> SB.addBuildParameter bp
-  let  f :: SB.RowTypeTag d a -> Eff es (SL.CodeWriter SL.VectorE)
+  let  f :: SB.RowTypeTag a -> Eff es (SL.CodeWriter SL.VectorE)
        f rtt = pure $ pure $ avE aE rtt
   pure $ AlphaByDataVecCW $ f
-setupAlpha (GroupAlphaCW bp avCW _ _) = do
+setupAlpha _idt (GroupAlphaCW bp avCW _ _) = do
   aE <- SB.parameterExpr <$> SB.addBuildParameter bp
-  let f :: SB.RowTypeTag d a -> Eff es (SL.CodeWriter SL.VectorE)
+  let f :: SB.RowTypeTag a -> Eff es (SL.CodeWriter SL.VectorE)
       f rtt = pure $ avCW aE rtt
   pure $ AlphaByDataVecCW f
-setupAlpha (GroupAlphaTD bp tdCW avCW _ _) = do
+setupAlpha idt (GroupAlphaTD bp tdCW avCW _ _) = do
   aE <- SB.parameterExpr <$> SB.addBuildParameter bp
-  let f :: SB.RowTypeTag d a -> Eff es (SL.CodeWriter SL.VectorE)
+  let f :: SB.RowTypeTag a -> Eff es (SL.CodeWriter SL.VectorE)
       f rtt = do
         td <- SB.inBlock (gaSetupBlock idt) $ SB.addFromCodeWriter $ tdCW rtt
         pure $ avCW td aE rtt
   pure $ AlphaByDataVecCW f
-setupAlpha (GroupAlphaPrep bp prep avCW _ _) = do
+setupAlpha idt (GroupAlphaPrep bp prep avCW _ _) = do
   aE <- SB.parameterExpr <$> SB.addBuildParameter bp
-  let f :: SB.RowTypeTag d a -> Eff es (SL.CodeWriter SL.VectorE)
+  let f :: SB.RowTypeTag a -> Eff es (SL.CodeWriter SL.VectorE)
       f rtt = do
-        a <- prep rtt
+        a <- prep idt rtt
         pure $ avCW a aE rtt
   pure $ AlphaByDataVecCW f
 
-tdAsPrep :: forall td i b es . SB.StanCodeC es
-         => (forall a . SB.RowTypeTag i a -> SL.CodeWriter td) -> SB.RowTypeTag i b -> Eff es td
-tdAsPrep tdCW rtt = SB.inBlock (gaSetupBlock $ SB.dataSetInputData rtt) $ SB.addFromCodeWriter $ tdCW rtt
+tdAsPrep :: forall td i d b es . SB.StanCodeC es
+         => SB.InputDataType i d -> (SB.RowTypeTag b -> SL.CodeWriter td) -> SB.RowTypeTag b -> Eff es td
+tdAsPrep idt tdCW rtt = SB.inBlock (gaSetupBlock idt) $ SB.addFromCodeWriter $ tdCW rtt
 
 --newtype SomeGroupAlpha r = SomeGroupAlpha { someGroupAlpha :: forall t . GroupAlpha r t}
 
 -- do once per data-set things and sum
-setupAlphaSum' :: forall i d r es . (SB.StanParametersC es, SB.StanRowInfoC i d es, SB.StanFunctionsC es)
-               => NonEmpty (Some.Some (GroupAlpha i d r)) -> Eff es (AlphaByDataVecCW d es)
-setupAlphaSum' gts = do
-  abdvcws {-:: (SB.StanParametersC es, SB.StanCodeC es) => NonEmpty AlphaByDataVecCW-} <- traverse (\x -> Some.withSome x setupAlpha) gts
-  let f :: SB.RowTypeTag d a -> Eff es (SL.CodeWriter SL.VectorE)
+setupAlphaSum' :: forall i d k es . (SB.StanParametersC es, SB.StanRowInfoC i d es, SB.StanFunctionsC es)
+               => SB.InputDataType i d -> NonEmpty (Some.Some (GroupAlpha k)) -> Eff es (AlphaByDataVecCW es)
+setupAlphaSum' idt gts = do
+  abdvcws {-:: (SB.StanParametersC es, SB.StanCodeC es) => NonEmpty AlphaByDataVecCW-} <- traverse (\x -> Some.withSome x (setupAlpha idt)) gts
+  let f :: SB.RowTypeTag a -> Eff es (SL.CodeWriter SL.VectorE)
       f rtt = do
         x <- traverse (\(AlphaByDataVecCW g) -> g rtt) abdvcws
         pure $ fmap (\z -> foldl' (|+|) (head z) (tail z)) $ sequence x
   pure $ AlphaByDataVecCW f
 
-setupAlphaSum :: forall i d ts r es . (SB.StanParametersC es, SB.StanRowInfoC i d es, SB.StanFunctionsC es)
-              => GroupAlphaList i d r ts -> Eff es (AlphaByDataVecCW d es)
-setupAlphaSum gs  = maybe emptyErr setupAlphaSum' $ nonEmpty $ toSomeGroupAlphaList gs where
-  toSomeGroupAlphaList :: GroupAlphaList i d r qs -> [Some.Some (GroupAlpha i d r)]
+setupAlphaSum :: forall i d k ts es . (SB.StanParametersC es, SB.StanRowInfoC i d es, SB.StanFunctionsC es)
+              => SB.InputDataType i d -> GroupAlphaList k ts -> Eff es (AlphaByDataVecCW es)
+setupAlphaSum idt gs  = maybe emptyErr (setupAlphaSum' idt) $ nonEmpty $ toSomeGroupAlphaList gs where
+  toSomeGroupAlphaList :: GroupAlphaList k qs -> [Some.Some (GroupAlpha k)]
   toSomeGroupAlphaList TNil = []
   toSomeGroupAlphaList (g :> gs') = Some.mkSome g : toSomeGroupAlphaList gs'
   emptyErr = SB.buildError "setupAlphaSum: empty GroupAlphaList given"
 
 
-lookupAlphasPS :: forall i d r ts . GroupAlphaList i d r ts -> CS.StanSummary -> Either Text (PSList CS.StanStatistic (MapExprTypeToDim ts))
+lookupAlphasPS :: GroupAlphaList k ts -> CS.StanSummary -> Either Text (PSList CS.StanStatistic (MapExprTypeToDim ts))
 lookupAlphasPS TNil _ = Right PNil
 lookupAlphasPS (ga :> gas) s = (:+) <$> lookupAlphaPS ga (CS.paramStats s) <*> lookupAlphasPS gas s
 
-alphaPSToAlphaF :: GroupAlphaList i d k ts -> PSList CS.StanStatistic (MapExprTypeToDim ts) -> k -> Either Text [Double]
+alphaPSToAlphaF :: GroupAlphaList k ts -> PSList CS.StanStatistic (MapExprTypeToDim ts) -> k -> Either Text [Double]
 alphaPSToAlphaF TNil PNil _ = pure []
 alphaPSToAlphaF (ga :> gas) (p :+ ps) k = (:) <$> indexAlphaPS ga p k <*> alphaPSToAlphaF gas ps k
-
 
 data PSList :: Type -> [SRP.Dim] -> Type where
   PNil :: PSList a '[]
   (:+) :: SRP.ParameterStatistics d a -> PSList a ds -> PSList a (d ': ds)
 
-type GroupAlphaList i d r = TypedList (GroupAlpha i d r)
+type GroupAlphaList k = TypedList (GroupAlpha k)
 
 
 --type FlippedPStatistics a d = SRP.ParameterStatistics d a
@@ -168,43 +167,43 @@ groupFromDataEnum f = GroupFromData f (SB.makeIndexFromEnum f) (SB.dataToIntMapF
 contraGroupFromData :: (a -> b) -> GroupFromData b k -> GroupFromData a k
 contraGroupFromData f (GroupFromData g mi di) = GroupFromData (g . f) (SB.contraMakeIndex f mi) (SB.contraDataToIntMap f di)
 
-data GroupAlpha (i :: SB.InputDataT) k t where
+data GroupAlpha k t where
   GroupAlphaE :: SB.BuildParameter t
               -> (forall a . SL.UExpr t -> SB.RowTypeTag a -> SL.VectorE)
               -> (Map String CS.StanStatistic -> Either Text (SRP.ParameterStatistics (AlphaExprDim t) CS.StanStatistic))
               -> (k -> SRP.ParameterStatistics (AlphaExprDim t) CS.StanStatistic -> Either Text Double)
-             -> GroupAlpha i k t
+             -> GroupAlpha k t
   GroupAlphaCW :: SB.BuildParameter t
                -> (forall a . SL.UExpr t -> SB.RowTypeTag a -> SL.CodeWriter SL.VectorE)
                -> (Map String CS.StanStatistic -> Either Text (SRP.ParameterStatistics (AlphaExprDim t) CS.StanStatistic))
                -> (k -> SRP.ParameterStatistics (AlphaExprDim t) CS.StanStatistic -> Either Text Double)
-               -> GroupAlpha i k t
+               -> GroupAlpha k t
   GroupAlphaTD :: SB.BuildParameter t
                -> (forall a . SB.RowTypeTag a -> SL.CodeWriter td)
                -> (forall a . td -> SL.UExpr t -> SB.RowTypeTag a -> SL.CodeWriter SL.VectorE)
                -> (Map String CS.StanStatistic -> Either Text (SRP.ParameterStatistics (AlphaExprDim t) CS.StanStatistic))
                -> (k ->  SRP.ParameterStatistics (AlphaExprDim t) CS.StanStatistic -> Either Text Double)
-               -> GroupAlpha i k t
+               -> GroupAlpha k t
   GroupAlphaPrep :: SB.BuildParameter t
-                 -> (forall a d es .  (SB.StanCodeC es, SB.StanFunctionsC es) => SB.StanRowInfoC i d es => SB.RowTypeTag a -> Eff es p)
+                 -> (forall i d a es .  (SB.StanCodeC es, SB.StanFunctionsC es, SB.StanRowInfoC i d es) => SB.InputDataType i d -> SB.RowTypeTag a -> Eff es p)
                  -> (forall a . p -> SL.UExpr t -> SB.RowTypeTag a -> SL.CodeWriter SL.VectorE)
                  -> (Map String CS.StanStatistic -> Either Text (SRP.ParameterStatistics (AlphaExprDim t) CS.StanStatistic))
                  -> (k -> SRP.ParameterStatistics (AlphaExprDim t) CS.StanStatistic -> Either Text Double)
-                 -> GroupAlpha i k t
+                 -> GroupAlpha k t
 
-lookupAlphaPS :: GroupAlpha i d k t ->  Map String CS.StanStatistic -> Either Text (SRP.ParameterStatistics (AlphaExprDim t) CS.StanStatistic)
+lookupAlphaPS :: GroupAlpha k t ->  Map String CS.StanStatistic -> Either Text (SRP.ParameterStatistics (AlphaExprDim t) CS.StanStatistic)
 lookupAlphaPS (GroupAlphaE _ _ lf _) = lf
 lookupAlphaPS (GroupAlphaCW _ _ lf _) = lf
 lookupAlphaPS (GroupAlphaTD _ _ _ lf _) = lf
 lookupAlphaPS (GroupAlphaPrep _ _ _ lf _) = lf
 
-indexAlphaPS :: GroupAlpha i d k t ->  SRP.ParameterStatistics (AlphaExprDim t) CS.StanStatistic -> k -> Either Text Double
+indexAlphaPS :: GroupAlpha k t ->  SRP.ParameterStatistics (AlphaExprDim t) CS.StanStatistic -> k -> Either Text Double
 indexAlphaPS (GroupAlphaE _ _ _ pf) = flip pf
 indexAlphaPS (GroupAlphaCW _ _ _ pf) = flip pf
 indexAlphaPS (GroupAlphaTD _ _ _ _ pf) = flip pf
 indexAlphaPS (GroupAlphaPrep _ _ _ _ pf) = flip pf
 
-contramapGroupAlpha :: (q -> r) -> GroupAlpha i d r t -> GroupAlpha i d q t
+contramapGroupAlpha :: (k2 -> k1) -> GroupAlpha k1 t -> GroupAlpha k2 t
 contramapGroupAlpha h (GroupAlphaE bp vf lf rf) = GroupAlphaE bp vf lf (rf . h)
 contramapGroupAlpha h (GroupAlphaCW bp cwvf lf rf) = GroupAlphaCW bp cwvf lf (rf . h)
 contramapGroupAlpha h (GroupAlphaTD bp cwtd cwv lf rf) = GroupAlphaTD bp cwtd cwv lf (rf . h)
@@ -218,26 +217,26 @@ data Alpha k et where
   BinaryAlpha :: SB.GroupTypeTag k -> (k -> Double) -> Alpha k SL.EReal
 -}
 
-zeroOrderAlpha :: SB.BuildParameter SL.EReal -> GroupAlpha i d k SL.EReal
+zeroOrderAlpha :: SB.BuildParameter SL.EReal -> GroupAlpha k SL.EReal
 zeroOrderAlpha bp = GroupAlphaE bp f lf pf where
-  f :: forall i a . SL.RealE -> SB.RowTypeTag i a -> SL.VectorE
+  f :: forall a . SL.RealE -> SB.RowTypeTag a -> SL.VectorE
   f aE _ = SF.scalarCVec aE
   lf =  SRP.parseScalar (SB.bParameterName bp)
   pf _ s =  Right $ SRP.getScalar (fmap CS.mean s)
 
-binarySI :: Maybe Text -> SB.GroupTypeTag k -> (k -> Double) -> (forall i a . SB.RowTypeTag i a -> SL.CodeWriter SL.VectorE)
+binarySI :: Maybe Text -> SB.GroupTypeTag k -> (k -> Double) -> (forall a . SB.RowTypeTag a -> SL.CodeWriter SL.VectorE)
 binarySI prefixM gtt _kScale = tdCW where
-  indexVec :: SB.RowTypeTag i a -> SL.VectorE
+  indexVec :: SB.RowTypeTag a -> SL.VectorE
   indexVec rtt = SF.to_vector (SB.dataByGroupIndexE rtt gtt)
   prefixed t = maybe t (<> "_" <> t) prefixM
-  splitIndexNDS :: SB.RowTypeTag i a -> SL.NamedDeclSpec SL.ECVec
+  splitIndexNDS :: SB.RowTypeTag a -> SL.NamedDeclSpec SL.ECVec
   splitIndexNDS rtt = SL.NamedDeclSpec (prefixed "splitIndex_" <> SB.taggedGroupName gtt <> "_" <> SB.dataSetName rtt) $ SL.vectorSpec (SB.dataSetSizeE rtt)
-  tdCW :: SB.RowTypeTag i a -> SL.CodeWriter SL.VectorE
+  tdCW :: SB.RowTypeTag a -> SL.CodeWriter SL.VectorE
   tdCW rtt = SL.declareRHSNW (splitIndexNDS rtt) $ SL.realE 2 `SL.timesE` (SL.realE 1.5 `SL.minusE` indexVec rtt)
 
-binaryAlpha :: Maybe Text -> SB.GroupTypeTag k -> (k-> Double) -> SB.BuildParameter SL.EReal -> GroupAlpha i d k SL.EReal
+binaryAlpha :: Maybe Text -> SB.GroupTypeTag k -> (k-> Double) -> SB.BuildParameter SL.EReal -> GroupAlpha k SL.EReal
 binaryAlpha prefixM gtt kScale bp = GroupAlphaTD bp tdCW f lf pf where
-  tdCW :: forall i a . SB.RowTypeTag i a -> SL.CodeWriter SL.VectorE
+  tdCW :: forall a . SB.RowTypeTag a -> SL.CodeWriter SL.VectorE
   tdCW = binarySI prefixM gtt kScale
 {-
   indexVec :: SB.RowTypeTag a -> SL.VectorE
@@ -248,17 +247,17 @@ binaryAlpha prefixM gtt kScale bp = GroupAlphaTD bp tdCW f lf pf where
   tdCW :: SB.RowTypeTag a -> SL.CodeWriter SL.VectorE
   tdCW rtt = SL.declareRHSNW (splitIndexNDS rtt) $ SL.realE 2 `SL.timesE` (SL.realE 1.5 `SL.minusE` indexVec rtt)
 -}
-  f :: SL.VectorE -> SL.UExpr SL.EReal -> SB.RowTypeTag i a -> SL.CodeWriter SL.VectorE
-  f splitIndex aE _rtt = pure $ aE `SL.timesE` splitIndex
+  f :: SL.VectorE -> SL.UExpr SL.EReal -> SB.RowTypeTag a -> SL.CodeWriter SL.VectorE
+  f splitIndex aE _rtt = pure $ aE |*| splitIndex
   lf = SRP.parseScalar (SB.bParameterName bp)
   pf k s = Right $ kScale k * SRP.getScalar (fmap CS.mean s)
 
 safeIndexVector :: V.Vector a -> Int -> Either Text a
 safeIndexVector v n = maybe (Left $ "safeIndexVector: bad index=" <> show n) Right $ v V.!? n
 
-firstOrderAlpha :: SB.GroupTypeTag k -> (k -> Either Text Int) -> SB.BuildParameter SL.ECVec -> GroupAlpha i d k SL.ECVec
+firstOrderAlpha :: SB.GroupTypeTag k -> (k -> Either Text Int) -> SB.BuildParameter SL.ECVec -> GroupAlpha k SL.ECVec
 firstOrderAlpha gtt index bp = GroupAlphaE bp f lf pf where
-  f :: forall i a . SL.VectorE -> SB.RowTypeTag i a -> SL.VectorE
+  f :: forall a . SL.VectorE -> SB.RowTypeTag a -> SL.VectorE
   f aE rtt = SL.indexE SL.s0 (SB.dataByGroupIndexE rtt gtt) aE
   lf = SRP.parse1D (SB.bParameterName bp)
   pf k s = index k >>= safeIndexVector (SRP.getVector $ fmap CS.mean s)
@@ -266,21 +265,21 @@ firstOrderAlpha gtt index bp = GroupAlphaE bp f lf pf where
 -- dummy coding. For now just append 0. Would be helpful to choose where to put the zero so we could
 -- choose which entry to dummy code.
 
-dcPrep :: forall i d k a es . (SB.StanRowInfoC i d es, SB.StanFunctionsC es)
-       => SB.GroupTypeTag k -> k -> SB.RowTypeTag d a -> Eff es (SL.Function SL.ECVec [SL.ECVec, SL.EInt], Int)
-dcPrep gtt controlK rtt = do
+dcPrep :: forall i d k r es . (SB.StanRowInfoC i d es, SB.StanFunctionsC es)
+       => SB.InputDataType i d -> SB.GroupTypeTag k -> k -> SB.RowTypeTag r -> Eff es (SL.Function SL.ECVec [SL.ECVec, SL.EInt], Int)
+dcPrep idt gtt controlK rtt = do
   insert_zero_at <- vectorInsertZeroAtFunction
-  (SB.IndexMap _ kgi _ _) <- SB.indexMap @i rtt gtt
+  (SB.IndexMap _ kgi _ _) <- SB.indexMap idt rtt gtt
   cn <- SB.buildEither $ kgi controlK
   pure (insert_zero_at, cn)
 
-firstOrderAlphaDC :: forall i d k . SB.GroupTypeTag k
+firstOrderAlphaDC :: SB.GroupTypeTag k
                   -> (k -> Either Text Int)
                   -> k
                   -> SB.BuildParameter SL.ECVec
-                  -> GroupAlpha i d k SL.ECVec
-firstOrderAlphaDC gtt index controlK bp = GroupAlphaPrep bp (dcPrep @i gtt controlK) f lf pf where
-  f :: forall d1 a . (SL.Function SL.ECVec [SL.ECVec, SL.EInt], Int) -> SL.VectorE -> SB.RowTypeTag d1 a -> SL.CodeWriter SL.VectorE
+                  -> GroupAlpha k SL.ECVec
+firstOrderAlphaDC gtt index controlK bp = GroupAlphaPrep bp (\idt -> dcPrep idt gtt controlK) f lf pf where
+  f :: forall a . (SL.Function SL.ECVec [SL.ECVec, SL.EInt], Int) -> SL.VectorE -> SB.RowTypeTag a -> SL.CodeWriter SL.VectorE
   f (insert_zero_at, cn) aE rtt = do
     let aDCNDS = SL.NamedDeclSpec (SB.bParameterName bp <> "_dc") $ SL.vectorSpec (SB.groupSizeE gtt)
     aDC <- SL.declareRHSNW aDCNDS $ SL.functionE insert_zero_at (aE :> SL.intE cn :> TNil)
@@ -294,19 +293,26 @@ firstOrderAlphaDC gtt index controlK bp = GroupAlphaPrep bp (dcPrep @i gtt contr
       EQ -> pure 0
       GT -> safeIndexVector (SRP.getVector $ fmap CS.mean s) (ik - 1)
 
-secondOrderBinaryDC :: forall i d bk dck . Maybe Text -> Maybe Text -> SB.GroupTypeTag bk -> (bk -> Double)
-                    -> SB.GroupTypeTag dck -> (dck -> Either Text Int) -> dck
+secondOrderBinaryDC :: forall bk dck .
+                    Maybe Text
+                    -> Maybe Text
+                    -> SB.GroupTypeTag bk
+                    -> (bk -> Double)
+                    -> SB.GroupTypeTag dck
+                    -> (dck -> Either Text Int)
+                    -> dck
                     -> SB.BuildParameter SL.ECVec
-                    -> GroupAlpha i d (bk, dck) SL.ECVec
+                    -> GroupAlpha (bk, dck) SL.ECVec
 secondOrderBinaryDC prefixM siPrefixM bTag kScale dcTag index controlK bp = GroupAlphaPrep bp prep f lf pf where
-  tdCW :: forall d1 a . SB.RowTypeTag d1 a -> SL.CodeWriter SL.VectorE
+  tdCW :: forall a . SB.RowTypeTag a -> SL.CodeWriter SL.VectorE
   tdCW = binarySI (siPrefixM <> prefixM) bTag kScale where
-  prep :: (SB.StanRowInfoC i d es, SB.StanFunctionsC es) => SB.RowTypeTag d a -> Eff es (SL.Function SL.ECVec [SL.ECVec, SL.EInt], Int, SL.VectorE)
-  prep rtt = do
-    (izf, index') <- dcPrep @i dcTag controlK rtt
-    td <- tdAsPrep tdCW rtt
+  prep :: (SB.StanRowInfoC i d es, SB.StanFunctionsC es)
+       => SB.InputDataType i d -> SB.RowTypeTag a -> Eff es (SL.Function SL.ECVec [SL.ECVec, SL.EInt], Int, SL.VectorE)
+  prep idt rtt = do
+    (izf, index') <- dcPrep idt dcTag controlK rtt
+    td <- tdAsPrep idt tdCW rtt
     pure $ (izf, index', td)
-  f :: forall d1 a . (SL.Function SL.ECVec [SL.ECVec, SL.EInt], Int, SL.VectorE) -> SL.VectorE -> SB.RowTypeTag d1 a -> SL.CodeWriter SL.VectorE
+  f :: forall a . (SL.Function SL.ECVec [SL.ECVec, SL.EInt], Int, SL.VectorE) -> SL.VectorE -> SB.RowTypeTag a -> SL.CodeWriter SL.VectorE
   f (insertZeroAt, cn, siE) aE rtt = do
     let aDCNDS = SL.NamedDeclSpec (SB.bParameterName bp <> "_dc") $ SL.vectorSpec (SB.groupSizeE dcTag)
         eltTimes = SL.binaryOpE (SL.SElementWise SL.SMultiply)
@@ -344,9 +350,9 @@ secondOrderAlpha :: Maybe Text
                  -> SB.GroupTypeTag k2
                  -> (k2 -> Either Text Int)
                  -> SB.BuildParameter SL.EMat
-                 -> GroupAlpha i d (k1, k2) SL.EMat
+                 -> GroupAlpha (k1, k2) SL.EMat
 secondOrderAlpha prefixM gtt1 index1 gtt2 index2 bp = GroupAlphaCW bp f lf pf where
-  f :: forall i a . SL.MatrixE -> SB.RowTypeTag i a -> SL.CodeWriter SL.VectorE
+  f :: forall a . SL.MatrixE -> SB.RowTypeTag a -> SL.CodeWriter SL.VectorE
   f aM rtt = do
     let index1' = SB.dataByGroupIndexE rtt gtt1
         index2' = SB.dataByGroupIndexE rtt gtt2
@@ -374,9 +380,9 @@ thirdOrderAlpha :: Maybe Text
                 -> SB.GroupTypeTag k3
                 -> (k3 -> Either Text Int)
                 -> SB.BuildParameter (SL.EArray1 SL.EMat)
-                -> GroupAlpha i d (k1, k2, k3) (SL.EArray1 SL.EMat)
+                -> GroupAlpha (k1, k2, k3) (SL.EArray1 SL.EMat)
 thirdOrderAlpha prefixM gtt1 index1 gtt2 index2 gtt3 index3 bp = GroupAlphaCW bp f lf pf where
-  f :: forall i a . SL.ArrayE SL.EMat -> SB.RowTypeTag i a -> SL.CodeWriter SL.VectorE
+  f :: forall a . SL.ArrayE SL.EMat -> SB.RowTypeTag a -> SL.CodeWriter SL.VectorE
   f aM rtt = do
     let prefixed t = maybe t (<> "_" <> t) prefixM
         alphaVNDS = SL.NamedDeclSpec (prefixed "aVec_" <> SB.taggedGroupName gtt1 <> "_" <> SB.taggedGroupName gtt2 <> "_" <> SB.taggedGroupName gtt3)
@@ -397,25 +403,27 @@ thirdOrderAlpha prefixM gtt1 index1 gtt2 index2 gtt3 index3 bp = GroupAlphaCW bp
     i3 <- index3 k3
     pure $ flip SRP.getIndexed (i1, i2, i3) $ fmap CS.mean s
 
-secondOrderAlphaDC :: forall i d k1 k2 . Maybe Text
+secondOrderAlphaDC :: forall k1 k2 .
+                   Maybe Text
                    -> SB.GroupTypeTag k1
                    -> (k1 -> Either Text Int, Int)
                    -> SB.GroupTypeTag k2
                    -> (k2 -> Either Text Int, Int)
                    -> (k1, k2)
                    -> SB.BuildParameter SL.ECVec
-                   -> GroupAlpha i d (k1, k2) SL.ECVec
+                   -> GroupAlpha (k1, k2) SL.ECVec
 secondOrderAlphaDC prefixM gtt1 (index1, _sz1) gtt2 (index2 , sz2) (controlK1, controlK2) bp = GroupAlphaPrep bp prep f lf pf where
-  prep :: (SB.StanFunctionsC es, SB.StanRowInfoC i d es) => SB.RowTypeTag d a -> Eff es (SL.Function SL.ECVec [SL.ECVec, SL.EInt], Int, Int)
-  prep rtt = do
+  prep :: (SB.StanFunctionsC es, SB.StanRowInfoC i d es)
+       => SB.InputDataType i d -> SB.RowTypeTag a -> Eff es (SL.Function SL.ECVec [SL.ECVec, SL.EInt], Int, Int)
+  prep idt rtt = do
     insert_zero_at <- vectorInsertZeroAtFunction
-    (SB.IndexMap _ kgi1 _ _) <- SB.indexMap @i rtt gtt1
-    (SB.IndexMap _ kgi2 _ _) <- SB.indexMap @i rtt gtt2
+    (SB.IndexMap _ kgi1 _ _) <- SB.indexMap idt rtt gtt1
+    (SB.IndexMap _ kgi2 _ _) <- SB.indexMap idt rtt gtt2
     cn1 <- SB.buildEither $ kgi1 controlK1
     cn2 <- SB.buildEither $ kgi2 controlK2
     pure (insert_zero_at, cn1, cn2)
 
-  f :: forall d1 a . (SL.Function SL.ECVec [SL.ECVec, SL.EInt], Int, Int) -> SL.VectorE -> SB.RowTypeTag d1 a -> SL.CodeWriter SL.VectorE
+  f :: forall a . (SL.Function SL.ECVec [SL.ECVec, SL.EInt], Int, Int) -> SL.VectorE -> SB.RowTypeTag a -> SL.CodeWriter SL.VectorE
   f (insert_zero_at, cn1, cn2) aV rtt = do
     let gs1E = SB.groupSizeE gtt1
         gs2E = SB.groupSizeE gtt2
@@ -455,7 +463,7 @@ secondOrderAlphaDC prefixM gtt1 (index1, _sz1) gtt2 (index2 , sz2) (controlK1, c
       EQ -> pure 0
       GT -> safeIndexVector (SRP.getVector $ fmap CS.mean s) (i - 1)
 
-thirdOrderAlphaDC :: forall i d k1 k2 k3 . SB.GroupTypeTag k1
+thirdOrderAlphaDC :: forall k1 k2 k3 . SB.GroupTypeTag k1
                   -> (k1 -> Either Text Int, Int)
                   -> SB.GroupTypeTag k2
                   -> (k2 -> Either Text Int, Int)
@@ -463,20 +471,21 @@ thirdOrderAlphaDC :: forall i d k1 k2 k3 . SB.GroupTypeTag k1
                   -> (k3 -> Either Text Int, Int)
                   -> (k1, k2, k3)
                   -> SB.BuildParameter SL.ECVec
-                  -> GroupAlpha i d (k1, k2, k3) SL.ECVec
+                  -> GroupAlpha (k1, k2, k3) SL.ECVec
 thirdOrderAlphaDC gtt1 (index1, _sz1) gtt2 (index2, sz2) gtt3 (index3, sz3) (controlK1, controlK2, controlK3) bp = GroupAlphaPrep bp prep f lf pf where
-  prep ::  (SB.StanFunctionsC es, SB.StanRowInfoC i d es) => SB.RowTypeTag d a -> Eff es (SL.Function SL.ECVec [SL.ECVec, SL.EInt], Int, Int, Int)
-  prep rtt = do
+  prep ::  (SB.StanFunctionsC es, SB.StanRowInfoC i d es)
+       => SB.InputDataType i d -> SB.RowTypeTag a -> Eff es (SL.Function SL.ECVec [SL.ECVec, SL.EInt], Int, Int, Int)
+  prep idt rtt = do
     insert_zero_at <- vectorInsertZeroAtFunction
-    (SB.IndexMap _ kgi1 _ _) <- SB.indexMap @i rtt gtt1
-    (SB.IndexMap _ kgi2 _ _) <- SB.indexMap @i rtt gtt2
-    (SB.IndexMap _ kgi3 _ _) <- SB.indexMap @i rtt gtt3
+    (SB.IndexMap _ kgi1 _ _) <- SB.indexMap idt rtt gtt1
+    (SB.IndexMap _ kgi2 _ _) <- SB.indexMap idt rtt gtt2
+    (SB.IndexMap _ kgi3 _ _) <- SB.indexMap idt rtt gtt3
     cn1 <- SB.buildEither $ kgi1 controlK1
     cn2 <- SB.buildEither $ kgi2 controlK2
     cn3 <- SB.buildEither $ kgi3 controlK3
     pure (insert_zero_at, cn1, cn2, cn3)
 
-  f :: forall d1 a . (SL.Function SL.ECVec [SL.ECVec, SL.EInt], Int, Int, Int) -> SL.VectorE -> SB.RowTypeTag d1 a -> SL.CodeWriter SL.VectorE
+  f :: forall a . (SL.Function SL.ECVec [SL.ECVec, SL.EInt], Int, Int, Int) -> SL.VectorE -> SB.RowTypeTag a -> SL.CodeWriter SL.VectorE
   f (insert_zero_at, cn1, cn2, cn3) aV rtt = do
     let gs1E = SB.groupSizeE gtt1
         gs2E = SB.groupSizeE gtt2

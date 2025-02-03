@@ -183,9 +183,10 @@ getRTT idt t = do
 withRowInfo :: forall i d es y r . EffS.State (SBC.RowInfos i d) :> es
             => Eff es y
             -> (forall z . SBC.RowInfo z r -> Eff es y)
+            -> SBC.InputDataType i d
             -> SBC.RowTypeTag r
             -> Eff es y
-withRowInfo missing presentF rtt = EffS.get @(SBC.RowInfos i d) >>= maybe missing presentF . DHash.lookup rtt . SBC.unRowInfos
+withRowInfo missing presentF _idt rtt = EffS.get @(SBC.RowInfos i d) >>= maybe missing presentF . DHash.lookup rtt . SBC.unRowInfos
 {-
 varScopeBlock :: SLP.StanBlock -> SBC.StanBuilderM md gq ()
 varScopeBlock sb = case sb of

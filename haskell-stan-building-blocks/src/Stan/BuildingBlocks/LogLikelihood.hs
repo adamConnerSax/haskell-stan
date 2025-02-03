@@ -30,7 +30,7 @@ import qualified Data.Dependent.HashMap as DHash
 import Effectful (Eff)
 
 generateLogLikelihood :: SB.StanCodeC es
-                      => SB.RowTypeTag i r
+                      => SB.RowTypeTag r
                       -> SBD.StanDist t pts rts
                       -> SL.CodeWriter (SL.IntE -> SL.ExprList pts)
                       -> SL.CodeWriter (SL.IntE -> SL.UExpr t)
@@ -51,19 +51,19 @@ newtype LLDetailsList r = LLDetailsList [LLDetails r]
 addDetailsLists :: LLDetailsList r -> LLDetailsList r -> LLDetailsList r
 addDetailsLists (LLDetailsList x) (LLDetailsList y) = LLDetailsList (x <> y)
 
-type LLSet i = DHash.DHashMap (SB.RowTypeTag i) LLDetailsList
+type LLSet = DHash.DHashMap SB.RowTypeTag LLDetailsList
 
-emptyLLSet :: LLSet i
+emptyLLSet :: LLSet
 emptyLLSet = DHash.empty
 
-addToLLSet :: SB.RowTypeTag i r -> LLDetails r -> LLSet i  -> LLSet i
+addToLLSet :: SB.RowTypeTag r -> LLDetails r -> LLSet  -> LLSet
 addToLLSet rtt d llSet = DHash.insertWith addDetailsLists rtt (LLDetailsList [d]) llSet
 
-mergeLLSets ::  LLSet i -> LLSet i -> LLSet i
+mergeLLSets ::  LLSet -> LLSet -> LLSet
 mergeLLSets = DHash.unionWith addDetailsLists
 
 -- we return RowTypeTag from doOne so that DHash traversal can infer types, I think.
-generateLogLikelihood' :: forall i es . SB.StanCodeC es => LLSet i -> Eff es ()
+generateLogLikelihood' :: forall es . SB.StanCodeC es => LLSet -> Eff es ()
 generateLogLikelihood' llSet =  SB.inBlock SL.SBLogLikelihood $ do
   let prependSizeName rtt (LLDetailsList ds) ls = Prelude.replicate (Prelude.length ds) (SB.dataSetSizeName rtt) ++ ls
   llSizeListNE <- case nonEmpty (DHash.foldrWithKey prependSizeName [] llSet) of
@@ -72,7 +72,7 @@ generateLogLikelihood' llSet =  SB.inBlock SL.SBLogLikelihood $ do
   let namedIntE n = SL.namedE n SL.SInt
       llSizeE = SL.multiOpE SL.SAdd $ fmap namedIntE llSizeListNE
   logLikE <- SB.addFromCodeWriter $ SL.declareNW $ SL.NamedDeclSpec "log_lik" $ SL.vectorSpec llSizeE
-  let doOne :: SB.RowTypeTag i a -> LLDetails a -> StateT [SL.UExpr SL.EInt] (Eff es) (SB.RowTypeTag i a)
+  let doOne :: SB.RowTypeTag a -> LLDetails a -> StateT [SL.UExpr SL.EInt] (Eff es) (SB.RowTypeTag a)
       doOne rtt (LLDetails df pFCW yFCW) = do
         prevSizes <- get
         let --sizeE =  SL.multiOpE SL.SAdd $ namedIntE "n" :| prevSizes
@@ -83,7 +83,7 @@ generateLogLikelihood' llSet =  SB.inBlock SL.SBLogLikelihood $ do
             $ \nE -> SL.sliceE SL.s0 nE logLikE `SL.assign` df (yF nE) (pF nE)
         put $ SL.namedE (SB.dataSetSizeName rtt) SL.SInt: prevSizes
         pure rtt
-      doList :: SB.RowTypeTag i a -> LLDetailsList a -> StateT [SL.UExpr SL.EInt] (Eff es) (SB.RowTypeTag i a)
+      doList :: SB.RowTypeTag a -> LLDetailsList a -> StateT [SL.UExpr SL.EInt] (Eff es) (SB.RowTypeTag a)
       doList rtt (LLDetailsList lls) = traverse_ (doOne rtt) lls >> pure rtt
   _ <- evalStateT (DHash.traverseWithKey doList llSet) []
   pure ()

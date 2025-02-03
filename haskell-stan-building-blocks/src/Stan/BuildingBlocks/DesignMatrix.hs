@@ -131,7 +131,7 @@ instance  (Bounded a, Enum a, Bounded b, Enum b, Bounded c, Enum c) => Enum (BEP
   fromEnum = fromEnum . toNested2
 
 -- first argument, if set, will encode as that is all zeroes.
-boundedEnumRowFunc :: forall r k.(Enum k, Bounded k, Eq k) => Maybe k -> (r -> k) -> (Int, r -> V.Vector Double)
+boundedEnumRowFunc :: forall r k . (Enum k, Bounded k, Eq k) => Maybe k -> (r -> k) -> (Int, r -> V.Vector Double)
 boundedEnumRowFunc encodeAsZerosM rToKey = case numKeys of
   1 -> error "Single element enum given to boundedEnumRowFunc"
   2 -> binary
@@ -222,8 +222,8 @@ designMatrixPartIndexName dmr dmrp = "I_" <> dmName dmr <> "_" <> dmrpName dmrp
 
 -- declares S_DesignName_PartName (size of part) and I_DesignName_PartName (starting index of part) and for all parts of design matrix row
 addDesignMatrixIndexes :: forall i d r es . SB.StanConstJsonC i d es
-                       => SB.InputDataType i d -> SB.RowTypeTag r -> DesignMatrixRow r -> Eff es [(DesignMatrixRowPart r, SL.UExpr SL.EInt, SL.UExpr SL.EInt)]
-addDesignMatrixIndexes idt rtt dmr = do
+                       => SB.InputDataType i d -> DesignMatrixRow r -> Eff es [(DesignMatrixRowPart r, SL.UExpr SL.EInt, SL.UExpr SL.EInt)]
+addDesignMatrixIndexes idt dmr = do
   let addEach (rp, gSize, gStart) = do
 --        let sizeName = dmName dmr <> "_" <> gName
         se <- SB.addFixedIntJson SB.ErrIfDuplicate idt (designMatrixPartSizeName dmr rp) Nothing gSize
