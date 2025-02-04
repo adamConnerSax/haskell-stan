@@ -103,7 +103,7 @@ flattenACW :: (ParamC t)
 flattenACW ds e eFlat =
   let flatten x =  SF.to_vector x
   in case ds of
-    SL.MatrixSpec SL.StanMatrix _ _ _ -> SL.addStmt $ eFlat SL.|=| flatten e
+    SL.MatrixSpec SL.StanMatrix _ _ _ -> SL.addStmt $ eFlat |=| flatten e
     SL.ArraySpec DT.SS arrDims mds -> do
       case mds of
         SL.MatrixSpec SL.StanMatrix _ _ _ -> flattenLoop "k" arrDims eFlat e
@@ -144,7 +144,7 @@ unFlattenACW :: SL.DeclSpec SL.UExpr t -> SL.UExpr (FlatParamT t) -> SL.UExpr t 
 unFlattenACW ds fe e = do
   let unFlatten x rowsE colsE = SF.vecToMatrix x rowsE colsE
   case ds of
-    SL.MatrixSpec SL.StanMatrix rowsE colsE _ -> SL.addStmt (e SL.|=| unFlatten fe rowsE colsE)
+    SL.MatrixSpec SL.StanMatrix rowsE colsE _ -> SL.addStmt (e |=| unFlatten fe rowsE colsE)
     SL.ArraySpec DT.SS arrDims mds -> case mds of
       SL.MatrixSpec SL.StanMatrix rowsE colsE _ -> unFlattenLoop "k" rowsE colsE arrDims e fe
       _ -> error "unflattenACW: Given array type of something other than matrices!"
@@ -318,7 +318,7 @@ nonCentered ds ncE muE sigmaE rawE = do
   let ncF :: SL.ExprList '[SL.ECVec, SL.ECVec] -> SL.VectorE
       ncF (mu :> raw :> TNil) = mu |+| (raw |.*| sigmaE)
   case ds of
-    SL.VectorSpec SL.StanVector _ _ -> SL.addStmt $ ncE SL.|=| ncF (muE :> rawE :> TNil)
+    SL.VectorSpec SL.StanVector _ _ -> SL.addStmt $ ncE |=| ncF (muE :> rawE :> TNil)
     SL.ArraySpec DT.SS arrDims mds -> case mds of
       SL.VectorSpec SL.StanVector _ _ -> do
         SBBA.applyToArrayOf' "k" ncF arrDims (SBBA.ArrayWrapper muE :> SBBA.ArrayWrapper rawE :> TNil) ncE

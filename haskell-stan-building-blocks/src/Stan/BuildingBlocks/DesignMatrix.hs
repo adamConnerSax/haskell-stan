@@ -251,7 +251,7 @@ splitToGroupVar (dmrp, se, ie) tse sn = do
         SB.addStmtToCode
           $ SL.for "k" (SL.SpecificNumbered (SL.intE 1) splitVarRowsE)
           $ \ke -> let atk = SL.sliceE SL.s0 ke
-                   in atk xe SL.|=| segment (atk tse)
+                   in atk xe |=| segment (atk tse)
         pure xe
       _ -> SB.buildError "DesignMatrix.splitToGroupVar: Can only split vectors, 1d arrays of vectors, or matrices."
     SL.SMat -> SB.addFromCodeWriter $ SL.declareRHSNW (SL.NamedDeclSpec newVarName $ SL.matrixSpec splitVarRowsE se) $ block tse
@@ -394,7 +394,7 @@ shiftDataMatrixFunction =  do
           let colk :: SL.UExpr q -> SL.UExpr (SL.Sliced SL.N1 q)
               colk = SL.sliceE SL.s1 ke
               atk = SL.sliceE SL.s0 ke
-          in colk newMatrix SL.|=| (colk m |-| atk means)
+          in colk newMatrix |=| (colk m |-| atk means)
     return newMatrix
 
 
@@ -410,7 +410,7 @@ shiftAndScaleDataMatrixFunction =  do
           let colk :: SL.UExpr q -> SL.UExpr (SL.Sliced SL.N1 q)
               colk = SL.sliceE SL.s1 ke
               atk = SL.sliceE SL.s0 ke
-          in colk newMatrix SL.|=| ((colk m |-| atk means) |/| atk sds)
+          in colk newMatrix |=| ((colk m |-| atk means) |/| atk sds)
     return newMatrix
 
 centerDataMatrix :: (SB.StanFunctionsC es, SB.StanCodeC es)
@@ -441,8 +441,8 @@ centerDataMatrix dms m mwgtsV namePrefix = do
         let kCol = SL.sliceE SL.s1 ke
             atk = SL.sliceE SL.s0 ke
         mv <- SL.declareRHSNW (SL.NamedDeclSpec "mv" $ SL.tuple2Spec SL.realSpec SL.realSpec) $ vecMVF (kCol m)
-        SL.addStmt $ atk mVec SL.|=| (SL.fstRef mv)
-        SL.addStmt $ atk sVec SL.|=| SL.functionE fixSDZero (SF.sqrt (SL.sndRef mv) :> TNil)
+        SL.addStmt $ atk mVec |=| (SL.fstRef mv)
+        SL.addStmt $ atk sVec |=| SL.functionE fixSDZero (SF.sqrt (SL.sndRef mv) :> TNil)
       shiftAndScaleF <- shiftAndScaleDataMatrixFunction
       let stdize x = SL.functionE shiftAndScaleF (x :> mVec :> sVec :> TNil)
       mStd <- SB.addFromCodeWriter
@@ -464,7 +464,7 @@ centerDataMatrix dms m mwgtsV namePrefix = do
         let kCol = SL.sliceE SL.s1 ke
             atk = SL.sliceE SL.s0 ke
         mv <- SL.declareRHSNW (SL.NamedDeclSpec "mv" $ SL.tuple2Spec SL.realSpec SL.realSpec) $ vecMVF (kCol m)
-        SL.addStmt $ atk mVec SL.|=| (SL.fstRef mv)
+        SL.addStmt $ atk mVec |=| (SL.fstRef mv)
       shiftF <- shiftDataMatrixFunction
       let centered x = SL.functionE shiftF (x :> mVec :> TNil)
       mCentered <- SB.addFromCodeWriter

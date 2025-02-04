@@ -22,6 +22,7 @@ module Stan.BuildingBlocks.ArrayHelpers
 where
 
 import qualified Stan.Language as SL
+import Stan.Functions.Operators
 import Stan.Language.Recursion (hfmap)
 import Stan.Language (TypedList(..))
 
@@ -60,7 +61,7 @@ applyToArrayOf' counterPrefix eltF arrDims es1 e2 = do
     $ \dimEs
       -> case SL.getFESAProof (SL.fesaProofI @SL.EInt (DT.snat @n)) of
            Refl -> let vecIndexes = SL.sameTypedListToVec dimEs
-                   in SL.sliceArrayAll @n e2 vecIndexes SL.|=| eltF (sliceArrayListAll @n vecIndexes es1)
+                   in SL.sliceArrayAll @n e2 vecIndexes |=| eltF (sliceArrayListAll @n vecIndexes es1)
 
 
 -- apply a function taking one argument to an array of that type, producing an array of results

@@ -353,7 +353,7 @@ secondOrderAlpha prefixM gtt1 index1 gtt2 index2 bp = GroupAlphaCW bp f lf pf wh
     aV <- SL.declareNW alphaVNDS
     SL.addStmt
       $ SL.for "n" (SL.SpecificNumbered (SL.intE 1) $ SB.dataSetSizeE rtt)
-      $ \nE -> (aV `SL.at` nE) SL.|=| SL.mAt reIndexedAlpha nE nE
+      $ \nE -> (aV !! nE) |=| SL.mAt reIndexedAlpha nE nE
     pure aV
   lf = SRP.parse2D (SB.bParameterName bp)
   pf (k1, k2) s = do
@@ -383,7 +383,7 @@ thirdOrderAlpha prefixM gtt1 index1 gtt2 index2 gtt3 index3 bp = GroupAlphaCW bp
     aV <- SL.declareNW alphaVNDS
     SL.addStmt
       $ SL.for "n" (SL.SpecificNumbered (SL.intE 1) $ SB.dataSetSizeE rtt)
-      $ \nE -> (aV `SL.at` nE) SL.|=| SL.mAt (reIndexedAlpha `SL.at` nE) nE nE
+      $ \nE -> (aV !! nE) |=| SL.mAt (reIndexedAlpha !! nE) nE nE
     pure aV
   lf = SRP.parse3D (SB.bParameterName bp)
   pf (k1, k2, k3) s =  do
@@ -428,9 +428,9 @@ secondOrderAlphaDC prefixM gtt1 (index1, _sz1) gtt2 (index2 , sz2) (controlK1, c
       wzero <- SL.declareRHSNW adcNDS $ SL.functionE insert_zero_at (aV :> czE :> TNil)
       SL.addStmt $ SL.for "k1" (SL.SpecificNumbered (SL.intE 1) gs1E)
           $ \k1 -> SL.for "k2" (SL.SpecificNumbered (SL.intE 1) gs2E)
-               $ \k2 -> SL.mAt am k1 k2 SL.|=|
+               $ \k2 -> SL.mAt am k1 k2 |=|
                         (SL.condE
-                          ((k1 |/=| SL.intE cn1) <||> (k2 |/=| SL.intE cn2))
+                          ((k1 |!=| SL.intE cn1) <||> (k2 |!=| SL.intE cn2))
                           (wzero !! (((k1 |-| SL.intE 1) |*| gs2E) |+| k2))
                           (SL.realE 0)
                         )
@@ -493,9 +493,9 @@ thirdOrderAlphaDC gtt1 (index1, _sz1) gtt2 (index2, sz2) gtt3 (index3, sz3) (con
       SL.addStmt $ SL.for "k1" (SL.SpecificNumbered (SL.intE 1) gs1E)
           $ \k1 -> SL.for "k2" (SL.SpecificNumbered (SL.intE 1) gs2E)
                $ \k2 -> SL.for "k3" (SL.SpecificNumbered (SL.intE 1) gs3E)
-                         $ \k3 -> SL.mAt (am !! k1) k2 k3 SL.|=|
+                         $ \k3 -> SL.mAt (am !! k1) k2 k3 |=|
                                   (SL.condE
-                                    ((k1 |/=| SL.intE cn1) <||> (k2 |/=| SL.intE cn2) <||> (k3 |/=| SL.intE cn3))
+                                    ((k1 |!=| SL.intE cn1) <||> (k2 |!=| SL.intE cn2) <||> (k3 |!=| SL.intE cn3))
                                     (wzero !! ((k1 |-| SL.intE 1) |*| gs2E |*| gs3E)
                                      |+| ((k2 |-| SL.intE 1) |*| gs3E)
                                       |+| k3)

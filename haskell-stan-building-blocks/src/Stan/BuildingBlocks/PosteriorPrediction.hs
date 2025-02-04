@@ -22,6 +22,7 @@ where
 import Prelude hiding (sum, All)
 
 import qualified Stan.Language as SL
+import Stan.Functions.Operators
 import qualified Stan.Builder as SB
 import qualified Stan.BuildingBlocks.Distributions as SBD
 
@@ -49,7 +50,7 @@ generatePosteriorPrediction' rtt nds rngF psFCW f = SB.inBlock SL.SBPosteriorPre
     psF <- psFCW
     SL.addStmt
       $ SL.for "n" (SL.SpecificNumbered (SL.intE 1) (SL.namedE (SB.dataSetSizeName rtt) SL.SInt))
-      $ \nE -> SL.sliceE SL.s0 nE ppE SL.|=| f nE (rngF psF nE)
+      $ \nE -> SL.sliceE SL.s0 nE ppE |=| f nE (rngF psF nE)
     return ppE
 
 generatePosteriorPredictionV' :: SB.StanCodeC es
@@ -64,7 +65,7 @@ generatePosteriorPredictionV' nds sDist psMCW f = SB.inBlock SL.SBPosteriorPredi
       pp <- SB.addFromCodeWriter $ SL.declareNW nds
       SB.addScopedFromCodeWriter $ do
         ps <- psCW
-        SL.addStmt $ pp SL.|=| f (SBD.familyRNG sDist ps)
+        SL.addStmt $ pp |=| f (SBD.familyRNG sDist ps)
         pure pp
     SL.NoCW ps -> SB.addFromCodeWriter $ SL.declareRHSNW nds $ f (SBD.familyRNG sDist ps)
 

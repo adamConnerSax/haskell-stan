@@ -4,10 +4,10 @@
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE ImpredicativeTypes #-}
-{-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE PolyKinds #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TypeFamilies #-}
+{-# LANGUAGE TypeOperators #-}
 {-# LANGUAGE TypeSynonymInstances #-}
 {-# LANGUAGE UndecidableInstances #-}
 
@@ -26,6 +26,8 @@ import qualified Stan.Language.Expression as SLE
 import qualified Stan.Language.Expressions as SLE
 import qualified Stan.Language.Operations as SLO
 import qualified Stan.Language.Indexing as SLO
+import qualified Stan.Language.Statement as SLS
+import qualified Stan.Language.Statements as SLS
 
 --vectorizedRealFunction :: SFC.VectorizedReal t => Text -> SLE.UExpr t -> SLE.UExpr t
 --vectorizedRealFunction fName t = SLE.functionE (SLF.simpleFunction fName) (t :> TNil)
@@ -37,7 +39,7 @@ infix 4 |<|, |<=|, |>|, |>=|
 infixl 5 |+|, |-|, |.+|, |.-|
 infixl 6 |*|, |/|, |%|, |%/%|, |.*|, |./|
 infixr 7 |^|, |.^|
-
+infix 8 |=|, |+=|, |-=|, |*=|, |/=|, |~|
 
 (|+|) :: SLE.UExpr ta -> SLE.UExpr tb -> SLE.UExpr (SLO.BinaryResultT SLO.BAdd ta tb)
 (|+|) = SLE.binaryOpE SLO.SAdd
@@ -81,9 +83,6 @@ infixr 7 |^|, |.^|
 (|!=|) :: SLE.UExpr ta -> SLE.UExpr tb -> SLE.UExpr (SLO.BoolResultT SLO.BNEq ta tb)
 (|!=|) = SLE.boolOpE SLO.SNEq
 
-(|/=|) :: SLE.UExpr ta -> SLE.UExpr tb -> SLE.UExpr (SLO.BoolResultT SLO.BNEq ta tb)
-(|/=|) = SLE.boolOpE SLO.SNEq
-
 (|<|) :: SLE.UExpr ta -> SLE.UExpr tb -> SLE.UExpr (SLO.BoolResultT SLO.BLT ta tb)
 (|<|) = SLE.boolOpE SLO.SLT
 
@@ -102,3 +101,21 @@ infixr 7 |^|, |.^|
 
 (!!) ::  SLE.UExpr t -> SLE.IntE -> SLE.UExpr (SLO.Sliced SLO.N0 t)
 (!!) = SLE.at
+
+(|=|) :: SLE.UExpr t -> SLE.UExpr t -> SLS.UStmt
+(|=|) = SLS.assign
+
+(|+=|) ::  (ta ~ SLO.BinaryResultT SLO.BAdd ta tb) => SLE.UExpr ta -> SLE.UExpr tb -> SLS.UStmt
+(|+=|) = SLS.opAssign SLO.SAdd
+
+(|-=|) ::  (ta ~ SLO.BinaryResultT SLO.BSubtract ta tb) => SLE.UExpr ta -> SLE.UExpr tb -> SLS.UStmt
+(|-=|) = SLS.opAssign SLO.SSubtract
+
+(|*=|) ::  (ta ~ SLO.BinaryResultT SLO.BMultiply ta tb) => SLE.UExpr ta -> SLE.UExpr tb -> SLS.UStmt
+(|*=|) = SLS.opAssign SLO.SMultiply
+
+(|/=|) ::  (ta ~ SLO.BinaryResultT SLO.BDivide ta tb) => SLE.UExpr ta -> SLE.UExpr tb -> SLS.UStmt
+(|/=|) = SLS.opAssign SLO.SDivide
+
+(|~|) ::  SLE.UExpr t -> SLS.DensityWithArgs t  -> SLS.UStmt
+(|~|) = SLS.sampleW

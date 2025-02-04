@@ -56,7 +56,7 @@ diagVectorFunction = do
     $ SL.simpleFunctionBody f "out_vec" dsF
     $ \rvE (vs :> n :> TNil) ->
         [SL.for "n" (SL.SpecificNumbered (SL.intE 1) n) $ \nE ->
-            let slice = SL.slice0 nE in slice rvE SL.|=| slice (SL.slice0 nE vs)]
+            let slice = SL.slice0 nE in slice rvE |=| slice (SL.slice0 nE vs)]
 
   return f
 
@@ -81,9 +81,9 @@ weightedMeanVarianceFunction = do
     mv <- SL.declareW "meanVar" (SL.tuple2Spec SL.realSpec SL.realSpec)
     let mvFst = SL.indexTuple SL.s0 mv
 --    let meanVar i = SL.slice0 (SL.intE i) mv
-    SL.addStmt $  mvFst SL.|=| (SF.sum wgtdXs |/| SF.sum ws)
+    SL.addStmt $  mvFst |=| (SF.sum wgtdXs |/| SF.sum ws)
     y <- SL.declareRHSW "y" (SL.vectorSpec n) $ xs |-| mvFst
-    SL.addStmt $ SL.indexTuple SL.s1 mv SL.|=| (SF.sum (ws |.*| y |.*| y) |/| SF.sum ws)
+    SL.addStmt $ SL.indexTuple SL.s1 mv |=| (SF.sum (ws |.*| y |.*| y) |/| SF.sum ws)
     return mv
 
 unWeightedMeanVarianceFunction :: SB.StanFunctionsC es => Eff es (SL.Function (SL.ETuple [SL.EReal, SL.EReal]) '[SL.ECVec])

@@ -122,7 +122,7 @@ realBinomialLogitRng = do
        samples <- SL.declareNW (SL.NamedDeclSpec "samples" vecSpec)
        SL.addStmt
          $ SL.for "k" (SL.SpecificNumbered (SL.intE 1) sz)
-         $ \k -> (samples `SL.at` k) SL.|=| scalarLogitRng (n `SL.at` k) (lp `SL.at` k)
+         $ \k -> (samples !! k) |=| scalarLogitRng (n !! k) (lp !! k)
        pure samples
      SL.SRVec -> SB.addFunctionOnce f (SL.DataArg "trials" :> SL.Arg "lp" :> TNil)
        $ \ (n :> lp :> TNil) -> SL.cwStmt $ do
@@ -131,7 +131,7 @@ realBinomialLogitRng = do
        samples <- SL.declareNW (SL.NamedDeclSpec "samples" rowVecSpec)
        SL.addStmt
          $ SL.for "k" (SL.SpecificNumbered (SL.intE 1) sz)
-         $ \k -> (samples `SL.at` k) SL.|=| scalarLogitRng (n `SL.at` k) (lp `SL.at` k)
+         $ \k -> (samples !! k) |=| scalarLogitRng (n !! k) (lp !! k)
        pure samples
      SL.SReal -> SB.addFunctionOnce f (SL.DataArg "trials" :> SL.Arg "lp" :> TNil)
        $ \ (n :> lp :> TNil) -> SL.cwStmt $ pure $ scalarLogitRng n lp
@@ -178,7 +178,7 @@ realBinomialLogitRngS_URS = do
     maxB <- SL.declareRHSNW (SL.NamedDeclSpec "maxB" $ SL.realSpec) $ SF.exp $ realBinomialLogitLPDF_S_Expr n k p
     proposal <- SL.declareRHSNW (SL.NamedDeclSpec "proposal" $ SL.realSpec) $ SF.uniform_rng (SL.realE 0) n
     let unacceptable x = SF.uniform_rng (SL.realE 0) maxB |>=| (SF.exp $ realBinomialLogitLPDF_S_Expr n x p)
-    SL.addStmt $ SL.while (unacceptable proposal) $ proposal SL.|=| SF.uniform_rng (SL.realE 0) n
+    SL.addStmt $ SL.while (unacceptable proposal) $ proposal |=| SF.uniform_rng (SL.realE 0) n
     pure proposal
 
 {-

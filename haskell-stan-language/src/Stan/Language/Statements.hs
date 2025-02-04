@@ -55,17 +55,17 @@ module Stan.Language.Statements
   , declareAndAssign
   , declareAndAssignN
   , addToTarget
-  , assign, (|=|)
+  , assign
   , opAssign
-  , plusEq, (+=)
-  , minusEq, (-=)
-  , timesEq, (*=)
-  , divEq, (/=)
+  , plusEq
+  , minusEq
+  , timesEq
+  , divEq
   , DensityWithArgs(..)
   , withDWA
   , target
   , sample
-  , sampleW, (|~|)
+  , sampleW
   , for
   , loopOver
   , ftSized
@@ -297,30 +297,25 @@ declareAndAssignN (NamedDeclSpec vn ds) = declareAndAssign vn ds
 addToTarget :: SLE.UExpr EReal -> SLS.UStmt
 addToTarget = SLR.Fix . SLS.STargetF
 
-assign, (|=|) :: SLE.UExpr t -> SLE.UExpr t -> SLS.UStmt
+assign :: SLE.UExpr t -> SLE.UExpr t -> SLS.UStmt
 assign lhs rhs = SLR.Fix $ SLS.SAssignF lhs rhs
-(|=|) = assign
 
 -- doing it this way avoids using Stans += syntax.  I just expand.
 -- to do otherwise I would have to add a constructor to Stmt
 opAssign :: (ta ~ BinaryResultT bop ta tb) => SBinaryOp bop -> SLE.UExpr ta -> SLE.UExpr tb -> SLS.UStmt
 opAssign op lhs = SLR.Fix . SLS.SOpAssignF op lhs
 
-plusEq, (+=) :: (ta ~ BinaryResultT BAdd ta tb) => SLE.UExpr ta -> SLE.UExpr tb -> SLS.UStmt
+plusEq :: (ta ~ BinaryResultT BAdd ta tb) => SLE.UExpr ta -> SLE.UExpr tb -> SLS.UStmt
 plusEq = opAssign SAdd
-(+=) = opAssign SAdd
 
-minusEq, (-=) :: (ta ~ BinaryResultT BSubtract ta tb) => SLE.UExpr ta -> SLE.UExpr tb -> SLS.UStmt
+minusEq :: (ta ~ BinaryResultT BSubtract ta tb) => SLE.UExpr ta -> SLE.UExpr tb -> SLS.UStmt
 minusEq = opAssign SSubtract
-(-=) = opAssign SSubtract
 
-timesEq, (*=) :: (ta ~ BinaryResultT BMultiply ta tb) => SLE.UExpr ta -> SLE.UExpr tb -> SLS.UStmt
+timesEq :: (ta ~ BinaryResultT BMultiply ta tb) => SLE.UExpr ta -> SLE.UExpr tb -> SLS.UStmt
 timesEq = opAssign SMultiply
-(*=) = opAssign SMultiply
 
-divEq, (/=) :: (ta ~ BinaryResultT BDivide ta tb) => SLE.UExpr ta -> SLE.UExpr tb -> SLS.UStmt
+divEq :: (ta ~ BinaryResultT BDivide ta tb) => SLE.UExpr ta -> SLE.UExpr tb -> SLS.UStmt
 divEq = opAssign SDivide
-(/=) = opAssign SDivide
 
 data DensityWithArgs g where
   DensityWithArgs :: Density g args -> TypedList SLE.UExpr args -> DensityWithArgs g
@@ -334,9 +329,8 @@ target = SLR.Fix . SLS.STargetF
 sample :: SLE.UExpr t -> Density t args -> TypedList SLE.UExpr args -> SLS.UStmt
 sample lhs density = SLR.Fix . SLS.SSampleF lhs density
 
-sampleW, (|~|) :: SLE.UExpr t -> DensityWithArgs t  -> SLS.UStmt
+sampleW :: SLE.UExpr t -> DensityWithArgs t  -> SLS.UStmt
 sampleW ue (DensityWithArgs d al)= SLR.Fix $ SLS.SSampleF ue d al
-ue |~| dwa = sampleW ue dwa
 
 for :: forall t . GenSType (SLS.ForEachSlice t)
     => Text -> SLS.ForType t -> (SLE.UExpr (SLS.ForEachSlice t) -> SLS.UStmt) -> SLS.UStmt

@@ -18,7 +18,6 @@ where
 import Prelude hiding (All)
 import qualified Stan.Builder as SB
 import qualified Stan.Language as SL
-import Stan.Language ((|=|))
 import qualified Stan.Functions as SF
 import Stan.Functions.Operators
 import Stan.Language (TypedList((:>), TNil))
@@ -60,7 +59,7 @@ sumToZeroQRBody (x_raw :> qr :> TNil) = SL.cwStmt $ do
   let fBody i =
         let ati = SL.slice0 i
             atiPlusN = SL.slice0 (i |+| n)
-        in ati x |=| (x_aux |+| ati x_raw |+| ati qr)
+        in (ati x |=| (x_aux |+| ati x_raw |+| ati qr))
            :| [x_aux |=| (x_aux |+| ati x_raw |+| atiPlusN qr)]
   SL.addStmt $ SL.for "i" (SL.SpecificNumbered (SL.intE 1) (n |-| SL.intE 1)) $ SL.grouped . fBody
   SL.addStmt $ x `SL.at` n  |=| x_aux
@@ -82,7 +81,7 @@ sumToZeroQR vName v_stz = do
     $ SL.declareRHSW vName (SL.vectorSpec vecSizeE) $ sumToZeroQRF v_stz qr_v
 
 softSumToZero :: SB.StanFunctionsC es => SL.VectorE -> SL.DensityWithArgs SL.EReal -> Eff es ()
-softSumToZero v dw = SB.addStmtToBlock SL.SBModel $ SF.sum v SL.|~| dw
+softSumToZero v dw = SB.addStmtToBlock SL.SBModel $ SF.sum v |~| dw
 
 -- up to user to insure IndexArray and vector have same size
 weightedSoftSumToZero :: SB.StanFunctionsC es
@@ -93,11 +92,11 @@ weightedSoftSumToZero vName v wgtIndex prior = do
 --  v <- SB.inBlock SB.SBParameters $ SB.stanDeclare varName vecSpec
   weights <- SB.inBlock SL.SBTransformedData $ SB.addFromCodeWriter $ do
     w <- SL.declareRHSW (vName <> "_wgts") vecSpec $ SF.rep_vector (SL.realE 0) vecSize
-    let fb n = SL.slice0 n (SL.indexE SL.s0 wgtIndex w) SL.+= SL.intE 1 :| []
+    let fb n = SL.slice0 n (SL.indexE SL.s0 wgtIndex w) |+=| SL.intE 1 :| []
     SL.addStmt $ SL.for "n" (SL.SpecificNumbered (SL.intE 1) vecSize) $ SL.grouped . fb
-    SL.addStmt $ w SL./= vecSize
+    SL.addStmt $ w |/=| vecSize
     pure w
-  SB.addStmtToBlock SL.SBModel $ SF.dot_product v weights SL.|~| prior
+  SB.addStmtToBlock SL.SBModel $ SF.dot_product v weights |~| prior
   pure ()
 
 data SumToZero = STZNone

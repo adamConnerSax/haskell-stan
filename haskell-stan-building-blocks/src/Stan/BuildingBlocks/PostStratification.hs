@@ -44,8 +44,8 @@ psByGroupFunction wgtsAreData = do
       $ \k ->
           let atk = SL.slice0 k
               indexByPS = SL.indexE SL.s0 grpPSIndex
-          in SL.grouped [atk (indexByPS sumByGroup) SL.+= (atk wgts |*| atk probs)
-                        , atk (indexByPS sumWgts) SL.+= atk wgts
+          in SL.grouped [atk (indexByPS sumByGroup) |+=| (atk wgts |*| atk probs)
+                        , atk (indexByPS sumWgts) |+=| atk wgts
                         ]
     -- we do the division in a loop so we can avoid the divide by zero of empty groups
     SL.addStmt $ SL.for "l" (SL.SpecificNumbered (SL.intE 1) nGrp)
@@ -54,7 +54,7 @@ psByGroupFunction wgtsAreData = do
               sbgl = atl sumByGroup
               swl = atl sumWgts
               z = SL.realE 0
-          in sbgl SL.|=| SL.condE (swl |>| z) (sbgl |/| swl) z
+          in sbgl |=| SL.condE (swl |>| z) (sbgl |/| swl) z
 
 --    SL.addStmt $ sumByGroup `elDivEq` sumWgts
     return sumByGroup
