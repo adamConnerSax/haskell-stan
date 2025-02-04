@@ -55,6 +55,16 @@ type family MapExprTypeToDim (ts :: [SL.EType]) :: [SRP.Dim] where
   MapExprTypeToDim '[] = '[]
   MapExprTypeToDim (et ': ets) = AlphaExprDim et ': MapExprTypeToDim ets
 
+addGroupSizes :: forall i d b es . (SB.StanConstJsonC i d es)
+              => SB.InputDataType i d
+              -> [DSum.DSum SB.GroupTypeTag (GroupFromData b)] -> Eff es ()
+addGroupSizes idt gfds = traverse_ g gfds where
+  f :: forall k r . SB.GroupTypeTag k -> GroupFromData r k -> Eff es ()
+  f gtt gfd = case gfd of
+      GroupFromData _ _ _ s -> SB.addGroup @k idt (SB.taggedGroupName gtt) s >> pure ()
+  g ::  DSum.DSum SB.GroupTypeTag (GroupFromData b) -> Eff es ()
+  g (gtt DSum.:=> gfd) = f gtt gfd
+
 addGroupIndexes :: forall i d a b es . (SB.StanDataBuildersC i d es)
                 => SB.InputDataType i d
                 -> SB.RowTypeTag a
@@ -64,7 +74,7 @@ addGroupIndexes :: forall i d a b es . (SB.StanDataBuildersC i d es)
 addGroupIndexes idt rtt f gfds = traverse_ g gfds where
   g :: DSum.DSum SB.GroupTypeTag (GroupFromData b) -> Eff es ()
   g (gtt DSum.:=> gfd) = do
-    let (GroupFromData _ mi _) = contraGroupFromData f gfd
+    let (GroupFromData _ mi _ _) = contraGroupFromData f gfd
     SB.addGroupIndexForData idt gtt rtt mi
 
 addGroupIntMaps :: forall i d a b es . SB.StanDataBuildersC i d es
@@ -76,7 +86,7 @@ addGroupIntMaps :: forall i d a b es . SB.StanDataBuildersC i d es
 addGroupIntMaps idt rtt f gfds = traverse_ g gfds where
   g :: DSum.DSum SB.GroupTypeTag (GroupFromData b) -> Eff es ()
   g (gtt DSum.:=> gfd) = do
-    let (GroupFromData _ _ gim) = contraGroupFromData f gfd
+    let (GroupFromData _ _ gim _) = contraGroupFromData f gfd
     SB.addGroupIntMapForData idt gtt rtt gim
 
 type AlphaByDataVecC i d es = (SB.StanCodeC es, SB.StanFunctionsC es, SB.StanRowInfoC i d es)
@@ -162,16 +172,26 @@ data PSList :: Type -> [SRP.Dim] -> Type where
 
 type GroupAlphaList k = TypedList (GroupAlpha k)
 
-data GroupFromData r k = GroupFromData { gfdGroup :: r -> k
-                                       , gfdMakeIndex :: SB.MakeIndex r k
-                                       , gfdMakeIntMap :: SB.DataToIntMap r k
-                                       }
+data GroupFromData r k  where
+  GroupFromData :: Typeable k => (r -> k) -> SB.MakeIndex r k -> SB.DataToIntMap r k -> Int -> GroupFromData r k
 
-groupFromDataEnum :: (Show k, Enum k, Bounded k, Ord k) => (r -> k) -> GroupFromData r k
-groupFromDataEnum f = GroupFromData f (SB.makeIndexFromEnum f) (SB.dataToIntMapFromEnum f)
+gfdGroup :: GroupFromData r k -> r -> k
+gfdGroup (GroupFromData f _ _ _) = f
+
+gfdMakeIndex :: GroupFromData r k -> SB.MakeIndex r k
+gfdMakeIndex (GroupFromData _ mi _ _) = mi
+
+gfdMakeIntMap :: GroupFromData r k -> SB.DataToIntMap r k
+gfdMakeIntMap (GroupFromData _ _ dtim _) = dtim
+
+gfdSize :: GroupFromData r k -> Int
+gfdSize (GroupFromData _ _ _ s) = s
+
+groupFromDataEnum :: forall r k . (Typeable k, Show k, Enum k, Bounded k, Ord k) => (r -> k) -> GroupFromData r k
+groupFromDataEnum f = GroupFromData f (SB.makeIndexFromEnum f) (SB.dataToIntMapFromEnum f) (length [(minBound @k) .. (maxBound @k)])
 
 contraGroupFromData :: (a -> b) -> GroupFromData b k -> GroupFromData a k
-contraGroupFromData f (GroupFromData g mi di) = GroupFromData (g . f) (SB.contraMakeIndex f mi) (SB.contraDataToIntMap f di)
+contraGroupFromData f (GroupFromData g mi di s) = GroupFromData (g . f) (SB.contraMakeIndex f mi) (SB.contraDataToIntMap f di) s
 
 data GroupAlpha k t where
   GroupAlphaE :: SB.BuildParameter t
