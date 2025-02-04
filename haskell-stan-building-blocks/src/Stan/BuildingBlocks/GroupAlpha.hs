@@ -190,6 +190,9 @@ gfdSize (GroupFromData _ _ _ s) = s
 groupFromDataEnum :: forall r k . (Typeable k, Show k, Enum k, Bounded k, Ord k) => (r -> k) -> GroupFromData r k
 groupFromDataEnum f = GroupFromData f (SB.makeIndexFromEnum f) (SB.dataToIntMapFromEnum f) (length [(minBound @k) .. (maxBound @k)])
 
+groupFromDataFoldable :: forall r k g . (Foldable g, Typeable k, Show k, Ord k) => (r -> k) -> g k -> GroupFromData r k
+groupFromDataFoldable f ks = GroupFromData f (SB.makeIndexFromFoldable show f ks) (SB.dataToIntMapFromFoldable f ks) (length ks)
+
 contraGroupFromData :: (a -> b) -> GroupFromData b k -> GroupFromData a k
 contraGroupFromData f (GroupFromData g mi di s) = GroupFromData (g . f) (SB.contraMakeIndex f mi) (SB.contraDataToIntMap f di) s
 
