@@ -1,6 +1,8 @@
 .stack-work/*
 *~
 *#
+/data
+/stan
 /dist
 /dist-newstyle
 cabal.project.local
