@@ -37,6 +37,10 @@ import Effectful (Eff)
 
 import qualified GHC.TypeLits as GHC
 
+{-
+NB: The point here is that the setup functions themselves do not require choosing a specific data-set, but instead delegate that to the AlphaByDataVecCW.
+So all data-set specific constraints and arguments should only appear there.
+-}
 
 type family AlphaExprDim (t :: SL.EType) :: SRP.Dim where
   AlphaExprDim SL.EReal = SRP.D0
@@ -75,11 +79,12 @@ addGroupIntMaps idt rtt f gfds = traverse_ g gfds where
     let (GroupFromData _ _ gim) = contraGroupFromData f gfd
     SB.addGroupIntMapForData idt gtt rtt gim
 
-data AlphaByDataVecCW es where
-  AlphaByDataVecCW :: (SB.StanCodeC es, SB.StanParametersC es)
-                   => (forall a . SB.RowTypeTag a -> Eff es (SL.CodeWriter SL.VectorE)) -> AlphaByDataVecCW es
+type AlphaByDataVecC i d es = (SB.StanCodeC es, SB.StanFunctionsC es, SB.StanRowInfoC i d es)
 
-alphaByDataVecCW :: AlphaByDataVecCW es -> SB.RowTypeTag a -> Eff es (SL.CodeWriter SL.VectorE)
+data AlphaByDataVecCW where
+  AlphaByDataVecCW :: (forall i d a es . AlphaByDataVecC i d es  => SB.InputDataType i d -> SB.RowTypeTag a -> Eff es (SL.CodeWriter SL.VectorE)) -> AlphaByDataVecCW
+
+alphaByDataVecCW :: AlphaByDataVecC i d es => AlphaByDataVecCW -> SB.InputDataType i d -> SB.RowTypeTag a -> Eff es (SL.CodeWriter SL.VectorE)
 alphaByDataVecCW (AlphaByDataVecCW f) = f
 
 -- Do one time per model things: add parameters, etc.
@@ -88,29 +93,30 @@ gaSetupBlock = \case
   SB.ModelData -> SL.SBTransformedData
   SB.GQData -> SL.SBTransformedDataGQ
 
-setupAlpha :: forall i d k t es . (SB.StanParametersC es, SB.StanRowInfoC i d es, SB.StanFunctionsC es)
-           => SB.InputDataType i d -> GroupAlpha k t -> Eff es (AlphaByDataVecCW es)
-setupAlpha _idt (GroupAlphaE bp avE _ _) = do
+setupAlpha :: forall k t es . (SB.StanParametersC es)
+           => GroupAlpha k t -> Eff es AlphaByDataVecCW
+setupAlpha (GroupAlphaE bp avE _ _) = do
   aE <- SB.parameterExpr <$> SB.addBuildParameter bp
-  let  f :: SB.RowTypeTag a -> Eff es (SL.CodeWriter SL.VectorE)
-       f rtt = pure $ pure $ avE aE rtt
+  let  f :: SB.InputDataType i d -> SB.RowTypeTag a -> Eff es' (SL.CodeWriter SL.VectorE)
+       f _ rtt = pure $ pure $ avE aE rtt
   pure $ AlphaByDataVecCW $ f
-setupAlpha _idt (GroupAlphaCW bp avCW _ _) = do
+setupAlpha (GroupAlphaCW bp avCW _ _) = do
   aE <- SB.parameterExpr <$> SB.addBuildParameter bp
-  let f :: SB.RowTypeTag a -> Eff es (SL.CodeWriter SL.VectorE)
-      f rtt = pure $ avCW aE rtt
+  let f :: SB.InputDataType i d -> SB.RowTypeTag a -> Eff es' (SL.CodeWriter SL.VectorE)
+      f _ rtt = pure $ avCW aE rtt
   pure $ AlphaByDataVecCW f
-setupAlpha idt (GroupAlphaTD bp tdCW avCW _ _) = do
+setupAlpha (GroupAlphaTD bp tdCW avCW _ _) = do
   aE <- SB.parameterExpr <$> SB.addBuildParameter bp
-  let f :: SB.RowTypeTag a -> Eff es (SL.CodeWriter SL.VectorE)
-      f rtt = do
+  let f :: SB.StanCodeC es' => SB.InputDataType i d -> SB.RowTypeTag a -> Eff es' (SL.CodeWriter SL.VectorE)
+      f idt rtt = do
         td <- SB.inBlock (gaSetupBlock idt) $ SB.addFromCodeWriter $ tdCW rtt
         pure $ avCW td aE rtt
   pure $ AlphaByDataVecCW f
-setupAlpha idt (GroupAlphaPrep bp prep avCW _ _) = do
+setupAlpha (GroupAlphaPrep bp prep avCW _ _) = do
   aE <- SB.parameterExpr <$> SB.addBuildParameter bp
-  let f :: SB.RowTypeTag a -> Eff es (SL.CodeWriter SL.VectorE)
-      f rtt = do
+  let f :: (SB.StanFunctionsC es', SB.StanRowInfoC i d es')
+        => SB.InputDataType i d -> SB.RowTypeTag a -> Eff es' (SL.CodeWriter SL.VectorE)
+      f idt rtt = do
         a <- prep idt rtt
         pure $ avCW a aE rtt
   pure $ AlphaByDataVecCW f
@@ -119,22 +125,23 @@ tdAsPrep :: forall td i d b es . SB.StanCodeC es
          => SB.InputDataType i d -> (SB.RowTypeTag b -> SL.CodeWriter td) -> SB.RowTypeTag b -> Eff es td
 tdAsPrep idt tdCW rtt = SB.inBlock (gaSetupBlock idt) $ SB.addFromCodeWriter $ tdCW rtt
 
---newtype SomeGroupAlpha r = SomeGroupAlpha { someGroupAlpha :: forall t . GroupAlpha r t}
-
 -- do once per data-set things and sum
-setupAlphaSum' :: forall i d k es . (SB.StanParametersC es, SB.StanRowInfoC i d es, SB.StanFunctionsC es)
-               => SB.InputDataType i d -> NonEmpty (Some.Some (GroupAlpha k)) -> Eff es (AlphaByDataVecCW es)
-setupAlphaSum' idt gts = do
-  abdvcws {-:: (SB.StanParametersC es, SB.StanCodeC es) => NonEmpty AlphaByDataVecCW-} <- traverse (\x -> Some.withSome x (setupAlpha idt)) gts
-  let f :: SB.RowTypeTag a -> Eff es (SL.CodeWriter SL.VectorE)
-      f rtt = do
-        x <- traverse (\(AlphaByDataVecCW g) -> g rtt) abdvcws
+setupAlphaSum' :: forall k es . (SB.StanParametersC es)
+                  => NonEmpty (Some.Some (GroupAlpha k)) -> Eff es AlphaByDataVecCW
+setupAlphaSum' gts = do
+  abdvcws {-:: (SB.StanParametersC es, SB.StanCodeC es) => NonEmpty AlphaByDataVecCW-} <- traverse (\x -> Some.withSome x setupAlpha) gts
+  let doOne :: AlphaByDataVecC i d es' => SB.InputDataType i d -> SB.RowTypeTag a -> AlphaByDataVecCW -> Eff es' (SL.CodeWriter SL.VectorE)
+      doOne idt rtt = \case
+        AlphaByDataVecCW g -> g idt rtt
+  let f ::  forall es' i d a . AlphaByDataVecC i d es' => SB.InputDataType i d -> SB.RowTypeTag a -> Eff es' (SL.CodeWriter SL.VectorE)
+      f idt rtt = do
+        x <- traverse (doOne idt rtt) abdvcws
         pure $ fmap (\z -> foldl' (|+|) (head z) (tail z)) $ sequence x
   pure $ AlphaByDataVecCW f
 
-setupAlphaSum :: forall i d k ts es . (SB.StanParametersC es, SB.StanRowInfoC i d es, SB.StanFunctionsC es)
-              => SB.InputDataType i d -> GroupAlphaList k ts -> Eff es (AlphaByDataVecCW es)
-setupAlphaSum idt gs  = maybe emptyErr (setupAlphaSum' idt) $ nonEmpty $ toSomeGroupAlphaList gs where
+setupAlphaSum :: forall k ts es . (SB.StanParametersC es)
+              => GroupAlphaList k ts -> Eff es AlphaByDataVecCW
+setupAlphaSum gs  = maybe emptyErr setupAlphaSum' $ nonEmpty $ toSomeGroupAlphaList gs where
   toSomeGroupAlphaList :: GroupAlphaList k qs -> [Some.Some (GroupAlpha k)]
   toSomeGroupAlphaList TNil = []
   toSomeGroupAlphaList (g :> gs') = Some.mkSome g : toSomeGroupAlphaList gs'
@@ -154,10 +161,6 @@ data PSList :: Type -> [SRP.Dim] -> Type where
   (:+) :: SRP.ParameterStatistics d a -> PSList a ds -> PSList a (d ': ds)
 
 type GroupAlphaList k = TypedList (GroupAlpha k)
-
-
---type FlippedPStatistics a d = SRP.ParameterStatistics d a
-
 
 data GroupFromData r k = GroupFromData { gfdGroup :: r -> k
                                        , gfdMakeIndex :: SB.MakeIndex r k
@@ -212,14 +215,6 @@ contramapGroupAlpha h (GroupAlphaCW bp cwvf lf rf) = GroupAlphaCW bp cwvf lf (rf
 contramapGroupAlpha h (GroupAlphaTD bp cwtd cwv lf rf) = GroupAlphaTD bp cwtd cwv lf (rf . h)
 contramapGroupAlpha h (GroupAlphaPrep bp mp cwv lf rf) = GroupAlphaPrep bp mp cwv lf (rf . h)
 
-{-
-data Alpha k et where
-  Alpha :: Alpha () SL.EReal
-  GroupAlpha :: SB.GroupTypeTag k -> (k -> Either Text Int) -> Alpha k SL.ECVec
-  GroupAlphaDC :: SB.GroupTypeTag k ->  (k -> Either Text Int) -> k -> Alpha k SL.ECVec
-  BinaryAlpha :: SB.GroupTypeTag k -> (k -> Double) -> Alpha k SL.EReal
--}
-
 zeroOrderAlpha :: SB.BuildParameter SL.EReal -> GroupAlpha k SL.EReal
 zeroOrderAlpha bp = GroupAlphaE bp f lf pf where
   f :: forall a . SL.RealE -> SB.RowTypeTag a -> SL.VectorE
@@ -241,15 +236,6 @@ binaryAlpha :: Maybe Text -> SB.GroupTypeTag k -> (k-> Double) -> SB.BuildParame
 binaryAlpha prefixM gtt kScale bp = GroupAlphaTD bp tdCW f lf pf where
   tdCW :: forall a . SB.RowTypeTag a -> SL.CodeWriter SL.VectorE
   tdCW = binarySI prefixM gtt kScale
-{-
-  indexVec :: SB.RowTypeTag a -> SL.VectorE
-  indexVec rtt = SL.functionE SF.to_vector (SB.byGroupIndexE rtt gtt :> TNil)
-  prefixed t = maybe t (<> "_" <> t) prefixM
-  splitIndexNDS :: SB.RowTypeTag a -> SL.NamedDeclSpec SL.ECVec
-  splitIndexNDS rtt = SL.NamedDeclSpec (prefixed "splitIndex_" <> SB.taggedGroupName gtt <> "_" <> SB.dataSetName rtt) $ SL.vectorSpec (SB.dataSetSizeE rtt) []
-  tdCW :: SB.RowTypeTag a -> SL.CodeWriter SL.VectorE
-  tdCW rtt = SL.declareRHSNW (splitIndexNDS rtt) $ SL.realE 2 `SL.timesE` (SL.realE 1.5 `SL.minusE` indexVec rtt)
--}
   f :: SL.VectorE -> SL.UExpr SL.EReal -> SB.RowTypeTag a -> SL.CodeWriter SL.VectorE
   f splitIndex aE _rtt = pure $ aE |*| splitIndex
   lf = SRP.parseScalar (SB.bParameterName bp)

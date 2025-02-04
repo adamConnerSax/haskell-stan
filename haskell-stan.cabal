@@ -61,7 +61,12 @@ library
          , relude (Relude as Prelude
          , Relude.Extra)
   exposed-modules: Stan
-                   , Stan.Operators
+                 , Stan.Operators
+                 , Stan.Libraries.Language
+                 , Stan.Libraries.Functions
+                 , Stan.Libraries.Builder
+                 , Stan.Libraries.Runner
+                 , Stan.Libraries.BuildingBlocks
   hs-source-dirs:   src
 
 executable model-test

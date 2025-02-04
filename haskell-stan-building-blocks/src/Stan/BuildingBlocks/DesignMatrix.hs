@@ -419,7 +419,7 @@ centerDataMatrix :: (SB.StanFunctionsC es, SB.StanCodeC es)
                  -> Maybe (SL.UExpr SL.ECVec)
                  -> SL.VarName -- prefix for names
                  -> Eff es (SL.UExpr SL.EMat -- standardized matrix, X - row_mean(X) or (X - row_mean(X))/row_stddev(X)
-                           , SB.InputDataType i d -> SL.UExpr SL.EMat -> SL.VarName -> Eff es (SL.UExpr SL.EMat) -- \Y -> standardized Y (via mean/var of X)
+                           , SB.InputDataT -> SL.UExpr SL.EMat -> SL.VarName -> Eff es (SL.UExpr SL.EMat) -- \Y -> standardized Y (via mean/var of X)
                            )
 centerDataMatrix dms m mwgtsV namePrefix = do
   vecMVF <- case mwgtsV of
@@ -448,8 +448,12 @@ centerDataMatrix dms m mwgtsV namePrefix = do
       mStd <- SB.addFromCodeWriter
               $ SL.declareRHSNW (SL.NamedDeclSpec (namePrefix <> "_standardized") $ SL.matrixSpec (SF.rows m) (SF.cols m))
               $ stdize m
-      let centerF idt m' n = do
-            SB.inBlock (SB.caseInputDataType SL.SBTransformedData SL.SBTransformedDataGQ idt) $ SB.addFromCodeWriter
+      let centerF it m' n = do
+            let bl = case it of
+                  SB.ModelDataT -> SL.SBTransformedData
+                  SB.GQDataT -> SL.SBTransformedDataGQ
+            SB.inBlock bl -- (SB.caseInputDataType SL.SBTransformedData SL.SBTransformedDataGQ idt)
+              $ SB.addFromCodeWriter
               $ SL.declareRHSNW (SL.NamedDeclSpec n $ SL.matrixSpec (SF.cols m') (SF.cols m')) $ stdize m'
       return (mStd, centerF)
     DMCenterOnly -> do
@@ -466,8 +470,11 @@ centerDataMatrix dms m mwgtsV namePrefix = do
       mCentered <- SB.addFromCodeWriter
                    $ SL.declareRHSNW (SL.NamedDeclSpec (namePrefix <> "_centered") $ SL.matrixSpec (SF.rows m) (SF.cols m))
                    $ centered m
-      let centerF idt m' n = do
-            SB.inBlock (SB.caseInputDataType SL.SBTransformedData SL.SBTransformedDataGQ idt)
+      let centerF it m' n = do
+            let bl = case it of
+                  SB.ModelDataT -> SL.SBTransformedData
+                  SB.GQDataT -> SL.SBTransformedDataGQ
+            SB.inBlock bl -- (SB.caseInputDataType SL.SBTransformedData SL.SBTransformedDataGQ idt)
               $ SB.addFromCodeWriter
               $ SL.declareRHSNW (SL.NamedDeclSpec n $ SL.matrixSpec (SF.rows m') (SF.cols m')) $ centered m'
       pure (mCentered, centerF)

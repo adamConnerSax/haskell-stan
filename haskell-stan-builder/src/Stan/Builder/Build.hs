@@ -30,6 +30,7 @@ import qualified Stan.Functions as SF
 import Control.Monad (unless)
 import qualified Data.Dependent.HashMap as DHash
 import qualified Data.Set as Set
+import Data.GADT.Show (gshow)
 
 import Effectful ((:>), Eff)
 import qualified Effectful.State.Static.Local as EffS
@@ -179,6 +180,19 @@ getRTT idt t = do
   case DHash.lookup tag rowInfos of
     Nothing -> SBC.buildError $ "Tag \"" <> t <> "\" not found in " <> show idt
     Just _ -> pure tag
+
+getGTT :: forall k r i d es . (Typeable k, SBC.StanRowInfoC i d es) => SBC.InputDataType i d -> SBC.RowTypeTag r -> Text -> Eff es (SBC.GroupTypeTag k)
+getGTT idt rtt t = do
+  rowInfos <- EffS.gets @(SBC.RowInfos i d) SBC.unRowInfos
+  case DHash.lookup rtt rowInfos of
+    Nothing -> SBC.buildError $ "Row Type Tag \"" <> t <> "\" not found in " <> show idt
+    Just ri -> do
+      let gtt :: SBC.GroupTypeTag k = SBC.GroupTypeTag t
+          g (SBC.GroupIndexes ghm) = ghm
+      case DHash.lookup gtt (g $ SBC.groupIndexes ri) of
+        Nothing -> SBC.buildError $ "Group Type Tag \"" <> t <> "\" not found in " <> show idt <> "/" <> toText (gshow rtt)
+        Just _ -> pure gtt
+
 
 withRowInfo :: forall i d es y r . EffS.State (SBC.RowInfos i d) :> es
             => Eff es y
