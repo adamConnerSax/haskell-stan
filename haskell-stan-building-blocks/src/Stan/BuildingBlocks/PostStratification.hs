@@ -101,7 +101,7 @@ postStratifiedParameterF prof block varNameM rtt gtt grpIndex wgtsMCW pCW reInde
       grpVecDS =  SL.vectorSpec grpSizeE --SB.StanVector $ SB.NamedDim gName
 --      psVecDS =  SL.vectorSpec dsSizeE [] --SB.StanVector $ SB.NamedDim dsName
       scopeF :: SL.UStmt -> SL.UStmt
-      scopeF stmt = if prof then SL.profile varName stmt else SL.scoped stmt
+      scopeF stmt = if prof then SL.profile varName stmt else SL.groupedWithBrackets [stmt]
   SB.inBlock block $ case reIndexRttM of
     Nothing -> do
       probV <- SB.addFromCodeWriter $ SL.declareW varName grpVecDS
