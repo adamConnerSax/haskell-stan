@@ -445,7 +445,7 @@ secondOrderAlphaDC prefixM gtt1 (index1, _sz1) gtt2 (index2 , sz2) (controlK1, c
         alphaMNDS = SL.NamedDeclSpec (prefixed "alpha_" <> SB.taggedGroupName gtt1 <> "_" <> SB.taggedGroupName gtt2)
                     $ SL.matrixSpec gs1E gs2E
     am <- SL.declareNW alphaMNDS
-    SL.addStmt $ SL.scoped $ SL.cwStmt_ $ do
+    SL.addStmt $ SL.groupedWithBrackets $ pure @[] $ SL.cwStmt_ $ do
       let adcNDS = SL.NamedDeclSpec "withZero" $ SL.vectorSpec (gs1E |*| gs2E)
           czE = (SL.intE (cn1 - 1) |*| gs2E) |+| SL.intE cn2
       wzero <- SL.declareRHSNW adcNDS $ SL.functionE insert_zero_at (aV :> czE :> TNil)

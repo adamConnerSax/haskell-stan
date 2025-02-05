@@ -462,7 +462,7 @@ grouped :: Traversable f => f SLS.UStmt -> SLS.UStmt
 grouped = SLR.Fix . SLS.SGroupF SLS.UnBracketed
 
 groupedWithBrackets :: Traversable f => f SLS.UStmt -> SLS.UStmt
-groupedWithBrackets = SLR.Fix . SLS.SGroupF SLS.Bracketed
+groupedWithBrackets = scoped . SLR.Fix . SLS.SGroupF SLS.Bracketed
 
 {-
 insertIndexBinding :: SLE.IndexKey -> SLE.LExpr EIndexArray -> SLA.ASTCtxt -> SLA.ASTCtxt
