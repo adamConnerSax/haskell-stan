@@ -11,9 +11,7 @@
 {-# LANGUAGE TypeOperators #-}
 {-# LANGUAGE UndecidableInstances #-}
 {-# LANGUAGE AllowAmbiguousTypes #-}
-{-# LANGUAGE TypeSynonymInstances #-}
 {-# OPTIONS_GHC -fwarn-incomplete-patterns #-}
-{-# LANGUAGE StandaloneKindSignatures #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE FlexibleInstances #-}
 
@@ -218,7 +216,7 @@ sTypeName = \case
   SMat -> "matrix"
   SSqMat -> "matrix"
   SArray _ _ -> "array" --FIXME
-  STuple ts -> "(" <> Text.intercalate ", " (reverse (SLTT.foldTypedList (\st tl -> sTypeName st : tl) [] ts)) <> ")"
+  STuple ts -> "tuple(" <> Text.intercalate ", " (reverse (SLTT.foldTypedList (\st tl -> sTypeName st : tl) [] ts)) <> ")"
 
 instance TestEquality SType where
   testEquality SVoid SVoid = Just Refl
