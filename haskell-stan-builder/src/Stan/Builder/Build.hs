@@ -80,7 +80,7 @@ addFromCodeWriter cw = addStmtsToCode stmts >> return a
   where (stmts, a) = SLC.cwStmtList cw
 
 addScopedFromCodeWriter :: SBC.StanCodeC es => SLC.CodeWriter a -> Eff es a
-addScopedFromCodeWriter cw = addStmtsToCode [SLS.scoped $ SLS.grouped stmts] >> return a
+addScopedFromCodeWriter cw = addStmtsToCode [SLS.groupedWithBrackets stmts] >> return a
   where (stmts, a) = SLC.cwStmtList cw
 
 modifyCode' :: (SLP.StanProgram -> SLP.StanProgram) -> SBC.BuilderState md gq -> SBC.BuilderState md gq
