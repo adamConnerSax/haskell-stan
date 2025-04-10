@@ -508,12 +508,13 @@ runModel config rScriptsToWrite dataWrangler cbm cbgq makeResult toPredict md_C 
           <> show ((CS.cmdStanDir $ SRC.mrcStanMakeConfig config SRC.MRFull) ++ "/bin/stansummary")
           <> " "
           <> T.intercalate " " (fmap T.pack (CS.stansummaryConfigToCmdLine (SRC.mrcStanSummaryConfig config)))
-        K.logLE (K.Debug 1) $ "Stan output ot summarize: "
+        K.logLE (K.Debug 1) $ "Stan output to summarize: "
           <> T.intercalate " " (fmap toText csvFileNames)
         summary <- K.liftKnit $ CS.stansummary ((SRC.mrcStanSummaryConfig config) {CS.sampleFiles = csvFileNames})
         P.embed $ A.encodeFile summaryPath summary
         return summary
       getSummary csvFileNames summaryPath = do
+        K.logLE (K.Debug 1) $ "getSummary called with csvFileNames=" <> show csvFileNames <> "; summaryPath=" <> toText summaryPath
         summaryE <- K.ignoreCacheTimeM
                     $ K.loadOrMakeFile
                     summaryPath
