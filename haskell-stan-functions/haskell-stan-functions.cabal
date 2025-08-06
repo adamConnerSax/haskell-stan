@@ -54,10 +54,10 @@ library
                , fin >= 0.2 && < 0.4
                , haskell-stan-language
                , relude  >=1.0.0 && < 1.3
-               , text >= 1.2 && < 2.1
+               , text >= 1.2 && < 2.2
   mixins:  base hiding (Prelude)
-         , relude (Relude as Prelude
-         , Relude.Extra)
+         , relude (Relude as Prelude)
+         , relude
   exposed-modules: Stan.Functions
                  , Stan.Functions.Constraints
                  , Stan.Functions.Operators
