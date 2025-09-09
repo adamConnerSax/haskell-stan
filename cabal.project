@@ -1,7 +1,7 @@
 packages: . haskell-stan-language haskell-stan-builder haskell-stan-functions haskell-stan-runner haskell-stan-building-blocks
 jobs: 4
 with-compiler: ghc
-allow-newer: base, bytestring, ghc-prim, template-haskell, polysemy-zoo:constraints
+allow-newer: base, bytestring, ghc-prim, template-haskell, containers, polysemy-zoo:constraints
 
 flags: +streamly9
 
@@ -18,20 +18,19 @@ source-repository-package
 source-repository-package
   type: git
   location: https://github.com/adamConnerSax/knit-haskell
-  tag: 95c943061d23d605b025ffe5b2ba6c9357fc13d4
+  tag: 9b1aa0ddcf146e3792e5d601d818e26431c9bcd4
 
 source-repository-package
   type: git
   location: https://github.com/adamConnerSax/Frames-streamly
-  tag: 1236568e55ebfdb63237ddae1a52ce4696d650d3
+  tag: 730b493d89abfabdcff3d1cb853fb8814c06b5d5
 
 source-repository-package
   type: git
   location: https://gitlab.com/adamCS/Frames-serialize
-  tag: d6535a4817cbce92d031812576d88af5dcaaa20b
---cc0bad16b2cf221597831e5495c00051572113f9
+  tag: c4288e713f19a89e57c587c8d3f1f3724a450ad4
 
---source-repository-package
---  type: git
---  location: https://github.com/L-as/flat
---  tag: 41a040c413351e021982bb78bd00f750628f8060
+source-repository-package
+  type: git
+  location: https://github.com/ollef/dependent-hashmap
+  tag: fe277eac510f93b984ae66fea6d63769220f3d9b

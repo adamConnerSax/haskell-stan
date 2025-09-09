@@ -22,6 +22,7 @@ module Stan.Language.Program
   , programHasLLBlock
   , programHasPPBlock
   , stmtAsText
+  , stmtAsText'
   , addStmtToBlock
   , addStmtToBlockTop
   , addStmtsToBlock

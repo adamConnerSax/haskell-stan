@@ -11,11 +11,6 @@ category:            Data
 build-type:          Simple
 extra-source-files:
 
-flag streamly9
-    Description: require streamly >= 0.9
-    Manual: True
-    Default: False
-
 common common-options
   ghc-options:         -Wall
                        -Wcompat
@@ -77,11 +72,10 @@ library
                , scientific >= 0.3.5 && < 0.4
                , text >= 1.2 && < 2.3
                , vector >= 0.13 && < 0.14
-  if flag(streamly9)
-    build-depends:
-      streamly >=0.9 && <0.11, streamly-core >=0.1.0 && <0.3, streamly-bytestring >=0.2.0 && < 0.3
-  else
-    build-depends: streamly >=0.8 && <0.9, streamly-bytestring >=0.1.0 && <0.2
+               , streamly >=0.9 && <0.13
+               , streamly-core >=0.1.0 && <0.5
+               , streamly-bytestring >=0.2.0 && < 0.3
+
   mixins:  base hiding (Prelude)
          , relude (Relude as Prelude)
          , relude
