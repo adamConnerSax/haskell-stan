@@ -52,7 +52,7 @@ common common-options
 library
   import: common-options
   build-depends: base >= 4.12 && < 5
-               , hs-cmdstan >= 0.1 && < 0.3
+               , hs-cmdstan >= 0.1 && < 0.4
                , dependent-hashmap >= 0.1.0.1 && < 0.2
                , dependent-sum >= 0.7.0 && < 0.8
                , effectful >= 2.5 && < 3
