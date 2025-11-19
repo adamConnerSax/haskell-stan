@@ -19,7 +19,7 @@ import CmdStan
        ( StanExeConfig (..),
          StanSummary,
          StancConfig (..),
-         makeDefaultStancConfig,
+--         makeDefaultStancConfig,
        )
 
 import qualified Stan.Builder as SB
@@ -47,6 +47,16 @@ import qualified Say
 import qualified Control.Exception as X
 import qualified GHC.IO.Exception as X
 
+makeDefaultStancConfig :: FilePath -> CS.StancConfig
+makeDefaultStancConfig fp = (CS.makeDefaultStancConfig fp) {CS.useOpenCL = False, CS.allOptimization = False, CS.outputCppFile = ""}
+
+makeDefaultMakeConfig :: FilePath -> IO CS.MakeConfig
+makeDefaultMakeConfig fp = do
+  config <- CS.makeDefaultMakeConfig fp
+  let stancFlags = makeDefaultStancConfig fp
+  pure $ config {CS.stancFlags = Just stancFlags}
+
+
 -- simplified runner for common cases
 runModel' :: forall st cd md gq mb gqb c r.
              (SRC.KnitStan st cd r
@@ -68,8 +78,9 @@ runModel' cacheDirE configE mStanParams dataWrangler stanProgram resultAction rS
   (rin, stanConfig) <- case configE of
     Left mrc -> pure (SRC.mrcInputNames mrc, mrc)
     Right rin' -> do
+      let modelPrefix = SRC.rinModel rin' <> (maybe "" (\x -> "_" <> SRC.gqModelName x) $ SRC.rinGQ rin')
       let stancConfig =
-            (CS.makeDefaultStancConfig (toString $ SRC.rinModelDir rin' <> "/" <> SRC.rinModel rin')) {CS.useOpenCL = False}
+            (makeDefaultStancConfig (toString $ SRC.rinModelDir rin' <> modelPrefix)) {CS.useOpenCL = False}
       stanConfig <-
         SRC.setSigFigs 4
         . SRC.noLogOfSummary
@@ -148,7 +159,7 @@ makeDefaultModelRunnerConfig runnerInputNames modelM stanMCParameters mStancConf
       stanMakeConfig mr = do
         K.logLE K.Diagnostic $ "Making config for " <> show mr <> " run."
         writeModel runnerInputNames mr modelM
-        stanMakeNoGQConfig' <- K.liftKnit $ CS.makeDefaultMakeConfig (toString $ SRC.modelPath mr runnerInputNames)
+        stanMakeNoGQConfig' <- K.liftKnit $ makeDefaultMakeConfig (toString $ SRC.modelPath mr runnerInputNames)
         return $  stanMakeNoGQConfig' {CS.stancFlags = mStancConfig}
   stanMakeNoGQConfig <- stanMakeConfig SRC.MRNoGQ
   stanMakeOnlyLLConfig <- stanMakeConfig SRC.MROnlyLL
@@ -502,7 +513,7 @@ runModel config rScriptsToWrite dataWrangler cbm cbgq makeResult toPredict md_C 
         Nothing -> modelResDep
         Just gqResDep -> const <$> gqResDep <*> modelResDep
       makeSummaryFromCSVs csvFileNames summaryPath = do
-        K.logLE K.Diagnostic "Stan summary older output.  Re-summarizing."
+        K.logLE K.Diagnostic "Stan summary missing or older than output.  Re-summarizing."
         K.logLE (K.Debug 1) $
           "Summary command: "
           <> show ((CS.cmdStanDir $ SRC.mrcStanMakeConfig config SRC.MRFull) ++ "/bin/stansummary")
