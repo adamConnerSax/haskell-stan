@@ -387,7 +387,7 @@ manageIndex config inputDataType dataIndexer cb ebFromA_C = do
             let jsonFP = case inputDataType of
                   SB.ModelDataT -> SRC.modelDataFileName $ SRC.mrcInputNames config
                   SB.GQDataT -> fromMaybe "Error:No GQ Setup" $ SRC.gqDataFileName $ SRC.mrcInputNames config
-            K.logLE (K.Debug 1)  $ "JSON data (\"" <> jsonFP <> "\") is missing.  Deleting cached indices to force rebuild."
+            K.logLE K.Warning  $ "JSON data (\"" <> jsonFP <> "\") is missing.  Deleting cached indices to force rebuild."
             K.clearIfPresent @Text @cd (indexCacheKey config inputDataType)
           K.retrieveOrMake @st @cd (indexCacheKey config inputDataType) ebFromA_C pure
         _ -> K.knitError "Cacheable index type provided but b is Uncacheable."
@@ -566,7 +566,7 @@ deleteStaleFiles config staleFiles = do
       exists fp = K.liftKnit $ Dir.doesFileExist fp >>= \x -> return $ if x then Just fp else Nothing
       filesToDelete = ordNub $ concat $ toDelete <$> staleFiles
   extantPaths <- catMaybes <$> traverse exists filesToDelete
-  Say.say $ "Deleting output files: " <> T.intercalate "," (toText <$> extantPaths)
+  K.logLE K.Warning $ "Deleting output files: " <> T.intercalate "," (toText <$> extantPaths)
   traverse_ (K.liftKnit. Dir.removeFile) extantPaths
 {-# INLINEABLE deleteStaleFiles #-}
 
